@@ -1,0 +1,6 @@
+namespace: production
+replicas: 5
+image:
+  repository: redis
+  tag: "7.0"
+port: 6379

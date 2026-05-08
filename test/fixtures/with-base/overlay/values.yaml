@@ -1,0 +1,3 @@
+replicas: 5
+image:
+  tag: latest

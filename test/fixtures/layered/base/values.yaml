@@ -1,0 +1,5 @@
+name: base-app
+replicas: 1
+image:
+  repository: nginx
+  tag: "1.0"

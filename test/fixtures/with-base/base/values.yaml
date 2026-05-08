@@ -1,0 +1,5 @@
+name: base
+replicas: 1
+image:
+  repository: nginx
+  tag: stable

@@ -1,0 +1,5 @@
+name: myapp
+replicas: 3
+image:
+  repository: nginx
+  tag: latest

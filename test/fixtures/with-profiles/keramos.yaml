@@ -1,0 +1,3 @@
+apiVersion: keramos/v1
+name: profiled-app
+version: 1.0.0

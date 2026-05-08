@@ -1,0 +1,3 @@
+name: myapp
+replicas: 1
+env: dev

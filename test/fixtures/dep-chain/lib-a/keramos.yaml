@@ -1,0 +1,7 @@
+apiVersion: v1
+name: lib-a
+version: 1.0.0
+dependencies:
+  - name: lib-b
+    version: "^2.0.0"
+    repository: http://localhost:0/test-repo

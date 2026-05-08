@@ -1,0 +1,8 @@
+apiVersion: keramos/v1
+name: app
+version: 2.0.0
+layers:
+  - name: base
+    source: ../base
+  - name: service
+    source: ../service

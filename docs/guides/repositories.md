@@ -1,0 +1,180 @@
+# Repositories
+
+A keramos repository is a directory served over HTTPS containing one or more packaged `*.keramos.tgz` archives plus an `index.yaml` describing them. Repositories are the simplest distribution mechanism — any HTTP(S) server can host one, including GitHub Pages, S3 with a static index, or an internal nginx.
+
+For OCI-based distribution, see [OCI](oci.md). The two are complementary; a single project often publishes both.
+
+## The shape of a repo
+
+```
+https://charts.example.com/
+├── index.yaml
+├── my-app-1.0.0.keramos.tgz
+├── my-app-1.1.0.keramos.tgz
+├── my-app-1.2.0.keramos.tgz
+├── my-app-1.0.0.keramos.tgz.prov         # optional PGP detached signature
+└── ...
+```
+
+`index.yaml` is the catalogue: it lists every package, its versions, the URL of each archive, and (optionally) a digest and signature reference per version.
+
+## Producing a repo
+
+### Package each release
+
+```sh
+keramos package ./my-app -d ./build
+# writes ./build/my-app-1.2.3.keramos.tgz
+```
+
+`keramos package` reads the package's `keramos.yaml`, resolves layers, and produces a self-contained archive. By default it computes a SHA-256 digest and writes it to a sibling `.sha256` file.
+
+To sign at package time:
+
+```sh
+keramos package ./my-app -d ./build --sign --key author@example.com --keyring ~/.gnupg/secring.gpg
+```
+
+This produces:
+
+- `my-app-1.2.3.keramos.tgz`
+- `my-app-1.2.3.keramos.tgz.prov` — detached PGP signature
+- `my-app-1.2.3.keramos.tgz.sha256` — SHA-256 digest
+
+### Generate or update an index
+
+```sh
+keramos repo index ./build --url https://charts.example.com
+```
+
+Writes (or updates) `./build/index.yaml`. The `--url` flag is the base URL where archives will be served; keramos writes per-version absolute URLs into the index.
+
+For an incremental update (a new version was added without re-packaging existing ones):
+
+```sh
+keramos repo index ./build --url https://charts.example.com --merge
+```
+
+`--merge` preserves existing entries and only adds the new ones; without it, the index is regenerated from scratch.
+
+### Publish
+
+The `./build/` directory is the entire repository. Drop it on any HTTP server:
+
+- **GitHub Pages**: commit to a branch, enable Pages, point to `https://<user>.github.io/<repo>/`.
+- **S3**: `aws s3 sync ./build s3://my-bucket/`, set `index.yaml`'s Content-Type to `application/yaml`.
+- **nginx**: serve the directory; enable `autoindex` if you want a browsable view.
+
+There is no special server — the repo is dumb static.
+
+## Consuming a repo
+
+Register the repo, refresh the index, then pull packages by name:
+
+```sh
+keramos repo add my-charts https://charts.example.com
+keramos repo update                                       # refresh local cached indexes
+keramos repo list                                         # see what's added
+keramos search repo my-app                                # across all added repos
+```
+
+Pull a package from a registered repo by name, with `--repo` pointing at the registered URL:
+
+```sh
+keramos pull my-app --repo https://charts.example.com --version "^1.2.0" -d ./pulled --untar
+```
+
+Then install from the unpacked directory:
+
+```sh
+keramos install my-app ./pulled/my-app -n default --create-namespace
+```
+
+`keramos repo add` writes the repository name+URL to `~/.config/keramos/repositories.yaml` (or `${KERAMOS_CONFIG_HOME}/repositories.yaml`). `keramos repo update` fetches each repo's `index.yaml` into the index cache (`~/.cache/keramos/indexes/`).
+
+## Authentication
+
+For private repos, supply credentials at `repo add` time:
+
+```sh
+keramos repo add private https://charts.example.com --username u --password p
+```
+
+For token-based authentication (e.g. GitHub Pages with a fine-grained token), pass the token as the password — many providers accept a token in place of an HTTP basic password:
+
+```sh
+keramos repo add private https://charts.example.com --username "$GITHUB_USER" --password "$GITHUB_TOKEN"
+```
+
+Credentials are stored in `~/.config/keramos/credentials.json` keyed by URL. Subsequent operations use them automatically. To refresh credentials without re-adding the repo, run `keramos login`:
+
+```sh
+keramos login charts.example.com
+```
+
+The interactive flow asks for username and password; non-interactive use takes `--username`/`--password` flags.
+
+To remove credentials:
+
+```sh
+keramos logout charts.example.com
+```
+
+`keramos logout` does not unregister the repo — only the credentials. To unregister the repo, `keramos repo remove private`.
+
+## TLS
+
+`keramos repo add` honours these flags:
+
+- `--ca-file <path>` — additional CA bundle for self-signed registries.
+- `--cert-file <path>` / `--key-file <path>` — client certificate for mTLS-protected repos.
+- `--insecure-skip-tls-verify` — disable server cert validation (do not use in production).
+
+Same flags are accepted on `keramos pull` and `keramos install` when targeting an HTTPS source directly.
+
+## Repository conventions
+
+- **`index.yaml` versioning**: keramos recognises `apiVersion: keramos/v1` (current). Indexes generated by other tools using the legacy `apiVersion: v1` chart-repo schema are also accepted as a compatibility layer.
+- **Per-version digest**: every entry in `index.yaml` includes the SHA-256 of its archive. `keramos pull` verifies the digest before unpacking.
+- **`provenance` field**: when an entry has a `prov:` URL, `keramos pull --verify` fetches the `.prov` file and checks its PGP signature against the local keyring. See [Signing](signing.md).
+- **Mirror chains**: a repo can be a mirror of another by republishing its `index.yaml` with rewritten URLs. Keramos doesn't care.
+
+## Inspecting a package
+
+`keramos show` operates on a *package directory* — typically a pulled+untar'd one:
+
+```sh
+keramos pull my-app --repo https://charts.example.com --version 1.2.3 -d ./pulled --untar
+keramos show chart   ./pulled/my-app                    # keramos.yaml metadata
+keramos show values  ./pulled/my-app                    # default values.yaml
+keramos show readme  ./pulled/my-app                    # README.md
+keramos show crds    ./pulled/my-app                    # CRDs declared by the package
+keramos show all     ./pulled/my-app                    # everything in one document
+```
+
+To browse upstream catalogues without adding a repo:
+
+```sh
+keramos search hub my-app                                # query Artifact Hub
+keramos search hub my-app --endpoint https://artifacthub.io
+```
+
+`keramos search hub` queries the public Artifact Hub API directly and does not require `keramos repo add`.
+
+## Pulling without installing
+
+```sh
+keramos pull my-charts/my-app --version 1.2.3 -d ./pulled
+keramos pull my-charts/my-app --version 1.2.3 -d ./pulled --untar
+keramos pull my-charts/my-app --version 1.2.3 -d ./pulled --untar --prov  # also fetch .prov
+keramos pull my-charts/my-app --version 1.2.3 -d ./pulled --verify       # fetch + verify .prov
+```
+
+Useful for vendoring a copy of an upstream package into your repo, for inspection, or for offline-airgap install workflows.
+
+## Troubleshooting
+
+- **`failed to fetch index.yaml: TLS handshake error`** — the server's cert isn't trusted. Use `--ca-file` for self-signed setups.
+- **`digest mismatch: expected sha256:abc..., got sha256:def...`** — the archive on the server doesn't match the index's recorded digest. Common cause: someone re-published an archive without regenerating the index.
+- **`401 Unauthorized`** — credentials weren't sent or are wrong. `keramos login <host>` to refresh them; check `~/.config/keramos/credentials.json`.
+- **`index.yaml not found`** — the URL points at a directory but the server doesn't serve `index.yaml` at the URL root. Check the actual URL by running `curl <url>/index.yaml`.

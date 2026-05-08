@@ -1,0 +1,6 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+To get the application URL:
+  kubectl get svc {{ .Release.Name }}-svc -n {{ .Release.Namespace }}

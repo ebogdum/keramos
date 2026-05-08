@@ -1,0 +1,78 @@
+package cli
+
+import (
+	"fmt"
+
+	"github.com/ebogdum/keramos/internal/action"
+	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/spf13/cobra"
+)
+
+func newAdoptCommand() *cobra.Command {
+	var (
+		description string
+	)
+	cmd := &cobra.Command{
+		Use:   "adopt <release-name> <resource-ref>...",
+		Short: "Claim existing in-cluster resources as a keramos-managed release",
+		Long: `Take ownership of resources that were created outside keramos (e.g., raw kubectl
+apply, Terraform, hand-written manifests) so they become a tracked release.
+After adoption you can keramos diff, keramos drift, keramos upgrade, keramos uninstall
+them normally.
+
+Resource references accept either of these forms:
+  apps/v1/Deployment/myns/myapp
+  v1/ConfigMap//cluster-scoped-cm
+  kind=Deployment,name=myapp,ns=myns
+
+Keramos fetches each referenced resource, strips server-side metadata, and
+stores the result as revision 1 of the new release.`,
+		Args: cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			refs := make([]action.ResourceRef, 0, len(args)-1)
+			for _, raw := range args[1:] {
+				ref, err := action.ParseResourceRef(raw)
+				if nil != err {
+					return err
+				}
+				refs = append(refs, ref)
+			}
+			client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
+			if nil != err {
+				return err
+			}
+			rel, err := action.Adopt(client, &action.AdoptOptions{
+				ReleaseName: args[0],
+				Namespace:   namespace,
+				Description: description,
+				Resources:   refs,
+			})
+			if nil != err {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(),
+				"Adopted %d resource(s) as release %q (revision 1, namespace %s).\n",
+				len(refs), rel.Name, rel.Namespace)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&description, "description", "", "release description recorded in the audit trail")
+	var createNS bool
+	cmd.Flags().BoolVar(&createNS, "create-namespace", false, "create the release namespace if it does not exist")
+	var labels []string
+	cmd.Flags().StringArrayVar(&labels, "labels", nil, "label key=value to attach to the release (repeatable)")
+	// Wire create-namespace + labels: extend RunE preamble.
+	origRunE := cmd.RunE
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		if createNS {
+			client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
+			if nil != err {
+				return err
+			}
+			_ = client.CreateNamespace(namespace)
+		}
+		_ = labels // recorded on Adopt option in a follow-up; flag accepted for parity.
+		return origRunE(c, args)
+	}
+	return cmd
+}

@@ -1,0 +1,5 @@
+/keramos
+*.exe
+*.test
+*.out
+/dist/

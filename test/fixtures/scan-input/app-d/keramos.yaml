@@ -1,0 +1,3 @@
+apiVersion: keramos/v1
+name: app-d
+version: 1.0.0
