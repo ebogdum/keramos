@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/logger"
+	"github.com/ebogdum/keramos/internal/netguard"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"bytes"
 
@@ -38,31 +38,52 @@ type OCIRegistry struct {
 	InsecureSkipTLSVerify bool
 }
 
-// insecureRetryClient returns an http.Client that skips TLS certificate
-// verification but otherwise retains the safety properties of the standard
-// authenticated client: timeouts, idle-connection limits, and a
-// cross-host-redirect block (so credentials cannot leak to a redirect target).
-func insecureRetryClient() *http.Client {
-	transport := &http.Transport{
+// crossHostRedirectBlock refuses redirects that change host so credentials and
+// mTLS material cannot leak to an attacker-chosen target.
+func crossHostRedirectBlock(req *http.Request, via []*http.Request) error {
+	if 0 == len(via) {
+		return nil
+	}
+	if req.URL.Host != via[0].URL.Host {
+		return fmt.Errorf("redirect to different host %q blocked (original: %q)", req.URL.Host, via[0].URL.Host)
+	}
+	return nil
+}
+
+// ociTransport builds an http.Transport whose dialer enforces the SSRF
+// blocklist (metadata/loopback blocked, private registries allowed) and pins
+// TLS 1.2 as the floor. tlsConf supplies cert verification settings.
+func ociTransport(tlsConf *tls.Config) *http.Transport {
+	return &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
-		DialContext:         (&net.Dialer{Timeout: defaultConnectTimeout}).DialContext,
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // explicit opt-in via --insecure-skip-tls-verify
+		DialContext:         netguard.DialContext(netguard.BlockMetadata, "KERAMOS_ALLOW_INTERNAL_FETCH", defaultConnectTimeout),
+		TLSClientConfig:     tlsConf,
 		MaxIdleConns:        100,
 		IdleConnTimeout:     90 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
+}
+
+// secureRetryClient is the default OCI client: SSRF-guarded dialer, TLS 1.2
+// floor, ORAS retry semantics, and a cross-host-redirect block.
+func secureRetryClient() *http.Client {
 	return &http.Client{
-		Transport: transport,
-		Timeout:   defaultOverallTimeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if 0 == len(via) {
-				return nil
-			}
-			if req.URL.Host != via[0].URL.Host {
-				return fmt.Errorf("redirect to different host %q blocked (original: %q)", req.URL.Host, via[0].URL.Host)
-			}
-			return nil
-		},
+		Transport:     retry.NewTransport(ociTransport(&tls.Config{MinVersion: tls.VersionTLS12})),
+		Timeout:       defaultOverallTimeout,
+		CheckRedirect: crossHostRedirectBlock,
+	}
+}
+
+// insecureRetryClient skips TLS certificate verification (explicit opt-in via
+// --insecure-skip-tls-verify) but keeps every other safety property: the
+// SSRF-guarded dialer, TLS 1.2 floor, retry semantics, timeouts, and the
+// cross-host-redirect block.
+func insecureRetryClient() *http.Client {
+	tlsConf := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true} //nolint:gosec // explicit opt-in via --insecure-skip-tls-verify
+	return &http.Client{
+		Transport:     retry.NewTransport(ociTransport(tlsConf)),
+		Timeout:       defaultOverallTimeout,
+		CheckRedirect: crossHostRedirectBlock,
 	}
 }
 
@@ -139,7 +160,7 @@ func (o *OCIRegistry) Push(archivePath, ref string) error {
 		return err
 	}
 
-	httpClient := retry.DefaultClient
+	httpClient := secureRetryClient()
 	if o.InsecureSkipTLSVerify {
 		httpClient = insecureRetryClient()
 	}
@@ -240,7 +261,7 @@ func (o *OCIRegistry) Pull(ref, destDir string) (string, error) {
 		return "", err
 	}
 
-	httpClient := retry.DefaultClient
+	httpClient := secureRetryClient()
 	if o.InsecureSkipTLSVerify {
 		httpClient = insecureRetryClient()
 	}

@@ -55,12 +55,24 @@ func validateControllerPackagePath(p, root string) error {
 // written into a CR status, where any cluster reader with `get
 // keramosreleases` can see them.
 var secretLikePatterns = []*regexp.Regexp{
-	regexp.MustCompile(`hvs\.[A-Za-z0-9_\-]+`),
-	regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9._\-]+`),
-	regexp.MustCompile(`eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+`),
-	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
-	regexp.MustCompile(`(?i)(?:password|token|secret|api[_\-]?key)\s*[:=]\s*\S+`),
+	regexp.MustCompile(`hvs\.[A-Za-z0-9_\-]+`),                                        // Vault service token
+	regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9._\-]+`),                               // Authorization: Bearer
+	regexp.MustCompile(`eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+`),        // JWT
+	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),                                            // AWS access key id
+	regexp.MustCompile(`ya29\.[A-Za-z0-9_\-]+`),                                       // Google OAuth access token
+	regexp.MustCompile(`AIza[0-9A-Za-z_\-]{35}`),                                      // Google API key
+	regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{20,}`),                                  // GitHub tokens
+	regexp.MustCompile(`glpat-[A-Za-z0-9_\-]{20,}`),                                   // GitLab PAT
+	regexp.MustCompile(`xox[baprs]-[A-Za-z0-9\-]{10,}`),                               // Slack token
+	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`),                          // PEM private key header
+	// Labelled secrets: capture quoted values (which may contain spaces) as
+	// well as bare non-whitespace tokens.
+	regexp.MustCompile(`(?i)(?:password|passwd|pwd|token|secret|api[_\-]?key|access[_\-]?key|client[_\-]?secret)\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)`),
 }
+
+// urlUserinfoSecret matches the password component of a URL userinfo block
+// (scheme://user:password@host) so connection strings don't leak via status.
+var urlUserinfoSecret = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^:@\s/]+:)[^@\s/]+(@)`)
 
 // scrubError redacts secret-shaped substrings, then truncates so a multi-MB
 // response body cannot be exfiltrated wholesale through the CR status field.
@@ -69,6 +81,7 @@ func scrubError(err error) string {
 		return ""
 	}
 	s := err.Error()
+	s = urlUserinfoSecret.ReplaceAllString(s, "${1}[REDACTED]${2}")
 	for _, re := range secretLikePatterns {
 		s = re.ReplaceAllString(s, "[REDACTED]")
 	}

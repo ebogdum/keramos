@@ -2,7 +2,7 @@
 
 ## Synopsis
 
-`keramos policy` evaluates package-defined policy rules (under `policies/`) against the rendered manifest. Rules can be Keramos policy YAML (declarative match-and-require) or Rego (full Open Policy Agent expressiveness).
+`keramos policy` evaluates package-defined policy rules (under `policies/`) against the rendered manifest. Rules are Keramos policy YAML (declarative match-and-require).
 
 ## When to use it
 

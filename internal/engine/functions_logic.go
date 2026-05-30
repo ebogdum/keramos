@@ -9,6 +9,18 @@ func registerLogicFuncs(r *FuncRegistry) {
 	r.Register("required", fnRequired)
 	r.Register("empty", fnEmpty)
 	r.Register("ternary", fnTernary)
+	r.Register("omitempty", fnOmitEmpty)
+}
+
+// fnOmitEmpty drops the surrounding map key / slice element when the piped
+// value is empty (nil, "", empty list/map, false, 0). Used as
+// `field: ${values.optional | omitempty}` so an unset optional value omits its
+// key entirely instead of rendering `field: null`.
+func fnOmitEmpty(value any, args ...any) (any, error) {
+	if isEmpty(value) {
+		return omit, nil
+	}
+	return value, nil
 }
 
 func fnDefault(value any, args ...any) (any, error) {

@@ -173,7 +173,7 @@ Pull once with `keramos pull`, mirror archives to a local OCI registry, install 
 
 ### Compliance-driven environments (PCI, HIPAA, SOC 2)
 
-Keramos's audit trail, signed packages, and SBOM generation cover the deployment-side controls these frameworks require. Combine with `keramos policy` for in-package policy enforcement (Rego or keramos-native rules).
+Keramos's audit trail, signed packages, and SBOM generation cover the deployment-side controls these frameworks require. Combine with `keramos policy` for in-package policy enforcement (keramos-native declarative rules).
 
 ## Where next
 

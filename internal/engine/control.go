@@ -8,6 +8,21 @@ import (
 	"github.com/ebogdum/keramos/internal/logger"
 )
 
+// omitSentinel marks a value that must be DROPPED from its containing map or
+// slice (the key disappears entirely) rather than rendered as `null`. It lets
+// optional fields cleanly omit themselves: a field-level `$if` with no matching
+// branch, an `$each` over a missing collection, or `${value | omitempty}` all
+// resolve to this sentinel, and the surrounding map/slice prunes it.
+type omitSentinel struct{}
+
+var omit = omitSentinel{}
+
+// isOmit reports whether v is the omit sentinel.
+func isOmit(v any) bool {
+	_, ok := v.(omitSentinel)
+	return ok
+}
+
 // ProcessControlFlow walks the YAML tree and evaluates all control flow directives.
 // It returns a new tree with directives resolved.
 func ProcessControlFlow(node any, ctx *RenderContext, funcs *FuncRegistry) (any, error) {
@@ -37,12 +52,16 @@ func processMap(m map[string]any, ctx *RenderContext, funcs *FuncRegistry) (any,
 		return processSwitch(m, switchExpr, ctx, funcs)
 	}
 
-	// Regular map: recursively process values
+	// Regular map: recursively process values. A value resolving to the omit
+	// sentinel drops its key entirely (optional-field omission).
 	result := make(map[string]any, len(m))
 	for k, v := range m {
 		processed, err := ProcessControlFlow(v, ctx, funcs)
 		if nil != err {
 			return nil, err
+		}
+		if isOmit(processed) {
+			continue
 		}
 		result[k] = processed
 	}
@@ -55,6 +74,9 @@ func processSlice(s []any, ctx *RenderContext, funcs *FuncRegistry) (any, error)
 		processed, err := ProcessControlFlow(item, ctx, funcs)
 		if nil != err {
 			return nil, err
+		}
+		if isOmit(processed) {
+			continue
 		}
 		result = append(result, processed)
 	}
@@ -80,12 +102,16 @@ func processIf(m map[string]any, ifExpr any, ctx *RenderContext, funcs *FuncRegi
 		if hasElse {
 			return processControlFlowResult(m["$else"], ctx, funcs)
 		}
-		return nil, nil
+		// No matching branch: omit this node so a field-level $if drops only
+		// its own key rather than emitting `null`.
+		return omit, nil
 	}
 
-	// Document-level $if: if falsy, return nil (document removed)
+	// Document/block-level $if: if falsy, omit the node. At a map field this
+	// drops the key; at the document root the document is removed (see
+	// renderDocumentWithRegistry, which treats omit like nil).
 	if !condition {
-		return nil, nil
+		return omit, nil
 	}
 
 	// If truthy, return the map without $if
@@ -127,7 +153,10 @@ func processEach(m map[string]any, eachExpr any, ctx *RenderContext, funcs *Func
 	case map[string]any:
 		return eachOverMap(collection, asName, yieldTemplate, ctx, funcs)
 	case nil:
-		return []any{}, nil
+		// Iterating a MISSING collection omits the field entirely; iterating an
+		// explicitly empty list (`[]`) still yields an empty list (see the
+		// []any branch above), preserving the missing-vs-empty distinction.
+		return omit, nil
 	default:
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrType, "$each: expected list or map, got %T", iterable)
 	}
@@ -151,6 +180,9 @@ func eachOverList(list []any, asName string, yieldTemplate any, ctx *RenderConte
 			return nil, err
 		}
 
+		if isOmit(processed) {
+			continue // a yield that omits itself contributes no element
+		}
 		// Flatten if yield produces a list
 		if resultList, ok := processed.([]any); ok {
 			results = append(results, resultList...)
@@ -188,6 +220,9 @@ func eachOverMap(m map[string]any, asName string, yieldTemplate any, ctx *Render
 			return nil, err
 		}
 
+		if isOmit(processed) {
+			continue
+		}
 		if resultList, ok := processed.([]any); ok {
 			results = append(results, resultList...)
 		} else {

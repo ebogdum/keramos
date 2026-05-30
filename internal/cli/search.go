@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ebogdum/keramos/internal/netguard"
 	"github.com/ebogdum/keramos/internal/repo"
 	"github.com/spf13/cobra"
 )
@@ -139,7 +140,7 @@ func searchArtifactHubAt(endpoint, keyword string, kind, limit int) ([]hubResult
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := netguard.HTTPClient(netguard.BlockMetadata, "KERAMOS_ALLOW_INTERNAL_FETCH", 15*time.Second)
 	resp, err := client.Do(req)
 	if nil != err {
 		return nil, err

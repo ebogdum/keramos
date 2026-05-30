@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	"github.com/ebogdum/keramos/internal/netguard"
 	"github.com/spf13/cobra"
 )
 
@@ -152,7 +152,7 @@ func fetchMarketplaceIndex(rawURL string) (*marketplaceIndex, error) {
 		// Per-call client with an explicit timeout: the default http.Get
 		// uses http.DefaultClient which has no timeout, so a slow or
 		// hostile marketplace index could stall keramos indefinitely.
-		client := &http.Client{Timeout: 30 * time.Second}
+		client := netguard.HTTPClient(netguard.BlockMetadata, "KERAMOS_ALLOW_INTERNAL_FETCH", 30*time.Second)
 		resp, err := client.Get(rawURL)
 		if nil != err {
 			return nil, keramoserr.WrapError(keramoserr.ErrInternal, "fetch index", err)

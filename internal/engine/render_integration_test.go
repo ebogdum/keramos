@@ -33,6 +33,43 @@ data:
 	}
 }
 
+func TestRender_DollarEscapeInBlockScalar(t *testing.T) {
+	eng := New()
+	templates := map[string]string{
+		"cm.yaml": `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${release.name}
+data:
+  register.sh: |
+    #!/bin/sh
+    echo "instance: $${GITEA_INSTANCE_URL}"
+    echo "release: ${release.name}"
+`,
+	}
+	ctx := &RenderContext{
+		Values:  map[string]any{},
+		Package: map[string]any{"name": "demo"},
+		Release: map[string]any{"name": "myrelease"},
+	}
+	out, err := eng.Render(templates, nil, ctx)
+	if nil != err {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(out, "${GITEA_INSTANCE_URL}") {
+		t.Errorf("expected escaped shell var preserved verbatim, got:\n%s", out)
+	}
+	if strings.Contains(out, "$${GITEA_INSTANCE_URL}") {
+		t.Errorf("escape sequence was not collapsed, got:\n%s", out)
+	}
+	if strings.Contains(out, "<nil>") {
+		t.Errorf("escaped var was evaluated to nil, got:\n%s", out)
+	}
+	if !strings.Contains(out, "release: myrelease") {
+		t.Errorf("real expression alongside escape did not render, got:\n%s", out)
+	}
+}
+
 func TestRender_LookupReturnsEmptyWhenNoClient(t *testing.T) {
 	eng := New()
 	templates := map[string]string{

@@ -16,6 +16,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/ebogdum/keramos/internal/netguard"
 )
 
 // Span represents one operation. Use Start to construct, then call End when
@@ -174,8 +176,9 @@ func (t *Tracer) export(s *Span) {
 }
 
 // telemetryClient bounds telemetry POST attempts so they cannot stall keramos
-// operations or exfiltrate large bodies on a slow link.
-var telemetryClient = &http.Client{Timeout: 5 * time.Second}
+// operations on a slow link, and routes through the SSRF-guarded dialer so the
+// telemetry path can't be pointed at the cloud metadata endpoint.
+var telemetryClient = netguard.HTTPClient(netguard.BlockMetadata, "KERAMOS_ALLOW_INTERNAL_FETCH", 5*time.Second)
 
 func postSilently(endpoint string, body []byte) {
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))

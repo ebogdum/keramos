@@ -65,17 +65,13 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 		preResults, preErr = hooks.ExecuteHooks(client, parsedHooks, hooks.PreDelete)
 	}
 	if nil != preErr {
-		current.Status = release.StatusFailed
 		current.Hooks = preResults
-		_ = storage.Update(current)
-		return current, preErr
+		return current, combineFailure(preErr, markFailed(storage, current))
 	}
 
 	// Step 4: Delete all manifests (reverse install order handled by DeleteManifests)
 	if delErr := client.DeleteManifests(current.Manifest); nil != delErr {
-		current.Status = release.StatusFailed
-		_ = storage.Update(current)
-		return current, delErr
+		return current, combineFailure(delErr, markFailed(storage, current))
 	}
 
 	// Step 5: Execute post-delete hooks
@@ -86,8 +82,7 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 	}
 	current.Hooks = append(current.Hooks, postResults...)
 	if nil != postErr {
-		_ = storage.Update(current)
-		return current, postErr
+		return current, combineFailure(postErr, markFailed(storage, current))
 	}
 
 	// Step 6: Delete release history unless --keep-history
@@ -103,7 +98,9 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 		}
 	} else {
 		current.Status = release.StatusSuperseded
-		_ = storage.Update(current)
+		if updateErr := storage.Update(current); nil != updateErr {
+			return current, keramoserr.WrapError(keramoserr.ErrRelease, "uninstall completed but failed to persist kept-history status", updateErr)
+		}
 	}
 
 	logger.Debug("uninstall of %s complete", opts.ReleaseName)

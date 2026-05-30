@@ -2,7 +2,7 @@
 
 ## Synopsis
 
-`keramos policy check` evaluates every policy under `<package-path>/policies/` against a rendered Kubernetes manifest, returning a non-zero exit code when any rule reports a violation. The manifest comes from stdin (the typical pattern is `keramos template ... | keramos policy check ./pkg`) or from `--manifest <file>`. Policies can be either declarative keramos-policy YAML or full Rego (`.rego`) files for OPA-style logic.
+`keramos policy check` evaluates every policy under `<package-path>/policies/` against a rendered Kubernetes manifest, returning a non-zero exit code when any rule reports a violation. The manifest comes from stdin (the typical pattern is `keramos template ... | keramos policy check ./pkg`) or from `--manifest <file>`. Policies are declarative keramos-policy YAML (match-and-require rules).
 
 ## When to use it
 
@@ -10,7 +10,7 @@ Use as a deny-gate in CI: render the package, pipe through policy check, and fai
 
 ## What happens when you run it
 
-1. Loads every `.yaml` and `.rego` file under `<package-path>/policies/`.
+1. Loads every `.yaml` policy file under `<package-path>/policies/`.
 2. Reads the manifest from stdin (or from `--manifest <file>`).
 3. Evaluates each policy rule against each resource in the manifest.
 4. Prints a summary of pass/fail per rule.

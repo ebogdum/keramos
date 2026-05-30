@@ -5,25 +5,194 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/migrate"
+	"github.com/ebogdum/keramos/internal/helmcompat"
+	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/internal/values"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
-// newHelmCompatCommand exposes Helm-compat helpers: import a Helm chart into
-// keramos syntax (delegates to migrate), and emit a compat report that explains
-// which chart constructs translate cleanly.
+// newHelmCompatCommand exposes Helm-compat helpers: render/install an
+// unmodified upstream Helm chart under keramos's release record, import a Helm
+// chart into keramos syntax (delegates to migrate), and emit a compat report.
 func newHelmCompatCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "helm-compat",
-		Short: "Helm chart compatibility helpers",
+		Short: "Run and convert upstream Helm charts",
 	}
+	cmd.AddCommand(newHelmCompatRenderCommand())
+	cmd.AddCommand(newHelmCompatInstallCommand())
 	cmd.AddCommand(newHelmCompatReportCommand())
 	cmd.AddCommand(newHelmCompatExportCommand())
 	return cmd
+}
+
+// renderHelmChart loads values flags, queries cluster capabilities when a
+// client is available, and renders the chart via the helmcompat engine,
+// returning the manifests joined in stable filename order.
+func renderHelmChart(chartPath string, valueFiles, sets, setStrings, setFiles, setJSON []string, rel helmcompat.ReleaseMeta, caps helmcompat.CapabilitiesMeta) (string, error) {
+	userValues, err := values.ResolveAll(map[string]any{}, valueFiles, sets, setStrings, setFiles, setJSON)
+	if nil != err {
+		return "", err
+	}
+	rendered, err := helmcompat.Render(chartPath, helmcompat.Options{
+		Release:      rel,
+		Capabilities: caps,
+		UserValues:   userValues,
+	})
+	if nil != err {
+		return "", err
+	}
+	names := make([]string, 0, len(rendered))
+	for n := range rendered {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, n := range names {
+		fmt.Fprintf(&b, "---\n# Source: %s\n%s\n", n, strings.TrimRight(rendered[n], "\n"))
+	}
+	return b.String(), nil
+}
+
+func newHelmCompatRenderCommand() *cobra.Command {
+	var (
+		name        string
+		namespace   string
+		kubeconfig  string
+		kubeContext string
+		valueFiles  []string
+		sets        []string
+		setStrings  []string
+		setFiles    []string
+		setJSON     []string
+		kubeVersion string
+	)
+	cmd := &cobra.Command{
+		Use:   "render <chart-path>",
+		Short: "Render an unmodified Helm chart to manifests (like `helm template`)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			caps := helmcompat.CapabilitiesMeta{KubeVersion: kubeVersion}
+			// Best-effort cluster capabilities (offline render still works).
+			if client, cErr := kube.NewClient(kubeconfig, kubeContext, namespace); nil == cErr {
+				if c, capErr := client.GetCapabilities(); nil == capErr {
+					caps = capabilitiesFromMap(c, kubeVersion)
+				}
+			}
+			rel := helmcompat.ReleaseMeta{Name: name, Namespace: namespace, Revision: 1, IsInstall: true}
+			out, err := renderHelmChart(args[0], valueFiles, sets, setStrings, setFiles, setJSON, rel, caps)
+			if nil != err {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), out)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "release-name", "release name (.Release.Name)")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace (.Release.Namespace)")
+	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig")
+	cmd.Flags().StringVar(&kubeContext, "kube-context", "", "kubeconfig context")
+	cmd.Flags().StringSliceVarP(&valueFiles, "values", "f", nil, "values file(s)")
+	cmd.Flags().StringArrayVar(&sets, "set", nil, "set values (key=val)")
+	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "set string values")
+	cmd.Flags().StringArrayVar(&setFiles, "set-file", nil, "set values from files")
+	cmd.Flags().StringArrayVar(&setJSON, "set-json", nil, "set JSON values")
+	cmd.Flags().StringVar(&kubeVersion, "kube-version", "", "override .Capabilities.KubeVersion for offline render")
+	return cmd
+}
+
+func newHelmCompatInstallCommand() *cobra.Command {
+	var (
+		namespace   string
+		kubeconfig  string
+		kubeContext string
+		valueFiles  []string
+		sets        []string
+		setStrings  []string
+		setFiles    []string
+		setJSON     []string
+	)
+	cmd := &cobra.Command{
+		Use:   "install <name> <chart-path>",
+		Short: "Render an unmodified Helm chart and apply it under a keramos release record",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, chartPath := args[0], args[1]
+			client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
+			if nil != err {
+				return err
+			}
+			storage := release.NewSecretStorage(client.Clientset(), namespace)
+			if existing, _ := storage.Last(name); nil != existing {
+				return keramoserr.NewErrorf(keramoserr.ErrRelease, "release %q already exists; use a different name", name)
+			}
+
+			caps := helmcompat.CapabilitiesMeta{}
+			if c, capErr := client.GetCapabilities(); nil == capErr {
+				caps = capabilitiesFromMap(c, "")
+			}
+			rel := helmcompat.ReleaseMeta{Name: name, Namespace: namespace, Revision: 1, IsInstall: true}
+			manifest, err := renderHelmChart(chartPath, valueFiles, sets, setStrings, setFiles, setJSON, rel, caps)
+			if nil != err {
+				return err
+			}
+			if applyErr := client.ApplyManifests(manifest); nil != applyErr {
+				return applyErr
+			}
+			now := time.Now().UTC()
+			rec := &release.Release{
+				Name:      name,
+				Namespace: namespace,
+				Revision:  1,
+				Status:    release.StatusDeployed,
+				Manifest:  manifest,
+				Info:      release.ReleaseInfo{FirstDeployed: now, LastDeployed: now, Description: "helm-compat install"},
+			}
+			if storeErr := storage.Create(rec); nil != storeErr {
+				return storeErr
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "installed Helm chart %s as keramos release %q (revision 1)\n", filepath.Base(chartPath), name)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace")
+	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig")
+	cmd.Flags().StringVar(&kubeContext, "kube-context", "", "kubeconfig context")
+	cmd.Flags().StringSliceVarP(&valueFiles, "values", "f", nil, "values file(s)")
+	cmd.Flags().StringArrayVar(&sets, "set", nil, "set values (key=val)")
+	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "set string values")
+	cmd.Flags().StringArrayVar(&setFiles, "set-file", nil, "set values from files")
+	cmd.Flags().StringArrayVar(&setJSON, "set-json", nil, "set JSON values")
+	return cmd
+}
+
+// capabilitiesFromMap adapts the kube client's capability map to the
+// helmcompat CapabilitiesMeta. kubeVersionOverride wins when non-empty.
+func capabilitiesFromMap(c map[string]any, kubeVersionOverride string) helmcompat.CapabilitiesMeta {
+	out := helmcompat.CapabilitiesMeta{KubeVersion: kubeVersionOverride}
+	if "" == out.KubeVersion {
+		if kv, ok := c["kubeVersion"].(string); ok {
+			out.KubeVersion = kv
+		}
+	}
+	switch av := c["apiVersions"].(type) {
+	case []string:
+		out.APIVersions = av
+	case []any:
+		for _, x := range av {
+			if s, ok := x.(string); ok {
+				out.APIVersions = append(out.APIVersions, s)
+			}
+		}
+	}
+	return out
 }
 
 func newHelmCompatReportCommand() *cobra.Command {
@@ -186,7 +355,3 @@ func exportToHelmChart(pkg, dest string) error {
 	fmt.Printf("exported helm-compat chart to %s\n", dest)
 	return nil
 }
-
-// _ keeps migrate import used (prevents go-mod tidy from removing it; the
-// migrate command shares analysis helpers we may consume in future).
-var _ = migrate.Migrate

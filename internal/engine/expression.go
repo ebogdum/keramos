@@ -3,14 +3,11 @@ package engine
 import (
 	"strconv"
 	"fmt"
-	"regexp"
 	"strings"
 
 	keramoserrors "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/logger"
 )
-
-var exprPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 
 // EvaluateExpression evaluates a single ${...} expression against the context.
 // Returns the resolved value (can be any type: string, int, bool, map, slice).
@@ -88,6 +85,11 @@ func EvaluateExpression(expr string, ctx *RenderContext, funcs *FuncRegistry) (a
 	// paren form (`name(arg1, arg2)`) or the bare space form
 	// (`name arg1 "arg2"`). parseSpaceCall handles the latter.
 	for i := 1; i < len(segments); i++ {
+		// Once a value is the omit sentinel (e.g. from `omitempty`), short-
+		// circuit: downstream functions must not stringify it into `{}`.
+		if isOmit(value) {
+			return value, nil
+		}
 		seg := strings.TrimSpace(segments[i])
 		var fnName string
 		var fnArgs []string
@@ -134,17 +136,23 @@ func SubstituteAll(node any, ctx *RenderContext, funcs *FuncRegistry) (any, erro
 			if nil != err {
 				return nil, err
 			}
+			if isOmit(resolved) {
+				continue // `${... | omitempty}` drops its key
+			}
 			result[key] = resolved
 		}
 		return result, nil
 	case []any:
-		result := make([]any, len(v))
-		for i, val := range v {
+		result := make([]any, 0, len(v))
+		for _, val := range v {
 			resolved, err := SubstituteAll(val, ctx, funcs)
 			if nil != err {
 				return nil, err
 			}
-			result[i] = resolved
+			if isOmit(resolved) {
+				continue
+			}
+			result = append(result, resolved)
 		}
 		return result, nil
 	default:
@@ -164,24 +172,72 @@ func substituteString(s string, ctx *RenderContext, funcs *FuncRegistry) (any, e
 		}
 	}
 
-	// Mixed content: replace all ${...} and produce a string
-	var evalErr error
-	result := exprPattern.ReplaceAllStringFunc(s, func(match string) string {
-		if nil != evalErr {
-			return match
+	// Mixed content: scan for top-level ${...} expressions with the same
+	// quote/brace-aware logic as stashExpressions so a `}` inside a quoted
+	// argument (e.g. `${"a}b" | upper}`) does not terminate the match early.
+	// The escape sequence `$${` collapses to a literal `${` and is not
+	// evaluated.
+	var b strings.Builder
+	b.Grow(len(s))
+	runes := []rune(s)
+	i := 0
+	for i < len(runes) {
+		if '$' == runes[i] && i+2 < len(runes) && '$' == runes[i+1] && '{' == runes[i+2] {
+			b.WriteString("${")
+			i += 3
+			continue
 		}
-		inner := match[2 : len(match)-1]
-		val, err := EvaluateExpression(inner, ctx, funcs)
-		if nil != err {
-			evalErr = err
-			return match
+		if '$' == runes[i] && i+1 < len(runes) && '{' == runes[i+1] {
+			j := scanExpressionEnd(runes, i)
+			if j > 0 {
+				inner := string(runes[i+2 : j-1])
+				val, err := EvaluateExpression(inner, ctx, funcs)
+				if nil != err {
+					return nil, err
+				}
+				// In mixed content an omit sentinel renders as empty (there is
+				// no key to drop); never stringify it to `{}`.
+				if !isOmit(val) {
+					fmt.Fprintf(&b, "%v", val)
+				}
+				i = j
+				continue
+			}
 		}
-		return fmt.Sprintf("%v", val)
-	})
-	if nil != evalErr {
-		return nil, evalErr
+		b.WriteRune(runes[i])
+		i++
 	}
-	return result, nil
+	return b.String(), nil
+}
+
+// scanExpressionEnd returns the index just past the matching `}` of the
+// `${...}` expression starting at runes[start] (which must be `$`). It is
+// quote- and brace-aware: `}` inside single/double quotes or nested braces
+// does not close the expression. Returns -1 when no matching `}` is found.
+func scanExpressionEnd(runes []rune, start int) int {
+	depth := 1
+	j := start + 2
+	inSingle, inDouble := false, false
+	for j < len(runes) && 0 < depth {
+		ch := runes[j]
+		switch {
+		case '\\' == ch && j+1 < len(runes):
+			j++
+		case '\'' == ch && !inDouble:
+			inSingle = !inSingle
+		case '"' == ch && !inSingle:
+			inDouble = !inDouble
+		case '{' == ch && !inSingle && !inDouble:
+			depth++
+		case '}' == ch && !inSingle && !inDouble:
+			depth--
+		}
+		j++
+	}
+	if 0 == depth {
+		return j
+	}
+	return -1
 }
 
 // resolvePath resolves a dotted path against the render context.

@@ -243,6 +243,40 @@ func TestSubstituteAllUndefinedVarDefault(t *testing.T) {
 	}
 }
 
+func TestSubstituteAllDollarEscape(t *testing.T) {
+	ctx := testContext()
+	funcs := NewFuncRegistry()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"pure escape", `$${VAR}`, `${VAR}`},
+		{"escape keeps shell-style braces", `$${GITEA_INSTANCE_URL}`, `${GITEA_INSTANCE_URL}`},
+		{"escape mixed with expression", `$${PORT}-${values.name}`, `${PORT}-myapp`},
+		{"two escapes", `$${A} $${B}`, `${A} ${B}`},
+		{"escape then literal then expr", `prefix $${LIT} ${values.name} done`, `prefix ${LIT} myapp done`},
+		{"bare double dollar not before brace untouched", `cost is $$5`, `cost is $$5`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := SubstituteAll(tc.in, ctx, funcs)
+			if nil != err {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got, ok := result.(string)
+			if !ok {
+				t.Fatalf("expected string result, got %T: %v", result, result)
+			}
+			if tc.want != got {
+				t.Errorf("input %q: expected %q, got %q", tc.in, tc.want, got)
+			}
+		})
+	}
+}
+
 func TestSplitPipeline(t *testing.T) {
 	tests := []struct {
 		input    string

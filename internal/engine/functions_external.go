@@ -12,6 +12,7 @@ import (
 	"time"
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	"github.com/ebogdum/keramos/internal/netguard"
 )
 
 // validateOutboundURL parses and string-validates the URL: scheme must be
@@ -32,38 +33,12 @@ func validateOutboundURL(raw string) error {
 	return nil
 }
 
-// isBlockedIP returns true for any address class keramos refuses to dial when
-// KERAMOS_RENDER_INTERNAL is unset. Covers loopback, link-local (incl. AWS/GCP
-// metadata 169.254.169.254), unspecified (0.0.0.0/::), RFC1918, CGNAT,
-// IETF protocol assignment, benchmarking, and IPv6 ULA / docs.
+// isBlockedIP returns true for any address class keramos refuses to dial at
+// render time when KERAMOS_RENDER_INTERNAL is unset. It delegates to the shared
+// netguard classifier (block-all-internal policy) so render-time and
+// artifact-fetch paths stay consistent.
 func isBlockedIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified() || ip.IsPrivate() || ip.IsMulticast() {
-		return true
-	}
-	if v4 := ip.To4(); nil != v4 {
-		// 127.0.0.0/8 — extra belt-and-braces over IsLoopback for mapped v6
-		if 127 == v4[0] {
-			return true
-		}
-		// 100.64.0.0/10 — CGNAT
-		if 100 == v4[0] && 64 <= v4[1] && 127 >= v4[1] {
-			return true
-		}
-		// 192.0.0.0/24 — IETF protocol assignments
-		if 192 == v4[0] && 0 == v4[1] && 0 == v4[2] {
-			return true
-		}
-		// 198.18.0.0/15 — benchmarking
-		if 198 == v4[0] && (18 == v4[1] || 19 == v4[1]) {
-			return true
-		}
-		// 0.0.0.0/8
-		if 0 == v4[0] {
-			return true
-		}
-	}
-	return false
+	return netguard.IsBlocked(ip, netguard.BlockAllInternal)
 }
 
 // safeDialer enforces the SSRF blocklist at TCP dial time, after the OS

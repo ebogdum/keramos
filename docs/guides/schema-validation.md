@@ -230,7 +230,7 @@ Reads as "if `tls` is set, also require `tlsCert` and `tlsKey`". `dependentRequi
 Some constraints are out of scope. Examples:
 
 - **Cross-package references**: "this value must be a Service that exists in the cluster". For these, use a `pre-install` hook that validates at run time.
-- **Mutual exclusion across distant fields**: schemas can express it via `oneOf` but it's verbose. For complex cross-field rules, write a Rego policy under `policies/`.
+- **Mutual exclusion across distant fields**: schemas can express it via `oneOf` but it's verbose. For complex cross-field rules, write a keramos policy rule under `policies/`.
 - **Conditional defaults**: schemas express *valid shapes*, not *derived values*. For derived defaults, use template expressions (`${values.image.tag | default .Chart.AppVersion}`).
 
 ## Composition with layers

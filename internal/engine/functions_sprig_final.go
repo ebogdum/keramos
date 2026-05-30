@@ -124,6 +124,15 @@ func fnSeq(value any, args ...any) (any, error) {
 	if 0 == step {
 		return nil, keramoserrors.NewError(keramoserrors.ErrFunction, "seq: step must be non-zero")
 	}
+	// Bound the materialised slice to avoid OOM from a single expression.
+	// Computed in float64 so an enormous start/end can't overflow the count.
+	approx := (float64(end) - float64(start)) / float64(step)
+	if approx < 0 {
+		approx = -approx
+	}
+	if approx > float64(maxRangeLen) {
+		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "seq: range size %d exceeds %d", int64(approx)+1, maxRangeLen)
+	}
 	out := make([]any, 0)
 	if step > 0 {
 		for i := start; i <= end; i += step {

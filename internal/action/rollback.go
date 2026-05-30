@@ -110,28 +110,29 @@ func Rollback(client kube.KubeClient, opts *RollbackOptions) (*release.Release, 
 		preResults, preErr = hooks.ExecuteHooks(client, parsedHooks, hooks.PreRollback)
 	}
 	if nil != preErr {
-		rel.Status = release.StatusFailed
 		rel.Hooks = preResults
-		_ = storage.Update(rel)
-		return rel, preErr
+		return rel, combineFailure(preErr, markFailed(storage, rel))
 	}
 	rel.Hooks = append(rel.Hooks, preResults...)
 
 	// Step 4: Apply target revision's manifests
 	if opts.Force {
 		if delErr := client.DeleteManifests(current.Manifest); nil != delErr {
-			logger.Warn("force rollback: pre-delete reported error: %v", delErr)
+			// Pre-delete failed: abort rather than apply over a partially
+			// deleted state and report only a misleading apply error.
+			return rel, combineFailure(
+				keramoserr.WrapErrorf(keramoserr.ErrKube, delErr, "force rollback aborted: pre-delete of current resources failed"),
+				markFailed(storage, rel))
 		}
 	}
 	if applyErr := client.ApplyManifests(target.Manifest); nil != applyErr {
-		rel.Status = release.StatusFailed
-		_ = storage.Update(rel)
+		sec := markFailed(storage, rel)
 		if opts.CleanupOnFail {
 			if cleanErr := client.DeleteManifests(target.Manifest); nil != cleanErr {
-				logger.Warn("cleanup-on-fail: %v", cleanErr)
+				sec = append(sec, "cleanup-on-fail delete failed: "+cleanErr.Error())
 			}
 		}
-		return rel, applyErr
+		return rel, combineFailure(applyErr, sec)
 	}
 	if opts.RecreatePods {
 		if rrErr := recreatePodsForManifest(client, target.Manifest); nil != rrErr {
@@ -146,9 +147,7 @@ func Rollback(client kube.KubeClient, opts *RollbackOptions) (*release.Release, 
 			timeout = 5 * time.Minute
 		}
 		if waitErr := client.WaitForReady(target.Manifest, timeout); nil != waitErr {
-			rel.Status = release.StatusFailed
-			_ = storage.Update(rel)
-			return rel, waitErr
+			return rel, combineFailure(waitErr, markFailed(storage, rel))
 		}
 	}
 
@@ -160,9 +159,7 @@ func Rollback(client kube.KubeClient, opts *RollbackOptions) (*release.Release, 
 	}
 	rel.Hooks = append(rel.Hooks, postResults...)
 	if nil != postErr {
-		rel.Status = release.StatusFailed
-		_ = storage.Update(rel)
-		return rel, postErr
+		return rel, combineFailure(postErr, markFailed(storage, rel))
 	}
 
 	// Step 7: Mark new revision deployed, current superseded

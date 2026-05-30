@@ -81,8 +81,8 @@ func TestIfWithoutElse(t *testing.T) {
 	if nil != err {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if nil != result {
-		t.Errorf("expected nil for falsy without $else, got %v", result)
+	if !isOmit(result) {
+		t.Errorf("expected omit sentinel for falsy without $else, got %v", result)
 	}
 }
 
@@ -139,8 +139,8 @@ func TestDocumentLevelIfFalsy(t *testing.T) {
 	if nil != err {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if nil != result {
-		t.Errorf("expected nil for falsy document-level $if, got %v", result)
+	if !isOmit(result) {
+		t.Errorf("expected omit sentinel for falsy document-level $if, got %v", result)
 	}
 }
 
@@ -221,16 +221,35 @@ func TestEachOverNil(t *testing.T) {
 		"$yield": map[string]any{"item": "${$item}"},
 	}
 
+	// A MISSING collection now omits the field rather than emitting `[]`, so an
+	// optional list cleanly disappears. (An explicitly empty `[]` still yields
+	// an empty list — see TestEachOverEmptyListYieldsEmpty.)
+	result, err := ProcessControlFlow(input, ctx, funcs)
+	if nil != err {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !isOmit(result) {
+		t.Fatalf("expected omit sentinel for nil iterable, got %T %v", result, result)
+	}
+}
+
+func TestEachOverEmptyListYieldsEmpty(t *testing.T) {
+	ctx := &RenderContext{Values: map[string]any{"items": []any{}}}
+	funcs := NewFuncRegistry()
+	input := map[string]any{
+		"$each":  "${values.items}",
+		"$yield": map[string]any{"item": "${$item}"},
+	}
 	result, err := ProcessControlFlow(input, ctx, funcs)
 	if nil != err {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	list, ok := result.([]any)
 	if !ok {
-		t.Fatalf("expected list, got %T", result)
+		t.Fatalf("expected empty list for an explicitly empty iterable, got %T", result)
 	}
 	if 0 != len(list) {
-		t.Errorf("expected empty list for nil iterable, got %d", len(list))
+		t.Errorf("expected empty list, got %d", len(list))
 	}
 }
 

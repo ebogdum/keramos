@@ -120,7 +120,7 @@ An external command that integrates with keramos's CLI. Plugins live in `~/.conf
 
 ## Policy
 
-A rule that runs against a rendered manifest. Keramos packages can carry `policies/` (Rego or keramos-native YAML). `keramos policy run <pkg>` evaluates them. → [Policies](cli/policy.md).
+A rule that runs against a rendered manifest. Keramos packages can carry `policies/` (keramos-native declarative YAML). `keramos policy run <pkg>` evaluates them. → [Policies](cli/policy.md).
 
 ## .prov file
 

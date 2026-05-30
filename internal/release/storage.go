@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"time"
@@ -65,6 +66,25 @@ func NewSecretStorage(clientset kubernetes.Interface, namespace string) Storage 
 // SecretName generates the secret name for a release revision.
 func SecretName(releaseName string, revision int) string {
 	return fmt.Sprintf("keramos.v1.%s.v%d", releaseName, revision)
+}
+
+// releaseRecordName matches the canonical release-record Secret name shape,
+// `keramos.v1.<release>.v<revision>`.
+var releaseRecordName = regexp.MustCompile(`^keramos\.v1\..+\.v\d+$`)
+
+// isReleaseRecord reports whether a Secret is a keramos RELEASE RECORD rather than
+// an ordinary application Secret that keramos merely manages. Both carry the
+// `managedBy=keramos` label (keramos stamps it on every managed resource), so the
+// label alone is ambiguous; a release record additionally matches the
+// canonical name shape AND carries the encoded-release data key. Without this
+// check, listing would try to decode arbitrary managed Secrets (e.g. an app's
+// `db-password`) and emit a spurious "skipping corrupt release secret" warning.
+func isReleaseRecord(secret *corev1.Secret) bool {
+	if !releaseRecordName.MatchString(secret.Name) {
+		return false
+	}
+	_, ok := secret.Data[dataKey]
+	return ok
 }
 
 // SecretLabels generates the labels for a release secret. We write both
@@ -210,6 +230,10 @@ func (s *SecretStorage) List(namespace string) ([]*Release, error) {
 				continue
 			}
 			seen[secrets.Items[i].Name] = struct{}{}
+			if !isReleaseRecord(&secrets.Items[i]) {
+				// A keramos-managed application Secret, not a release record.
+				continue
+			}
 			rel, decErr := decodeSecret(&secrets.Items[i])
 			if nil != decErr {
 				logger.Warn("skipping corrupt release secret %s: %v", secrets.Items[i].Name, decErr)
@@ -249,6 +273,9 @@ func (s *SecretStorage) History(name string) ([]*Release, error) {
 
 	releases := make([]*Release, 0, len(secrets.Items))
 	for i := range secrets.Items {
+		if !isReleaseRecord(&secrets.Items[i]) {
+			continue
+		}
 		rel, decErr := decodeSecret(&secrets.Items[i])
 		if nil != decErr {
 			logger.Warn("skipping corrupt release secret %s: %v", secrets.Items[i].Name, decErr)

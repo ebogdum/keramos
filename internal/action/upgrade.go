@@ -1,6 +1,8 @@
 package action
 
 import (
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/ebogdum/keramos/internal/audit"
@@ -308,7 +310,7 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 		Tests:         renderedTests,
 		HookTemplates: renderedHooks,
 		Labels:        labels,
-		Audit:         audit.Capture("upgrade", current.Revision),
+		Audit:         audit.WithValueFiles(audit.WithFlags(audit.Capture("upgrade", current.Revision), auditFlagsUpgrade(opts)), opts.ValueFiles),
 		Info: release.ReleaseInfo{
 			FirstDeployed: current.Info.FirstDeployed,
 			LastDeployed:  now,
@@ -340,13 +342,14 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 		preResults, preErr = hooks.ExecuteHooksWithTimeout(client, parsedHooks, hooks.PreUpgrade, opts.HookTimeout)
 	}
 	if nil != preErr {
-		rel.Status = release.StatusFailed
 		rel.Hooks = preResults
-		_ = storage.Update(rel)
+		sec := markFailed(storage, rel)
 		if opts.Atomic {
-			atomicRollbackUpgrade(client, storage, current, rel)
+			if rbErr := atomicRollbackUpgrade(client, storage, current, rel); nil != rbErr {
+				sec = append(sec, rbErr.Error())
+			}
 		}
-		return rel, preErr
+		return rel, combineFailure(preErr, sec)
 	}
 	rel.Hooks = append(rel.Hooks, preResults...)
 
@@ -357,9 +360,7 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 			crdTimeout = 2 * time.Minute
 		}
 		if crdErr := client.ApplyCRDs(crdManifest, crdTimeout); nil != crdErr {
-			rel.Status = release.StatusFailed
-			_ = storage.Update(rel)
-			return rel, crdErr
+			return rel, combineFailure(crdErr, markFailed(storage, rel))
 		}
 	}
 
@@ -382,30 +383,38 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 		if nil != needErr {
 			logger.Warn("force upgrade: divergence check failed: %v (falling back to full pre-delete)", needErr)
 			if delErr := client.DeleteManifests(current.Manifest); nil != delErr {
-				logger.Warn("force upgrade: pre-delete of previous manifests reported error: %v", delErr)
+				// Pre-delete failed: do NOT proceed to apply, which would
+				// otherwise surface only a confusing immutable-field error
+				// while masking that the intended delete never happened.
+				return rel, combineFailure(
+					keramoserr.WrapErrorf(keramoserr.ErrKube, delErr, "force upgrade aborted: pre-delete of previous resources failed"),
+					markFailed(storage, rel))
 			}
 		} else if 0 < len(need) {
 			if delErr := client.DeleteResources(current.Manifest, need); nil != delErr {
-				logger.Warn("force upgrade: targeted pre-delete reported error: %v", delErr)
+				return rel, combineFailure(
+					keramoserr.WrapErrorf(keramoserr.ErrKube, delErr, "force upgrade aborted: targeted pre-delete of immutable-divergent resources failed"),
+					markFailed(storage, rel))
 			}
 		}
 	}
 	if applyErr := client.ApplyManifests(manifest); nil != applyErr {
-		rel.Status = release.StatusFailed
-		_ = storage.Update(rel)
+		sec := markFailed(storage, rel)
 		if opts.CleanupOnFail {
 			// Delete only the resources we introduced (those not in preExisting).
 			introduced := newResourcesOnly(client, manifest, preExisting)
 			if 0 < len(introduced) {
 				if cleanErr := client.DeleteResources(manifest, introduced); nil != cleanErr {
-					logger.Warn("cleanup-on-fail: failed to delete partially-applied resources: %v", cleanErr)
+					sec = append(sec, "cleanup-on-fail delete of partially-applied resources failed: "+cleanErr.Error())
 				}
 			}
 		}
 		if opts.Atomic {
-			atomicRollbackUpgrade(client, storage, current, rel)
+			if rbErr := atomicRollbackUpgrade(client, storage, current, rel); nil != rbErr {
+				sec = append(sec, rbErr.Error())
+			}
 		}
-		return rel, applyErr
+		return rel, combineFailure(applyErr, sec)
 	}
 
 	// --recreate-pods: rolling restart of Deployments/StatefulSets/DaemonSets
@@ -423,12 +432,13 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 			jt = 5 * time.Minute
 		}
 		if jobErr := waitForJobsInManifest(client, manifest, jt); nil != jobErr {
-			rel.Status = release.StatusFailed
-			_ = storage.Update(rel)
+			sec := markFailed(storage, rel)
 			if opts.Atomic {
-				atomicRollbackUpgrade(client, storage, current, rel)
+				if rbErr := atomicRollbackUpgrade(client, storage, current, rel); nil != rbErr {
+					sec = append(sec, rbErr.Error())
+				}
 			}
-			return rel, jobErr
+			return rel, combineFailure(jobErr, sec)
 		}
 	}
 	if opts.Wait {
@@ -437,22 +447,23 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 			timeout = 5 * time.Minute
 		}
 		if waitErr := client.WaitForReady(manifest, timeout); nil != waitErr {
-			rel.Status = release.StatusFailed
-			_ = storage.Update(rel)
+			sec := markFailed(storage, rel)
 			// CleanupOnFail: roll back the partial upgrade by re-applying the
 			// previous revision's manifest. Resources introduced by this
 			// upgrade and not in the previous revision are deleted.
 			if opts.CleanupOnFail {
 				if "" != current.Manifest {
 					if reapplyErr := client.ApplyManifests(current.Manifest); nil != reapplyErr {
-						logger.Warn("cleanup-on-fail upgrade: re-apply previous manifest: %v", reapplyErr)
+						sec = append(sec, "cleanup-on-fail re-apply of previous manifest failed: "+reapplyErr.Error())
 					}
 				}
 			}
 			if opts.Atomic {
-				atomicRollbackUpgrade(client, storage, current, rel)
+				if rbErr := atomicRollbackUpgrade(client, storage, current, rel); nil != rbErr {
+					sec = append(sec, rbErr.Error())
+				}
 			}
-			return rel, waitErr
+			return rel, combineFailure(waitErr, sec)
 		}
 	}
 
@@ -464,12 +475,13 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 	}
 	rel.Hooks = append(rel.Hooks, postResults...)
 	if nil != postErr {
-		rel.Status = release.StatusFailed
-		_ = storage.Update(rel)
+		sec := markFailed(storage, rel)
 		if opts.Atomic {
-			atomicRollbackUpgrade(client, storage, current, rel)
+			if rbErr := atomicRollbackUpgrade(client, storage, current, rel); nil != rbErr {
+				sec = append(sec, rbErr.Error())
+			}
 		}
-		return rel, postErr
+		return rel, combineFailure(postErr, sec)
 	}
 
 	// Step 10: Mark new revision deployed, old superseded
@@ -519,27 +531,82 @@ func pruneReleaseHistory(storage release.Storage, name string, maxKeep int) {
 // atomicRollbackUpgrade re-applies the previous revision's manifests when
 // atomic mode is enabled and an upgrade fails. It also deletes resources
 // that only exist in the failed manifest (not in the previous one).
-func atomicRollbackUpgrade(client kube.KubeClient, storage release.Storage, previous *release.Release, failed *release.Release) {
+// auditFlagsUpgrade renders the redacted upgrade-flag list for the audit
+// trail (see auditFlags for the install equivalent; --set values are redacted).
+func auditFlagsUpgrade(opts *UpgradeOptions) []string {
+	var f []string
+	for _, s := range opts.Sets {
+		f = append(f, "--set "+redactSetValue(s))
+	}
+	for _, s := range opts.SetStrings {
+		f = append(f, "--set-string "+redactSetValue(s))
+	}
+	for _, s := range opts.SetJSON {
+		f = append(f, "--set-json "+redactSetValue(s))
+	}
+	for _, s := range opts.SetFiles {
+		f = append(f, "--set-file "+s)
+	}
+	if "" != opts.Profile {
+		f = append(f, "--profile "+opts.Profile)
+	}
+	if "" != opts.Environment {
+		f = append(f, "--environment "+opts.Environment)
+	}
+	for _, o := range opts.Only {
+		f = append(f, "--only "+o)
+	}
+	for name, on := range map[string]bool{
+		"--atomic": opts.Atomic, "--wait": opts.Wait, "--wait-for-jobs": opts.WaitForJobs,
+		"--force": opts.Force, "--cleanup-on-fail": opts.CleanupOnFail, "--no-hooks": opts.NoHooks,
+		"--install": opts.Install, "--reuse-values": opts.ReuseValues, "--reset-values": opts.ResetValues,
+		"--include-crds": opts.IncludeCRDs, "--recreate-pods": opts.RecreatePods,
+	} {
+		if on {
+			f = append(f, name)
+		}
+	}
+	sort.Strings(f)
+	return f
+}
+
+// atomicRollbackUpgrade re-applies the previous revision and removes resources
+// introduced only by the failed upgrade. It returns a non-nil error if any
+// step of the rollback itself fails, so the caller can report that the cluster
+// may be left in an inconsistent state rather than silently claiming a clean
+// rollback.
+func atomicRollbackUpgrade(client kube.KubeClient, storage release.Storage, previous *release.Release, failed *release.Release) error {
 	logger.Warn("atomic upgrade failed, rolling back to revision %d for %s", previous.Revision, previous.Name)
+
+	var problems []string
 
 	// Delete resources that exist only in the failed manifest (new resources from the upgrade).
 	orphaned, orphanErr := computeOrphanedManifest(failed.Manifest, previous.Manifest)
 	if nil != orphanErr {
-		logger.Warn("atomic rollback: failed to compute orphaned resources: %v", orphanErr)
+		problems = append(problems, "compute orphaned resources: "+orphanErr.Error())
 	} else if "" != orphaned {
 		if delErr := client.DeleteManifests(orphaned); nil != delErr {
-			logger.Warn("atomic rollback: failed to delete orphaned resources: %v", delErr)
+			problems = append(problems, "delete orphaned resources: "+delErr.Error())
 		}
 	}
 
 	if applyErr := client.ApplyManifests(previous.Manifest); nil != applyErr {
-		logger.Warn("atomic rollback: failed to re-apply previous manifests: %v", applyErr)
+		problems = append(problems, "re-apply previous manifests: "+applyErr.Error())
 	}
 	failed.Status = release.StatusFailed
-	_ = storage.Update(failed)
+	if uErr := storage.Update(failed); nil != uErr {
+		problems = append(problems, "persist failed-revision status: "+uErr.Error())
+	}
 
 	previous.Status = release.StatusDeployed
-	_ = storage.Update(previous)
+	if uErr := storage.Update(previous); nil != uErr {
+		problems = append(problems, "restore previous-revision status: "+uErr.Error())
+	}
+
+	if 0 < len(problems) {
+		return keramoserr.WrapErrorf(keramoserr.ErrRelease, nil, "atomic rollback incomplete: %s", strings.Join(problems, "; "))
+	}
+	return nil
 }
 
 // resourceKey returns a unique identifier for a Kubernetes resource.

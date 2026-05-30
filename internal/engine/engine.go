@@ -154,14 +154,17 @@ func (e *Engine) renderDocumentWithRegistry(doc any, partials map[string]any, ct
 	if nil != err {
 		return nil, err
 	}
-	if nil == processed {
-		return nil, nil
+	if nil == processed || isOmit(processed) {
+		return nil, nil // whole document omitted (e.g. a root-level $if was false)
 	}
 
 	// Phase 3: Substitute variables
 	substituted, err := SubstituteAll(processed, ctx, reg)
 	if nil != err {
 		return nil, err
+	}
+	if isOmit(substituted) {
+		return nil, nil
 	}
 
 	// Phase 4: Clean $-prefixed keys
@@ -339,13 +342,22 @@ func cleanDollarKeys(node any) any {
 			if _, isDirective := keramosDirectiveKeys[k]; isDirective {
 				continue
 			}
+			// Defence in depth: an omit sentinel embedded in a value built by
+			// a function (e.g. `dict "k" (... | omitempty)`) is dropped here so
+			// it can never reach the YAML marshaller and serialise as `{}`.
+			if isOmit(val) {
+				continue
+			}
 			result[k] = cleanDollarKeys(val)
 		}
 		return result
 	case []any:
-		result := make([]any, len(v))
-		for i, val := range v {
-			result[i] = cleanDollarKeys(val)
+		result := make([]any, 0, len(v))
+		for _, val := range v {
+			if isOmit(val) {
+				continue
+			}
+			result = append(result, cleanDollarKeys(val))
 		}
 		return result
 	default:

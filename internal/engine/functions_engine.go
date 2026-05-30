@@ -38,7 +38,24 @@ func makeIncludeFunc(e *Engine, ctx *RenderContext, partials map[string]any) Fun
 		if !ok {
 			return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "include: partial %q not found", name)
 		}
-		body := fmt.Sprintf("%v", raw)
+		if int32(maxTplDepth) <= ctx.tplDepth.Load() {
+			return nil, keramoserrors.NewError(keramoserrors.ErrFunction, "include: recursion depth exceeded")
+		}
+		var body string
+		switch v := raw.(type) {
+		case string:
+			body = v
+		default:
+			// Structured partial (map/slice from _helpers.yaml): marshal to
+			// YAML so the result is valid YAML rather than Go's %v map syntax.
+			marshaled, mErr := marshalYAML(v)
+			if nil != mErr {
+				return nil, keramoserrors.WrapErrorf(keramoserrors.ErrFunction, mErr, "include: cannot marshal partial %q", name)
+			}
+			body = marshaled
+		}
+		ctx.tplDepth.Add(1)
+		defer ctx.tplDepth.Add(-1)
 		out, err := e.RenderFile("__include__:"+name, body, partials, ctx)
 		if nil != err {
 			return nil, err

@@ -104,17 +104,38 @@ func newRegistryPushCommand() *cobra.Command {
 
 func newRegistryPullCommand() *cobra.Command {
 	var (
-		destDir   string
-		plainHTTP bool
-		insecure  bool
+		destDir        string
+		plainHTTP      bool
+		insecure       bool
+		cosignKey      string
+		cosignIdentity string
+		cosignIssuer   string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "pull <ref>",
 		Short: "Pull a keramos package from an OCI registry",
-		Args:  cobra.ExactArgs(1),
+		Long: "Pull a keramos package from an OCI registry.\n\n" +
+			"Supply --cosign-key (key-based) or --cosign-identity together with " +
+			"--cosign-issuer (keyless/Sigstore) to require a valid cosign " +
+			"signature on the artifact BEFORE it is pulled. Verification is " +
+			"fail-closed: an unsigned or wrongly-signed artifact is not pulled.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref := args[0]
+
+			// Fail-closed cosign verification before the artifact is fetched.
+			if "" != cosignKey || "" != cosignIdentity || "" != cosignIssuer {
+				var keyless *repo.CosignKeylessOpts
+				if "" == cosignKey {
+					keyless = &repo.CosignKeylessOpts{CertIdentity: cosignIdentity, CertIssuer: cosignIssuer}
+				}
+				if err := repo.VerifyCosign(ref, cosignKey, keyless); nil != err {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "cosign signature verified for %s\n", ref)
+			}
+
 			registry := &repo.OCIRegistry{
 				PlainHTTP:             plainHTTP,
 				InsecureSkipTLSVerify: insecure,
@@ -133,6 +154,9 @@ func newRegistryPullCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&destDir, "destination", "d", ".", "directory to save the pulled package")
 	cmd.Flags().BoolVar(&plainHTTP, "plain-http", false, "use plaintext HTTP (no TLS)")
 	cmd.Flags().BoolVar(&insecure, "insecure-skip-tls-verify", false, "skip TLS certificate verification")
+	cmd.Flags().StringVar(&cosignKey, "cosign-key", "", "verify the artifact's cosign signature with this public key before pulling")
+	cmd.Flags().StringVar(&cosignIdentity, "cosign-identity", "", "keyless cosign: required certificate identity (use with --cosign-issuer)")
+	cmd.Flags().StringVar(&cosignIssuer, "cosign-issuer", "", "keyless cosign: required certificate OIDC issuer (use with --cosign-identity)")
 
 	return cmd
 }

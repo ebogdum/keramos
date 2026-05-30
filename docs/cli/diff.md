@@ -2,7 +2,7 @@
 
 ## Synopsis
 
-`keramos diff` shows what would change if you ran `keramos upgrade` against a release with a given package + values. The diff is computed via server-side dry-run, so the cluster's defaulters and admission webhooks contribute to the comparison — you see the diff the cluster would actually compute, not a textual diff of two YAML files.
+`keramos diff` shows what would change if you ran `keramos upgrade` against a release with a given package + values. By default it compares keramos's stored manifest against the freshly rendered manifest (a structured, per-resource client-side diff). Add `--server-side` to instead compare the LIVE cluster objects against a server-side apply dry-run, so the cluster's defaulters and admission webhooks contribute to the comparison — the diff the cluster would actually compute, not a textual diff of two YAML files.
 
 ## When to use it
 
@@ -22,6 +22,7 @@ keramos diff <release-name> <package-path> [flags]
 | `--no-color` | — | — | disable colored diff output |
 | `--profile` | string | — | profile name to apply |
 | `--revision` | int | — | compare against a specific revision |
+| `--server-side` | — | — | diff live cluster state against a server-side apply dry-run |
 | `--set` | stringArray | — | set key=value overrides (repeatable) |
 | `--set-file` | stringArray | — | set key=path; value read from path (repeatable) |
 | `--set-json` | stringArray | — | set key=<json>; value parsed as JSON (repeatable) |

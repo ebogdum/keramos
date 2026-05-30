@@ -309,18 +309,16 @@ func TestNestedIfInsideEach(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected []any, got %T", result)
 	}
-	// Items with enabled=false produce nil
-	if 3 != len(list) {
-		t.Fatalf("expected 3 items (including nils), got %d", len(list))
+	// A $if without $else inside $each now OMITS the disabled element rather
+	// than emitting a nil hole, so iteration doubles as a filter.
+	if 2 != len(list) {
+		t.Fatalf("expected 2 items (disabled filtered out), got %d: %v", len(list), list)
 	}
 	if "a" != list[0] {
 		t.Errorf("expected 'a', got %v", list[0])
 	}
-	if nil != list[1] {
-		t.Errorf("expected nil for disabled item, got %v", list[1])
-	}
-	if "c" != list[2] {
-		t.Errorf("expected 'c', got %v", list[2])
+	if "c" != list[1] {
+		t.Errorf("expected 'c', got %v", list[1])
 	}
 }
 

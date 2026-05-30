@@ -24,6 +24,7 @@ func newDiffCommand() *cobra.Command {
 		revision   int
 		noColor    bool
 		smart      bool
+		serverSide bool
 		filters    diff.Filters
 	)
 
@@ -39,7 +40,7 @@ rotation values). Each noise class can be re-enabled with its own --show-* flag.
 Use --smart=false to fall back to a raw line-level unified diff.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDiff(cmd, args[0], args[1], valueFiles, sets, setStrings, setFiles, setJSON, profile, revision, noColor, smart, filters)
+			return runDiff(cmd, args[0], args[1], valueFiles, sets, setStrings, setFiles, setJSON, profile, revision, noColor, smart, serverSide, filters)
 		},
 	}
 
@@ -53,6 +54,7 @@ Use --smart=false to fall back to a raw line-level unified diff.`,
 	cmd.Flags().BoolVar(&noColor, "no-color", false, "disable colored diff output")
 
 	cmd.Flags().BoolVar(&smart, "smart", true, "use Kubernetes-aware structured diff")
+	cmd.Flags().BoolVar(&serverSide, "server-side", false, "diff live cluster state against a server-side apply dry-run (reflects defaulting and admission mutation)")
 	cmd.Flags().BoolVar(&filters.ShowStatus, "show-status", false, "include changes under .status")
 	cmd.Flags().BoolVar(&filters.ShowManagedFields, "show-managed-fields", false, "include metadata.managedFields")
 	cmd.Flags().BoolVar(&filters.ShowGeneration, "show-generation", false, "include resourceVersion/uid/generation/creationTimestamp")
@@ -67,7 +69,7 @@ Use --smart=false to fall back to a raw line-level unified diff.`,
 	return cmd
 }
 
-func runDiff(cmd *cobra.Command, releaseName, packagePath string, valueFiles, sets, setStrings, setFiles, setJSON []string, profile string, revision int, noColor bool, smart bool, filters diff.Filters) error {
+func runDiff(cmd *cobra.Command, releaseName, packagePath string, valueFiles, sets, setStrings, setFiles, setJSON []string, profile string, revision int, noColor bool, smart bool, serverSide bool, filters diff.Filters) error {
 	// Step 1: Get current release manifest
 	client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
 	if nil != err {
@@ -121,9 +123,25 @@ func runDiff(cmd *cobra.Command, releaseName, packagePath string, valueFiles, se
 		return err
 	}
 
+	// Choose the two sides being compared. By default this is keramos's stored
+	// manifest versus the freshly rendered manifest (client-side). With
+	// --server-side, compare the LIVE cluster objects against what the API
+	// server would produce from a dry-run apply of the rendered manifest —
+	// reflecting defaulting and admission-webhook mutation.
+	baseManifest := current.Manifest
+	proposedManifest := newManifest
+	if serverSide {
+		live, merged, ssErr := client.ServerSideDiff(newManifest)
+		if nil != ssErr {
+			return ssErr
+		}
+		baseManifest = live
+		proposedManifest = merged
+	}
+
 	// Step 3: Compute diff (smart-by-default, raw on --smart=false).
 	if smart {
-		changes, dErr := diff.Compute(current.Manifest, newManifest, filters)
+		changes, dErr := diff.Compute(baseManifest, proposedManifest, filters)
 		if nil != dErr {
 			return dErr
 		}
@@ -135,7 +153,7 @@ func runDiff(cmd *cobra.Command, releaseName, packagePath string, valueFiles, se
 		return nil
 	}
 
-	diffOutput := UnifiedDiff(current.Manifest, newManifest, "current", "proposed")
+	diffOutput := UnifiedDiff(baseManifest, proposedManifest, "current", "proposed")
 	if "" == diffOutput {
 		fmt.Fprintln(cmd.OutOrStdout(), "No changes detected.")
 		return nil

@@ -26,6 +26,7 @@ type mockKubeClient struct {
 	deletedManifests []string
 	dryRunManifests  []string
 	clientset        kubernetes.Interface
+	lookupFn         func(apiVersion, kind, namespace, name string) (map[string]any, error)
 }
 
 func newMockClient(ns string) *mockKubeClient {
@@ -74,6 +75,9 @@ func (m *mockKubeClient) DryRunApply(manifests string) error {
 }
 
 func (m *mockKubeClient) Lookup(apiVersion, kind, namespace, name string) (map[string]any, error) {
+	if nil != m.lookupFn {
+		return m.lookupFn(apiVersion, kind, namespace, name)
+	}
 	return nil, nil
 }
 

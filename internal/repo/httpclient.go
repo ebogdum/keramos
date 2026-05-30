@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net"
 	"net/http"
 	"os"
 	"time"
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/logger"
+	"github.com/ebogdum/keramos/internal/netguard"
 )
 
 const (
@@ -50,9 +50,7 @@ func NewAuthenticatedClient(store *CredentialStore) (*AuthenticatedClient, error
 
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout: defaultConnectTimeout,
-		}).DialContext,
+		DialContext: netguard.DialContext(netguard.BlockMetadata, "KERAMOS_ALLOW_INTERNAL_FETCH", defaultConnectTimeout),
 		TLSClientConfig:     tlsConfig,
 		MaxIdleConns:        100,
 		IdleConnTimeout:     90 * time.Second,
@@ -110,7 +108,7 @@ func NewClientWithTLS(caFile, certFile, keyFile string) (*AuthenticatedClient, e
 	}
 	transport := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
-		DialContext:         (&net.Dialer{Timeout: defaultConnectTimeout}).DialContext,
+		DialContext:         netguard.DialContext(netguard.BlockMetadata, "KERAMOS_ALLOW_INTERNAL_FETCH", defaultConnectTimeout),
 		TLSClientConfig:     tlsConfig,
 		MaxIdleConns:        100,
 		IdleConnTimeout:     90 * time.Second,

@@ -303,6 +303,23 @@ data:
 
 The expression engine is forgiving with paths and string operations; arithmetic and type-strict functions raise errors so silent wrong outputs don't slip through.
 
+## Optional fields (omitting a key)
+
+By default a field whose value resolves to nil renders as `key: null`. To make a
+field *disappear* when its value is absent, use one of:
+
+| Pattern | Behaviour |
+|---|---|
+| `key: ${values.optional \| omitempty}` | the `key` is dropped entirely when the value is empty (nil, `""`, empty list/map, `false`, `0`) |
+| `key:`<br>`  $if: ${values.enabled}`<br>`  $then: ...` (no `$else`) | when the condition is false, **only `key`** is omitted — sibling fields are untouched |
+| `key:`<br>`  $each: ${values.list}`<br>`  $yield: ...` | when `values.list` is **missing**, `key` is omitted; when it is an explicit empty list (`[]`), `key` renders as `[]` |
+
+A `$if`/`$each` whose yield is itself omitted contributes no element, so iteration
+doubles as a filter: `$each` over a list with a nested `$if` drops the
+non-matching items instead of leaving `null` holes.
+
+A root-level `$if` that evaluates false removes the whole document.
+
 ## Output behaviour
 
 | Return type | Output |

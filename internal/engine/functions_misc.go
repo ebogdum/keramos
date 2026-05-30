@@ -95,8 +95,11 @@ func fnSet(value any, args ...any) (any, error) {
 	if 2 != len(args) {
 		return nil, keramoserrors.NewError(keramoserrors.ErrFunction, "set requires key and value arguments")
 	}
-	m[coerceString(args[0])] = args[1]
-	return m, nil
+	// Copy-on-write: never mutate the shared render context map in place,
+	// which would corrupt other keys/renders and race under parallel render.
+	out := deepCopyMap(m)
+	out[coerceString(args[0])] = args[1]
+	return out, nil
 }
 
 func fnUnset(value any, args ...any) (any, error) {
@@ -104,10 +107,11 @@ func fnUnset(value any, args ...any) (any, error) {
 	if !ok {
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "unset: expected map, got %T", value)
 	}
+	out := deepCopyMap(m)
 	for _, k := range args {
-		delete(m, coerceString(k))
+		delete(out, coerceString(k))
 	}
-	return m, nil
+	return out, nil
 }
 
 func fnGet(value any, args ...any) (any, error) {
@@ -224,13 +228,27 @@ func isZeroValue(v any) bool {
 func deepCopyMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {
-		if nested, ok := v.(map[string]any); ok {
-			out[k] = deepCopyMap(nested)
-			continue
-		}
-		out[k] = v
+		out[k] = deepCopyValue(v)
 	}
 	return out
+}
+
+// deepCopyValue recursively copies maps AND slices so a copy-on-write of a
+// render-context map cannot alias nested containers back to the shared
+// original (which would reintroduce cross-render mutation / data races).
+func deepCopyValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		return deepCopyMap(t)
+	case []any:
+		cp := make([]any, len(t))
+		for i, e := range t {
+			cp[i] = deepCopyValue(e)
+		}
+		return cp
+	default:
+		return v
+	}
 }
 
 func fnPick(value any, args ...any) (any, error) {
@@ -337,7 +355,7 @@ func fnCoalesce(value any, args ...any) (any, error) {
 		return value, nil
 	}
 	for _, a := range args {
-		if "" != a {
+		if !isEmpty(a) {
 			return a, nil
 		}
 	}

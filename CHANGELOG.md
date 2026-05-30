@@ -57,8 +57,8 @@ templating engine, and drift-detection CLI written in Go.
 - `files/` directory accessible from templates via the Files API.
 - `notes.yaml` post-install message.
 - `profiles/` for named overlays.
-- `policies/` for in-package policy enforcement (Rego or
-  keramos-native rules).
+- `policies/` for in-package policy enforcement (keramos-native
+  declarative match-and-require rules).
 - `.keramosignore` exclusion file.
 
 ### Layers and composition
@@ -93,8 +93,10 @@ templating engine, and drift-detection CLI written in Go.
   `--revision`, `--template`).
 - `keramos audit` — full chronological release trail (who, when, where,
   flags, values).
-- `keramos diff` — smart, server-side, per-resource diffing against any
-  historical revision.
+- `keramos diff` — smart, per-resource diffing against any historical
+  revision, with an optional `--server-side` mode that diffs live
+  cluster state against a server-side apply dry-run (reflecting
+  API-server defaulting and admission-webhook mutation).
 - `keramos plan` — deterministic rendered manifest with SHA-256
   integrity hash.
 - `keramos apply` — re-renders, verifies the plan integrity hash, then
@@ -159,8 +161,10 @@ templating engine, and drift-detection CLI written in Go.
   trust store with PGP public-key validation on add.
 - `keramos verify` — standalone verification.
 - `keramos install --verify` — fail-closed install gated on signature.
-- Cosign integration — verify external cosign signatures before
-  install.
+- Cosign integration — verify an OCI artifact's external cosign
+  signature (key-based or keyless) before pulling it, via
+  `keramos registry pull --cosign-key` / `--cosign-identity` +
+  `--cosign-issuer` (fail-closed).
 
 ### Cluster operations
 
@@ -204,7 +208,8 @@ templating engine, and drift-detection CLI written in Go.
 - `keramos sbom` — CycloneDX 1.5 SBOM emission per release.
 - `keramos metrics` — sample CPU and memory of running workloads and
   recommend `requests` / `limits`.
-- `keramos graph` — dependency graph rendering.
+- `keramos graph` — rendered-manifest resource relationship graph
+  (workload→ConfigMap/Secret mounts, hook ordering).
 - `keramos adopt` — claim existing resources into a release record.
 - `keramos migrate` — Helm-chart-to-keramos-package converter.
 - `keramos helm-compat` — interop layer that runs unmodified upstream

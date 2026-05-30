@@ -2,6 +2,7 @@ package action
 
 import (
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -244,7 +245,7 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 		Tests:         renderedTests,
 		HookTemplates: renderedHooks,
 		Labels:        opts.Labels,
-		Audit:         audit.Capture("install", 0),
+		Audit:         audit.WithValueFiles(audit.WithFlags(audit.Capture("install", 0), auditFlags(opts)), opts.ValueFiles),
 		Info: release.ReleaseInfo{
 			FirstDeployed: now,
 			LastDeployed:  now,
@@ -288,13 +289,8 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 		preResults, preErr = hooks.ExecuteHooksWithTimeout(client, parsedHooks, hooks.PreInstall, opts.HookTimeout)
 	}
 	if nil != preErr {
-		rel.Status = release.StatusFailed
 		rel.Hooks = preResults
-		_ = storage.Update(rel)
-		if opts.Atomic {
-			atomicCleanupInstall(client, storage, rel, manifest)
-		}
-		return rel, preErr
+		return failInstall(client, storage, rel, manifest, opts, false, preErr)
 	}
 	rel.Hooks = append(rel.Hooks, preResults...)
 
@@ -305,9 +301,7 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 			crdTimeout = 2 * time.Minute
 		}
 		if crdErr := client.ApplyCRDs(crdManifest, crdTimeout); nil != crdErr {
-			rel.Status = release.StatusFailed
-			_ = storage.Update(rel)
-			return rel, crdErr
+			return failInstall(client, storage, rel, manifest, opts, false, crdErr)
 		}
 	}
 
@@ -315,17 +309,7 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 	// For --cleanup-on-fail, fresh installs always introduce every resource,
 	// so a per-resource set isn't needed — the whole manifest is "ours".
 	if applyErr := client.ApplyManifests(manifest); nil != applyErr {
-		rel.Status = release.StatusFailed
-		_ = storage.Update(rel)
-		if opts.CleanupOnFail {
-			if cleanErr := client.DeleteManifests(manifest); nil != cleanErr {
-				logger.Warn("cleanup-on-fail: %v", cleanErr)
-			}
-		}
-		if opts.Atomic {
-			atomicCleanupInstall(client, storage, rel, manifest)
-		}
-		return rel, applyErr
+		return failInstall(client, storage, rel, manifest, opts, true, applyErr)
 	}
 
 	// Step 10: Wait for readiness
@@ -336,31 +320,11 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 		}
 		if opts.WaitForJobs {
 			if jobErr := waitForJobsInManifest(client, manifest, timeout); nil != jobErr {
-				rel.Status = release.StatusFailed
-				_ = storage.Update(rel)
-				if opts.CleanupOnFail {
-					if cleanErr := client.DeleteManifests(manifest); nil != cleanErr {
-						logger.Warn("cleanup-on-fail: %v", cleanErr)
-					}
-				}
-				if opts.Atomic {
-					atomicCleanupInstall(client, storage, rel, manifest)
-				}
-				return rel, jobErr
+				return failInstall(client, storage, rel, manifest, opts, true, jobErr)
 			}
 		}
 		if waitErr := client.WaitForReady(manifest, timeout); nil != waitErr {
-			rel.Status = release.StatusFailed
-			_ = storage.Update(rel)
-			if opts.CleanupOnFail {
-				if cleanErr := client.DeleteManifests(manifest); nil != cleanErr {
-					logger.Warn("cleanup-on-fail: %v", cleanErr)
-				}
-			}
-			if opts.Atomic {
-				atomicCleanupInstall(client, storage, rel, manifest)
-			}
-			return rel, waitErr
+			return failInstall(client, storage, rel, manifest, opts, true, waitErr)
 		}
 	}
 
@@ -372,12 +336,7 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 	}
 	rel.Hooks = append(rel.Hooks, postResults...)
 	if nil != postErr {
-		rel.Status = release.StatusFailed
-		_ = storage.Update(rel)
-		if opts.Atomic {
-			atomicCleanupInstall(client, storage, rel, manifest)
-		}
-		return rel, postErr
+		return failInstall(client, storage, rel, manifest, opts, true, postErr)
 	}
 
 	// Step 12: Mark deployed
@@ -493,15 +452,97 @@ func writeScopedValuesTemp(vals map[string]any) (string, error) {
 }
 
 
-// atomicCleanupInstall deletes all applied manifests and marks the release failed
-// when atomic mode is enabled and an error occurs.
-func atomicCleanupInstall(client kube.KubeClient, storage release.Storage, rel *release.Release, manifest string) {
-	logger.Warn("atomic install failed, cleaning up resources for %s", rel.Name)
-	if delErr := client.DeleteManifests(manifest); nil != delErr {
-		logger.Warn("atomic cleanup: failed to delete manifests: %v", delErr)
+// failInstall records an install failure. It marks the release Failed and
+// persists that status, optionally removes the applied manifest (when atomic
+// or cleanup-on-fail is set and resources were actually applied), and returns
+// an error wrapping the original cause TOGETHER WITH any secondary failure (a
+// dropped status write or a failed cleanup). This ensures the caller never
+// reports a plain failure when the cluster or the release record may have been
+// left inconsistent.
+// auditFlags renders a REDACTED list of the salient flags for the audit trail.
+// It records --set KEYS only (never their values, which routinely carry
+// secrets), profile/environment, and enabled boolean flags. Value-file paths
+// are recorded separately via WithValueFiles.
+func auditFlags(opts *InstallOptions) []string {
+	var f []string
+	for _, s := range opts.Sets {
+		f = append(f, "--set "+redactSetValue(s))
 	}
+	for _, s := range opts.SetStrings {
+		f = append(f, "--set-string "+redactSetValue(s))
+	}
+	for _, s := range opts.SetJSON {
+		f = append(f, "--set-json "+redactSetValue(s))
+	}
+	for _, s := range opts.SetFiles {
+		f = append(f, "--set-file "+s)
+	}
+	if "" != opts.Profile {
+		f = append(f, "--profile "+opts.Profile)
+	}
+	if "" != opts.Environment {
+		f = append(f, "--environment "+opts.Environment)
+	}
+	for name, on := range map[string]bool{
+		"--atomic": opts.Atomic, "--wait": opts.Wait, "--wait-for-jobs": opts.WaitForJobs,
+		"--force": opts.Force, "--cleanup-on-fail": opts.CleanupOnFail, "--no-hooks": opts.NoHooks,
+		"--create-namespace": opts.CreateNamespace, "--include-crds": opts.IncludeCRDs,
+		"--recreate-pods": opts.RecreatePods, "--skip-requires": opts.SkipRequires,
+	} {
+		if on {
+			f = append(f, name)
+		}
+	}
+	sort.Strings(f)
+	return f
+}
+
+// redactSetValue keeps the key of a `key=value` override but replaces the
+// value with [REDACTED] so secrets passed via --set never land in the trail.
+func redactSetValue(s string) string {
+	if eq := strings.IndexByte(s, '='); -1 != eq {
+		return s[:eq] + "=[REDACTED]"
+	}
+	return s
+}
+
+// markFailed sets the release status to Failed and persists it. If the
+// persist itself fails it returns a secondary-error description so the caller
+// can surface that the release record may not reflect reality.
+func markFailed(storage release.Storage, rel *release.Release) []string {
 	rel.Status = release.StatusFailed
-	_ = storage.Update(rel)
+	if uErr := storage.Update(rel); nil != uErr {
+		return []string{"release status not persisted: " + uErr.Error()}
+	}
+	return nil
+}
+
+// combineFailure folds any secondary failures (failed cleanup, dropped status
+// write, failed rollback) into the primary cause so a partially-recovered
+// operation never reports a clean error.
+func combineFailure(cause error, secondary []string) error {
+	if 0 == len(secondary) {
+		return cause
+	}
+	return keramoserr.WrapErrorf(keramoserr.ErrRelease, cause, "operation failed and recovery was incomplete: %s", strings.Join(secondary, "; "))
+}
+
+func failInstall(client kube.KubeClient, storage release.Storage, rel *release.Release, manifest string, opts *InstallOptions, applied bool, cause error) (*release.Release, error) {
+	var secondary []string
+	rel.Status = release.StatusFailed
+	if uErr := storage.Update(rel); nil != uErr {
+		secondary = append(secondary, "release status not persisted: "+uErr.Error())
+	}
+	if applied && (opts.Atomic || opts.CleanupOnFail) {
+		logger.Warn("install failed, removing applied resources for %s", rel.Name)
+		if delErr := client.DeleteManifests(manifest); nil != delErr {
+			secondary = append(secondary, "cleanup of applied resources failed (orphans may remain): "+delErr.Error())
+		}
+	}
+	if 0 < len(secondary) {
+		return rel, keramoserr.WrapErrorf(keramoserr.ErrRelease, cause, "install failed and recovery was incomplete: %s", strings.Join(secondary, "; "))
+	}
+	return rel, cause
 }
 
 func renderHooks(eng *engine.Engine, hookTemplates map[string]string, partials map[string]any, ctx *engine.RenderContext) (map[string]string, error) {

@@ -2,7 +2,7 @@
 
 ## Synopsis
 
-`keramos policy list` enumerates every policy rule declared under `<package-path>/policies/` without evaluating them. The output names each rule, its file of origin (`*.yaml` or `*.rego`), and a brief description so you can see at a glance what gates a package ships with.
+`keramos policy list` enumerates every policy rule declared under `<package-path>/policies/` without evaluating them. The output names each rule, its file of origin (`*.yaml`), and a brief description so you can see at a glance what gates a package ships with.
 
 ## When to use it
 
@@ -10,7 +10,7 @@ Use to audit a package's policy surface — particularly when adopting an upstre
 
 ## What happens when you run it
 
-1. Loads every `.yaml` and `.rego` file under `<package-path>/policies/`.
+1. Loads every `.yaml` policy file under `<package-path>/policies/`.
 2. Parses each for declared rule names and descriptions.
 3. Prints a tabular view to stdout.
 4. No cluster contact, no manifest evaluation.

@@ -79,19 +79,23 @@ Example:
 				if nil != uErr {
 					if 0 < baselineRev {
 						logger.Warn("stage %d failed: %v — rolling back to pre-canary revision %d", i+1, uErr, baselineRev)
-						_, _ = action.Rollback(client, &action.RollbackOptions{
+						if _, rbErr := action.Rollback(client, &action.RollbackOptions{
 							ReleaseName: args[0],
 							Namespace:   namespace,
 							Revision:    baselineRev,
-						})
+						}); nil != rbErr {
+							return fmt.Errorf("canary stage %d failed (%v) AND automatic rollback to revision %d failed: %w", i+1, uErr, baselineRev, rbErr)
+						}
 					} else {
 						// Release didn't exist before the canary; uninstall the
 						// partial deployment instead of rolling back to revision 0.
 						logger.Warn("stage %d failed: %v — uninstalling freshly-created release", i+1, uErr)
-						_, _ = action.Uninstall(client, &action.UninstallOptions{
+						if _, unErr := action.Uninstall(client, &action.UninstallOptions{
 							ReleaseName: args[0],
 							Namespace:   namespace,
-						})
+						}); nil != unErr {
+							return fmt.Errorf("canary stage %d failed (%v) AND cleanup uninstall failed: %w", i+1, uErr, unErr)
+						}
 					}
 					return uErr
 				}
