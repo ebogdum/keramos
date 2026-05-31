@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	maxFileSize         = 512 * 1024 * 1024      // 512 MB per file
-	maxTotalExtractSize = 2 * 1024 * 1024 * 1024 // 2 GB total
+	maxFileSize               = 512 * 1024 * 1024      // 512 MB per file
+	maxTotalExtractSize int64 = 2 * 1024 * 1024 * 1024 // 2 GB total (typed int64: the value overflows a 32-bit int on arm/386)
 	// maxEntries caps the number of distinct entries (files + dirs +
 	// special types). A tar with 1M tiny entries passes maxFileSize and
 	// maxTotalExtractSize but exhausts FS metadata, fd quota, and inode
