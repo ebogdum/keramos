@@ -3,3 +3,7 @@
 *.test
 *.out
 /dist/
+
+# Local code-indexer cache (kuzu graph + lance/sqlite search index). Machine-
+# local, regenerable, and large; must never be committed.
+/.indexer/
