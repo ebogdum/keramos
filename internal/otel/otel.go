@@ -88,11 +88,6 @@ func Start(name string) *Span {
 	return defaultTracer.StartSpan(name, nil)
 }
 
-// StartChild begins a span with `parent` as the parent.
-func StartChild(parent *Span, name string) *Span {
-	return defaultTracer.StartSpan(name, parent)
-}
-
 // StartSpan creates a span with optional parent.
 func (t *Tracer) StartSpan(name string, parent *Span) *Span {
 	traceID := ""

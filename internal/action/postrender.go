@@ -18,12 +18,6 @@ func RunPostRendererPublic(cmdLine, manifest string) (string, error) {
 	return runPostRenderer(cmdLine, manifest, defaultPostRendererTimeout)
 }
 
-// RunPostRenderersPublic runs a chain of post-renderers, piping each output
-// into the next stage's stdin.
-func RunPostRenderersPublic(cmdLines []string, manifest string, timeout time.Duration) (string, error) {
-	return runPostRenderers(cmdLines, manifest, timeout)
-}
-
 // runPostRenderers pipes manifest through each post-renderer in order.
 func runPostRenderers(cmdLines []string, manifest string, timeout time.Duration) (string, error) {
 	if 0 == timeout {

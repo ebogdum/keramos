@@ -87,20 +87,6 @@ func (r *RateLimiter) WaitForHost(host string) error {
 	}
 }
 
-// NewRateLimiterWithRPM creates a RateLimiter with explicit per-host requests-per-minute.
-func NewRateLimiterWithRPM(maxConcurrent, requestsPerMinute int) *RateLimiter {
-	rl := &RateLimiter{
-		semaphore: make(chan struct{}, maxConcurrent),
-		limiters:  make(map[string]*hostLimiter),
-	}
-	// Store the rpm in a closure-accessible way by overriding WaitForHost's default
-	// We re-implement the limiter init with the explicit RPM below
-	rl.mu.Lock()
-	rl.limiters["__rpm__"] = &hostLimiter{limit: requestsPerMinute}
-	rl.mu.Unlock()
-	return rl
-}
-
 // WaitForHostWithRPM blocks if the per-host rate limit has been reached.
 // Uses the configured requests-per-minute value.
 func (r *RateLimiter) WaitForHostWithRPM(host string, rpm int) error {

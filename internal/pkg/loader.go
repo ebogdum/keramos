@@ -16,11 +16,6 @@ const (
 	valuesFileName  = "values.yaml"
 )
 
-// LoadMetadata is an alias for LoadPackageMetadata for concise usage.
-func LoadMetadata(dirPath string) (PackageMetadata, error) {
-	return LoadPackageMetadata(dirPath)
-}
-
 // LoadPackageMetadata reads and parses keramos.yaml from the given directory path.
 func LoadPackageMetadata(dirPath string) (PackageMetadata, error) {
 	fullPath := filepath.Join(dirPath, packageFileName)

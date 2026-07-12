@@ -40,11 +40,6 @@ type SQLStorage struct {
 	dialect   Dialect
 }
 
-// NewSQLStorage returns a SQL-backed Storage with the standard `?` dialect.
-func NewSQLStorage(db *sql.DB, namespace string) (Storage, error) {
-	return NewSQLStorageWithDialect(db, namespace, DialectStandard)
-}
-
 // NewSQLStorageWithDialect lets the caller pick the placeholder style.
 func NewSQLStorageWithDialect(db *sql.DB, namespace string, dialect Dialect) (Storage, error) {
 	s := &SQLStorage{db: db, namespace: namespace, dialect: dialect}

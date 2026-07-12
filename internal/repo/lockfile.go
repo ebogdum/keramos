@@ -143,33 +143,6 @@ func isLegacyLockFileCurrent(lf *LockFile, deps []pkg.Dependency) bool {
 	return true
 }
 
-// IsLayerLockCurrent checks whether the lock file is current for the given layers.
-func IsLayerLockCurrent(lf *LockFile, layers []pkg.LayerSource) bool {
-	if nil == lf {
-		return false
-	}
-	if len(lf.Layers) != len(layers) {
-		return false
-	}
-
-	lockedByName := make(map[string]*LockedLayer, len(lf.Layers))
-	for i := range lf.Layers {
-		lockedByName[lf.Layers[i].Name] = &lf.Layers[i]
-	}
-
-	for _, ls := range layers {
-		locked, ok := lockedByName[ls.Name]
-		if !ok {
-			return false
-		}
-		if locked.Source != ls.Source {
-			return false
-		}
-	}
-
-	return true
-}
-
 // buildLockFile creates a LockFile from a ResolutionResult (legacy format).
 func buildLockFile(result *ResolutionResult) *LockFile {
 	deps := make([]LockedDependency, 0, len(result.Resolved))
