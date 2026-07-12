@@ -34,6 +34,7 @@ func TestRegistryUnauthenticatedFetchFails(t *testing.T) {
 }
 
 func TestRegistryAuthenticatedFetchSucceeds(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1") // httptest serves plain http
 	_, serverURL := createTestRepo(t, []testPkg{
 		{Name: "myapp", Version: "1.0.0"},
 		{Name: "myapp", Version: "2.0.0"},
@@ -405,6 +406,7 @@ func TestRegistryIndexMerge(t *testing.T) {
 }
 
 func TestRegistryBearerAuth(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1") // httptest serves plain http
 	expectedToken := "my-secret-token-12345"
 
 	mux := http.NewServeMux()
@@ -443,6 +445,7 @@ func TestRegistryBearerAuth(t *testing.T) {
 }
 
 func TestRegistryAPIKeyAuth(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1") // httptest serves plain http
 	expectedKey := "ak_test_123456789"
 
 	mux := http.NewServeMux()

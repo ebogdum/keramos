@@ -85,6 +85,7 @@ func TestPrivateRepoLoginAPIKey(t *testing.T) {
 }
 
 func TestPrivateRepoFetchIndex(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1") // httptest serves plain http
 	mux := http.NewServeMux()
 	mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
@@ -131,6 +132,7 @@ func TestPrivateRepoFetchIndex(t *testing.T) {
 }
 
 func TestPrivateRepoDownloadPackage(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1") // httptest serves plain http
 	_, serverURL := createTestRepo(t, []testPkg{
 		{Name: "private-pkg", Version: "1.0.0"},
 	}, true)
@@ -161,6 +163,7 @@ func TestPrivateRepoDownloadPackage(t *testing.T) {
 }
 
 func TestPrivateRepoLogout(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1") // httptest serves plain http
 	mux := http.NewServeMux()
 	mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
@@ -230,6 +233,7 @@ func TestPrivateRepoLogout(t *testing.T) {
 }
 
 func TestPrivateRepoMultipleCredentials(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1") // httptest serves plain http
 	// Set up two private registries
 	handler1 := func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
