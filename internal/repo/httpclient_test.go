@@ -20,6 +20,8 @@ func newTestClient(t *testing.T, store *CredentialStore) *AuthenticatedClient {
 }
 
 func TestAuthenticatedClient_BasicAuthInjection(t *testing.T) {
+	// httptest serves plain http; opt into plaintext auth to exercise injection.
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
 		if !ok {
@@ -55,6 +57,7 @@ func TestAuthenticatedClient_BasicAuthInjection(t *testing.T) {
 }
 
 func TestAuthenticatedClient_BearerTokenInjection(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if "Bearer mytoken123" != authHeader {
@@ -86,6 +89,7 @@ func TestAuthenticatedClient_BearerTokenInjection(t *testing.T) {
 }
 
 func TestAuthenticatedClient_APIKeyInjection(t *testing.T) {
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("X-API-Key")
 		if "apikey999" != key {

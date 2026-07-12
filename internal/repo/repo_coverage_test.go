@@ -129,6 +129,8 @@ func TestFetchIndexWith_EmptyEntries(t *testing.T) {
 }
 
 func TestFetchIndexWith_AuthInjected(t *testing.T) {
+	// httptest serves plain http; opt into plaintext auth to exercise injection.
+	t.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1")
 	var receivedAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")

@@ -199,6 +199,17 @@ func (ac *AuthenticatedClient) injectHeaders(req *http.Request) {
 		return
 	}
 
+	// Refuse to send credentials over plaintext HTTP. Basic/Bearer/API-key
+	// material would otherwise travel in cleartext to any on-path observer.
+	// Operators who genuinely need this (e.g. a trusted in-cluster registry on
+	// a private link) must opt in via KERAMOS_ALLOW_PLAINTEXT_AUTH=1, matching the
+	// OCI registry path (see oci.go).
+	if "https" != req.URL.Scheme && "1" != os.Getenv("KERAMOS_ALLOW_PLAINTEXT_AUTH") {
+		logger.Warn("refusing to send credentials to %s over %s (set KERAMOS_ALLOW_PLAINTEXT_AUTH=1 to override)",
+			req.URL.Host, req.URL.Scheme)
+		return
+	}
+
 	switch cred.Type {
 	case AuthBasic:
 		req.SetBasicAuth(cred.Username, cred.Password)
