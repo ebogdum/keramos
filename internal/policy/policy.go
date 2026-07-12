@@ -261,14 +261,12 @@ func evalRule(r Rule, doc map[string]any) []Violation {
 	}
 
 	for _, path := range r.Require.Fields {
-		v, ok := getDotted(doc, path)
-		if !ok || isZero(v) {
+		if !anyNonZero(collectDotted(doc, path)) {
 			emit(fmt.Sprintf("required field %q is missing or empty", path))
 		}
 	}
 	for _, path := range r.Forbid.Fields {
-		v, ok := getDotted(doc, path)
-		if ok && !isZero(v) {
+		if anyNonZero(collectDotted(doc, path)) {
 			emit(fmt.Sprintf("forbidden field %q is present", path))
 		}
 	}
@@ -377,21 +375,50 @@ func extractContainers(doc map[string]any) []map[string]any {
 	return out
 }
 
-func getDotted(doc map[string]any, path string) (any, bool) {
-	parts := strings.Split(path, ".")
-	var cur any = doc
-	for _, p := range parts {
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		v, exists := m[p]
-		if !exists {
-			return nil, false
-		}
-		cur = v
+// collectDotted resolves a dotted path, descending through BOTH maps and
+// slices. When a path element lands on a slice (e.g. `spec.template.spec.
+// containers` in a workload), the remaining path is applied to every element,
+// so `spec.template.spec.containers.securityContext.privileged` collects that
+// field from every container. It returns each present leaf value.
+//
+// The previous map-only walk returned "not found" the moment a path crossed a
+// slice, which silently turned every array-crossing forbid rule into a no-op —
+// an operator's `forbid: privileged` was never enforced. Traversing slices
+// closes that fail-open.
+func collectDotted(node any, path string) []any {
+	if "" == path {
+		return []any{node}
 	}
-	return cur, true
+	head, rest, _ := strings.Cut(path, ".")
+	switch n := node.(type) {
+	case map[string]any:
+		v, ok := n[head]
+		if !ok {
+			return nil
+		}
+		return collectDotted(v, rest)
+	case []any:
+		// The slice sits between path segments: re-apply the *current* path to
+		// each element rather than consuming a segment.
+		var out []any
+		for _, elem := range n {
+			out = append(out, collectDotted(elem, path)...)
+		}
+		return out
+	}
+	return nil
+}
+
+// anyNonZero reports whether any collected value is present and non-zero. Used
+// so forbid/require field checks work identically for scalar paths and for
+// paths that fan out across slices.
+func anyNonZero(vals []any) bool {
+	for _, v := range vals {
+		if !isZero(v) {
+			return true
+		}
+	}
+	return false
 }
 
 func isZero(v any) bool {
