@@ -294,6 +294,15 @@ func (o *OCIRegistry) Pull(ref, destDir string) (string, error) {
 	}
 	defer fs.Close()
 
+	// Never let the ORAS file store unpack pulled layers. The unpack path is
+	// driven by the untrusted remote manifest (io.deis.oras.content.unpack),
+	// and its tar extraction is vulnerable to hardlink/symlink escapes outside
+	// the destination dir (GHSA hardlink-escape, no fixed oras-go release as of
+	// 2.6.1). Keramos never relies on ORAS unpacking — it pulls a single .tgz and
+	// extracts it through the hardened archive.go extractor, which rejects link
+	// entries that escape the destination. SkipUnpack overrides the annotation.
+	fs.SkipUnpack = true
+
 	tag := repo.Reference.Reference
 	if "" == tag {
 		tag = "latest"
