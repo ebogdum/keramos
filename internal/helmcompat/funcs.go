@@ -21,6 +21,18 @@ import (
 // the bound is on total render nesting.
 const maxRenderDepth = 32
 
+// hermeticSprigFuncMap returns the Sprig text function map with the host-facing
+// env/expandenv functions removed, matching upstream Helm's engine. Rendering an
+// untrusted chart must not be able to read the operator's process environment
+// (cloud credentials, tokens) and copy it into a rendered manifest. Upstream
+// Helm deletes exactly these two functions for the same reason.
+func hermeticSprigFuncMap() template.FuncMap {
+	fm := sprig.TxtFuncMap()
+	delete(fm, "env")
+	delete(fm, "expandenv")
+	return fm
+}
+
 func addHelmFuncs(fm template.FuncMap, set *template.Template, partialSources *[]string) {
 	renderDepth := 0
 
@@ -45,7 +57,7 @@ func addHelmFuncs(fm template.FuncMap, set *template.Template, partialSources *[
 		defer func() { renderDepth-- }()
 		// Build a fresh template carrying the same funcs and all shared
 		// partial defines so `include`/`define` resolve inside the string.
-		t := template.New("keramos-tpl").Funcs(sprig.TxtFuncMap()).Funcs(fm)
+		t := template.New("keramos-tpl").Funcs(hermeticSprigFuncMap()).Funcs(fm)
 		for i, src := range *partialSources {
 			if _, err := t.New(fmt.Sprintf("__partial_%d__", i)).Parse(src); nil != err {
 				return "", err

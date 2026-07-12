@@ -399,15 +399,44 @@ type stringWriter struct{ b *strings.Builder }
 
 func (w stringWriter) Write(p []byte) (int, error) { return w.b.Write(p) }
 
+// renderEnvAccessEnv gates the env/expandenv template functions. Reading the
+// host process environment during template rendering is a secret-exfiltration
+// primitive when the chart is untrusted (a hostile template can copy the
+// operator's AWS_SECRET_ACCESS_KEY / VAULT_TOKEN / kube creds into a rendered
+// manifest). It is off by default and opt-in, mirroring the KERAMOS_RENDER_NETWORK
+// gate on the http/vault functions.
+const renderEnvAccessEnv = "KERAMOS_RENDER_ENV"
+
+func envAccessAllowed() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(renderEnvAccessEnv)))
+	return "1" == v || "true" == v || "yes" == v
+}
+
 func fnEnv(value any, args ...any) (any, error) {
+	if !envAccessAllowed() {
+		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
+			"env: host environment access disabled — set %s=1 to enable", renderEnvAccessEnv)
+	}
 	return os.Getenv(coerceString(value)), nil
 }
 
 func fnExpandEnv(value any, args ...any) (any, error) {
+	if !envAccessAllowed() {
+		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
+			"expandenv: host environment access disabled — set %s=1 to enable", renderEnvAccessEnv)
+	}
 	return os.ExpandEnv(coerceString(value)), nil
 }
 
 func fnGetHostByName(value any, args ...any) (any, error) {
+	// A DNS lookup is unsanctioned render-time network egress: an untrusted
+	// template can probe internal names or pipe a secret into a lookup against
+	// an attacker-controlled resolver (blind out-of-band exfiltration). Gate it
+	// behind the same opt-in as the other render-time network functions.
+	if !networkAllowed() {
+		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
+			"getHostByName: render-time network calls disabled — set %s=1 to enable", renderNetworkEnv)
+	}
 	addrs, err := net.LookupHost(coerceString(value))
 	if nil != err {
 		return nil, keramoserrors.WrapErrorf(keramoserrors.ErrFunction, err, "getHostByName: lookup failed for %v", value)
