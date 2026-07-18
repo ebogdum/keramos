@@ -4,6 +4,145 @@ All notable changes to keramos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — 2026-07-18
+
+### Breaking changes
+
+- `keramos plan` no longer takes a release-name argument. Use `keramos plan [dir]`
+  (default `.`); the release is derived from the package's `keramos.yaml` name and
+  compared against the latest stored state. Override with `-r/--release`.
+- `keramos diff` is now purely file-oriented (compare two dirs / manifests / value
+  sets / git refs). Its old release/revision comparison and `--server-side` mode
+  were removed — `plan` owns "vs state" and `drift --server-side` owns "vs live".
+- `keramos drift` is now a three-way comparison (package ↔ state ↔ running) and no
+  longer emits the old count-table (`-o table/json/yaml` of `DriftItem`).
+
+### Security & correctness hardening (adversarial review)
+
+- **Template engine:** capped output amplification in `repeat`/`indent`/`nindent`
+  (chained `repeat` could reach gigabytes); made `untilStep`/`seq` overflow-safe;
+  added a document nesting-depth guard (deep input crashed the process); rejected
+  leading-dash paths in `sops`/`git diff --from-ref` (arg-injection); `$switch`
+  with no match now omits its field instead of emitting `null`; `restoreInString`
+  is O(n).
+- **Registry / fetch:** the redirect policy now explicitly strips `Authorization`
+  and `X-API-Key` on any unauthorized/plaintext hop (closes a same-host
+  https→http credential leak and brings `X-API-Key` under the same governance);
+  repo matching is host/path-boundary-aware; archive and OCI blob downloads are
+  size-bounded.
+- **Values:** `--set` array index is bounded (negative index panicked, huge index
+  OOM'd); `--set` on a nil base no longer panics; value provenance prunes stale
+  entries when a value changes shape.
+- **Cluster ops:** `resolveNamespace` derives scope from the REST mapping, so
+  cluster-scoped kinds are no longer mis-namespaced (apply 404 / delete orphan);
+  a CRD placed in `templates/` now waits for Established before its custom
+  resources apply; `cleanup-on-fail` deletes the resources it introduced;
+  `reconcile` honours `resource-policy: keep`; rollback carries the full record.
+- **Policy:** image-registry allowlist matches at a host boundary (no
+  `registry.internal.evil.com` bypass); `imageNotTagged` parses the reference
+  (registry ports/digests handled); unknown `severity` is rejected (fail-closed);
+  `require.fields` enforces all array elements and treats an explicit `false`/`0`
+  as present.
+- **Diff:** type-mismatched fields report both sides instead of dropping a value;
+  `stripDefaults` no longer hides user-set fields (`sessionAffinity`,
+  `rollingUpdate`).
+- **Dependency tree:** total node count is bounded so an aliased fan-out graph
+  cannot rebuild subtrees exponentially.
+
+
+### Changed — plan, diff, and drift are now three distinct comparisons
+
+- `keramos plan` no longer takes a release-name argument. It takes a package
+  directory (default `.`) and compares it against the current stored state,
+  deriving the release identity from the package's `keramos.yaml` name. Use
+  `-r/--release` to target a state stored under a different name. This makes
+  plan the Terraform-style "desired vs state" command: `keramos plan` in a
+  package directory just works.
+- `keramos plan`'s terminal output is a per-resource change preview with, by
+  default, provenance woven in: each resource shows the template file that
+  emitted it (`from: <file>`), and each changed field is rendered line by
+  line as `- old (state)` / `+ new ← <origin>`, where the origin traces the
+  driving `${values.x}` back through the resolution chain (package-default,
+  values-file, layer, profile, or `--set`). Origin resolves for direct
+  scalar substitutions; array-nested values are not yet drilled.
+- The apply-able JSON artifact (`--out <file>` or `--format json`) is
+  unchanged, so `keramos apply --plan` keeps working; provenance is a
+  review-time view only.
+- `keramos diff` is now purely file-oriented — it never reads cluster or release
+  state. Four modes: two package directories, two rendered manifest files, one
+  package rendered under two value sets (`--from-values`/`--to-values`,
+  `--from-set`/`--to-set`, `--from-profile`/`--to-profile`), or one package at
+  two git revisions (`--from-ref`/`--to-ref`). Shared `-f`/`--set`/`--profile`
+  apply to both sides. Smart per-resource diff by default; `--smart=false`
+  for a raw unified diff. The old release/revision comparison and
+  `--server-side` mode were removed from `diff` (plan/drift own state and
+  live-cluster comparison respectively).
+
+### Fixed — finish wiring half-implemented features
+
+- `keramos adopt --labels` now actually attaches the labels to the adopted
+  release (the flag was previously accepted and discarded). `--create-namespace`
+  errors are surfaced instead of silently ignored.
+- `keramos drift --server-side` compares the live cluster against a server-side
+  apply dry-run (admission/defaulting reflected), re-homing the capability that
+  moved out of `keramos diff`.
+- `genPrivateKey "ed25519"` is now implemented (PKCS#8 PEM); it previously
+  returned an unsupported-type error.
+- Removed the orphaned `action.Drift` wrapper left unused after the drift
+  command was rewritten.
+
+### Added — transport opt-ins are now flags, not just env vars
+
+- Global flags `--allow-plaintext-auth`, `--oci-plain-http`, and
+  `--oci-insecure-skip-tls-verify` expose the previously env-var-only transport
+  opt-ins (`KERAMOS_ALLOW_PLAINTEXT_AUTH`, `KERAMOS_OCI_PLAIN_HTTP`,
+  `KERAMOS_OCI_INSECURE_SKIP_TLS`). Passing a flag is exactly equivalent to
+  exporting the variable and applies to every command that fetches over the
+  network. The env vars still work; an unset flag never clears an export.
+
+### Fixed — wire up previously-accepted-but-ignored registry flags
+
+- `repo add --insecure-skip-tls-verify`, `--pass-credentials`, and
+  `--pass-credentials-all` are now persisted on the repository entry and
+  honored by the fetch client: insecure skips certificate verification for that
+  repo; the pass flags relax the default (cross-host redirects blocked) and
+  forward the `Authorization` header — `--pass-credentials` on the first
+  cross-host hop only, `--pass-credentials-all` on every hop. Credentials are
+  still never forwarded over plaintext http:// unless `KERAMOS_ALLOW_PLAINTEXT_AUTH=1`.
+  Previously these flags were accepted and silently discarded, and (a bug) were
+  only read when `--username/--password` were also present.
+- `keramos login --insecure` now records the opt-in on the stored credential and is
+  honored per host by the HTTP and OCI clients (skip TLS verification for that
+  registry). Previously the flag did nothing.
+
+### Added — value provenance recorded in state
+
+- `install` and `upgrade` now record, on the release, where every value was
+  resolved from (package default, values file, layer, profile, or `--set`).
+  This provenance persists in the stored state, so the origin of a running
+  value survives even after the package changes. Read it back with
+  `keramos get provenance <release>` (`-o table|json|yaml`).
+
+### Changed — drift is now a three-way comparison
+
+- `keramos drift [package-path]` compares three views side by side — the package
+  as it renders now, the recorded state, and the live cluster — and reports,
+  per resource and field, where they disagree. It flags two divergence classes:
+  `⚠ cluster drift` (state ≠ running: the cluster was changed out of band) and
+  `→ pending apply` (package ≠ state: local edits not yet applied). The release
+  is derived from the package's keramos.yaml name, `-r` overrides. Comparison is
+  limited to keramos-managed fields, so status/managedFields/defaults noise on the
+  live side is ignored. Replaces the old `drift <release>` count table.
+
+### Fixed
+
+- The smart diff now drills into same-length lists element by element, so a
+  change to one field of one element (e.g. a container image or a port) is
+  reported at its exact indexed path (`spec.template.spec.containers.0.image`)
+  instead of replacing the whole list. This also lets `keramos plan` attribute
+  such changes to their source value. Lists whose length changes are still
+  reported whole.
+
 ## [1.0.0] — first stable release
 
 The first stable release of keramos — a Kubernetes package manager, YAML

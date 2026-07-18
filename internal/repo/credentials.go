@@ -30,6 +30,10 @@ type Credential struct {
 	Password string   `json:"password,omitempty"`
 	Token    string   `json:"token,omitempty"`
 	APIKey   string   `json:"apiKey,omitempty"`
+	// Insecure marks this host as one the operator has opted to reach over an
+	// untrusted transport (bad/self-signed TLS or plain HTTP). Set via
+	// `keramos login --insecure`; honored by the registry/HTTP clients for this host.
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // CredentialStore manages credentials for multiple hosts.

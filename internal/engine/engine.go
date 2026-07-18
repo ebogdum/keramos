@@ -3,7 +3,9 @@ package engine
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -138,9 +140,22 @@ func (e *Engine) renderDocument(doc any, partials map[string]any, ctx *RenderCon
 	return e.renderDocumentWithRegistry(doc, partials, ctx, reg)
 }
 
+// maxDocNestingDepth bounds how deeply a single template document may nest.
+// The tree-walking render phases recurse without their own guard, so a
+// pathologically deep document would otherwise overflow the goroutine stack —
+// an unrecoverable crash (no recover() in the process).
+const maxDocNestingDepth = 200
+
 func (e *Engine) renderDocumentWithRegistry(doc any, partials map[string]any, ctx *RenderContext, reg *FuncRegistry) (any, error) {
 	if nil == doc {
 		return nil, nil
+	}
+
+	// Reject documents nested past a sane depth before the unguarded recursive
+	// walks run, turning a stack-overflow DoS into a clean error.
+	if depthExceeds(doc, maxDocNestingDepth) {
+		return nil, keramoserrors.NewErrorf(keramoserrors.ErrParse,
+			"template document nests deeper than the %d-level limit", maxDocNestingDepth)
 	}
 
 	// Phase 1: Resolve includes
@@ -177,7 +192,9 @@ func (e *Engine) renderDocumentWithRegistry(doc any, partials map[string]any, ct
 //
 // Keramos's `${...}` expressions can contain characters that confuse the YAML
 // parser when they appear inside flow-style maps/lists, e.g.
-//   selector: {app: ${release.name}}
+//
+//	selector: {app: ${release.name}}
+//
 // The trailing `}` of the expression is read as the end of the flow map.
 // We sidestep this by scanning the raw content for `${...}` occurrences
 // and replacing each with a placeholder token that is YAML-safe, parsing
@@ -281,15 +298,23 @@ func restoreExpressions(node any, exprs []string) any {
 	}
 }
 
+// keramosExprTokenRe matches a stashed placeholder token so restoreInString can
+// resolve each occurrence by index in a single pass, rather than looping over
+// every stashed expression per string node (which was O(exprs × nodes)).
+var keramosExprTokenRe = regexp.MustCompile(regexp.QuoteMeta(keramosExprPrefix) + `(\d+)` + regexp.QuoteMeta(keramosExprSuffix))
+
 func restoreInString(s string, exprs []string) string {
 	if !strings.Contains(s, keramosExprPrefix) {
 		return s
 	}
-	for idx, expr := range exprs {
-		token := fmt.Sprintf("%s%d%s", keramosExprPrefix, idx, keramosExprSuffix)
-		s = strings.ReplaceAll(s, token, expr)
-	}
-	return s
+	return keramosExprTokenRe.ReplaceAllStringFunc(s, func(tok string) string {
+		m := keramosExprTokenRe.FindStringSubmatch(tok)
+		idx, err := strconv.Atoi(m[1])
+		if nil != err || idx < 0 || idx >= len(exprs) {
+			return tok // unknown token index: leave as-is
+		}
+		return exprs[idx]
+	})
 }
 
 // marshalYAML serializes a value to a YAML string.
@@ -363,4 +388,27 @@ func cleanDollarKeys(node any) any {
 	default:
 		return v
 	}
+}
+
+// depthExceeds reports whether v nests deeper than max levels. It stops
+// descending at max+1, so it cannot itself overflow the stack on hostile input.
+func depthExceeds(v any, max int) bool {
+	if max < 0 {
+		return true
+	}
+	switch t := v.(type) {
+	case map[string]any:
+		for _, e := range t {
+			if depthExceeds(e, max-1) {
+				return true
+			}
+		}
+	case []any:
+		for _, e := range t {
+			if depthExceeds(e, max-1) {
+				return true
+			}
+		}
+	}
+	return false
 }

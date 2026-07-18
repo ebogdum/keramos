@@ -9,6 +9,11 @@ import (
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
 )
 
+// maxSetIndex bounds --set array indexes so a single flag cannot grow a slice
+// to an arbitrary length and OOM the process. 65536 is far beyond any real
+// values array while capping the worst-case allocation.
+const maxSetIndex = 1 << 16
+
 // splitDotPath splits a dotted key path, honoring `\.` as an escape for a
 // literal dot inside a path segment. Bracket-style array indexing is folded
 // into dotted form AFTER the empty-segment check: `images[0].repo` becomes
@@ -207,6 +212,18 @@ func setSlice(s []any, parts []string, value any) ([]any, error) {
 	if nil != err {
 		return nil, keramoserr.NewErrorf(keramoserr.ErrCLIFlag,
 			"expected numeric index, got %q", parts[0])
+	}
+	// Bound the index: negative indexes are invalid (a bare strconv.Atoi
+	// accepts "-1", which would panic on the assignment below), and an
+	// unbounded positive index would grow the slice to idx+1 entries and
+	// OOM the process from a single --set flag.
+	if idx < 0 {
+		return nil, keramoserr.NewErrorf(keramoserr.ErrCLIFlag,
+			"array index %d is negative", idx)
+	}
+	if idx > maxSetIndex {
+		return nil, keramoserr.NewErrorf(keramoserr.ErrCLIFlag,
+			"array index %d exceeds the maximum of %d", idx, maxSetIndex)
 	}
 	for len(s) <= idx {
 		s = append(s, nil)

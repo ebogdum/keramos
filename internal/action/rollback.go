@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ebogdum/keramos/internal/audit"
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/hooks"
 	"github.com/ebogdum/keramos/internal/kube"
@@ -77,8 +78,18 @@ func Rollback(client kube.KubeClient, opts *RollbackOptions) (*release.Release, 
 		Status:    release.StatusPendingRollback,
 		Package:   target.Package,
 		Values:    target.Values,
-		Manifest:  target.Manifest,
-		Notes:     target.Notes,
+		// Carry the target revision's full record forward, matching Upgrade.
+		// Dropping these left the rollback revision with no audit trail, lost
+		// user labels, and empty Tests/HookTemplates — so `keramos test` and a
+		// later rollback-to-this-revision could no longer run.
+		UserValues:    target.UserValues,
+		Provenance:    target.Provenance,
+		Manifest:      target.Manifest,
+		Tests:         target.Tests,
+		HookTemplates: target.HookTemplates,
+		Notes:         target.Notes,
+		Labels:        target.Labels,
+		Audit:         audit.Capture("rollback", targetRevision),
 		Info: release.ReleaseInfo{
 			FirstDeployed: current.Info.FirstDeployed,
 			LastDeployed:  now,
@@ -162,16 +173,12 @@ func Rollback(client kube.KubeClient, opts *RollbackOptions) (*release.Release, 
 		return rel, combineFailure(postErr, markFailed(storage, rel))
 	}
 
-	// Step 7: Mark new revision deployed, current superseded
+	// Step 7: Mark new revision deployed, all older ones superseded.
 	rel.Status = release.StatusDeployed
-	if updateErr := storage.Update(rel); nil != updateErr {
+	if updateErr := updateReleaseWithRetry(storage, rel); nil != updateErr {
 		return rel, updateErr
 	}
-
-	current.Status = release.StatusSuperseded
-	if updateErr := storage.Update(current); nil != updateErr {
-		logger.Warn("failed to mark current revision as superseded: %v", updateErr)
-	}
+	supersedeOtherDeployed(storage, opts.ReleaseName, rel.Revision)
 
 	if 0 < opts.HistoryMax {
 		pruneReleaseHistory(storage, opts.ReleaseName, opts.HistoryMax)

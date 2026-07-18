@@ -334,7 +334,7 @@ func splitLogLines(logs string) []string {
 }
 
 // Legacy helpers retained for tests. New code should not depend on these.
-func containsTest(name string) bool { return strings.Contains(strings.ToLower(name), "test") }
+func containsTest(name string) bool  { return strings.Contains(strings.ToLower(name), "test") }
 func contains(s, substr string) bool { return strings.Contains(s, substr) }
 func buildTestPodManifest(name, ns string) string {
 	return fmt.Sprintf(`apiVersion: v1
@@ -352,10 +352,12 @@ spec:
     command: ["sh", "-c", "echo test"]
 `, name, ns)
 }
+
 type testHook struct {
 	Name     string
 	Manifest string
 }
+
 func findTestHooks(rel *release.Release) []testHook {
 	results := make([]testHook, 0, len(rel.Hooks))
 	for _, h := range rel.Hooks {

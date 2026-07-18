@@ -141,8 +141,8 @@ func TestMigrateOCICredentials(t *testing.T) {
 	}
 
 	legacy := map[string]ociCredential{
-		"ghcr.io":         {Username: "ghuser", Password: "ghpass"},
-		"docker.io":       {Username: "dkuser", Password: "dkpass"},
+		"ghcr.io":   {Username: "ghuser", Password: "ghpass"},
+		"docker.io": {Username: "dkuser", Password: "dkpass"},
 	}
 	data, err := json.Marshal(legacy)
 	if nil != err {

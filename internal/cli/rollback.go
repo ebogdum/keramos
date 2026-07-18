@@ -12,15 +12,15 @@ import (
 
 func newRollbackCommand() *cobra.Command {
 	var (
-		noWait      bool
-		timeout     time.Duration
-		description string
-		noHooks     bool
-		historyMax  int
-		force       bool
+		noWait        bool
+		timeout       time.Duration
+		description   string
+		noHooks       bool
+		historyMax    int
+		force         bool
 		cleanupOnFail bool
 		recreatePods  bool
-		output      string
+		output        string
 	)
 
 	cmd := &cobra.Command{
@@ -50,12 +50,12 @@ func newRollbackCommand() *cobra.Command {
 			}
 
 			opts := &action.RollbackOptions{
-				ReleaseName: releaseName,
-				Namespace:   namespace,
-				Revision:    revision,
-				Wait:        !noWait,
-				Timeout:     timeout,
-				Description: description,
+				ReleaseName:   releaseName,
+				Namespace:     namespace,
+				Revision:      revision,
+				Wait:          !noWait,
+				Timeout:       timeout,
+				Description:   description,
 				NoHooks:       noHooks,
 				HistoryMax:    historyMax,
 				Force:         force,

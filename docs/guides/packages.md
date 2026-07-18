@@ -175,7 +175,7 @@ The profile file's contents are merged on top of `values.yaml` and below environ
 
 ### `policies/`
 
-Optional. Package-defined policies that `keramos policy run` evaluates against the rendered manifest:
+Optional. Package-defined policies that `keramos policy check` evaluates against the rendered manifest:
 
 - **Keramos policy YAML** — declarative match-and-require rules; suitable for "every Pod must set runAsNonRoot" or "every Service must have a selector".
 

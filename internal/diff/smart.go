@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -253,8 +254,15 @@ func stripDefaults(o map[string]any) {
 		delete(spec, "clusterIPs")
 		delete(spec, "ipFamilies")
 		delete(spec, "ipFamilyPolicy")
-		delete(spec, "internalTrafficPolicy")
-		delete(spec, "sessionAffinity")
+		// internalTrafficPolicy / sessionAffinity are user-settable: strip only
+		// when they hold the server default, so a real edit (e.g.
+		// sessionAffinity None → ClientIP) is not hidden as noise.
+		if "Cluster" == spec["internalTrafficPolicy"] {
+			delete(spec, "internalTrafficPolicy")
+		}
+		if "None" == spec["sessionAffinity"] {
+			delete(spec, "sessionAffinity")
+		}
 		if ports, ok := spec["ports"].([]any); ok {
 			for _, p := range ports {
 				if pm, ok := p.(map[string]any); ok {
@@ -268,9 +276,8 @@ func stripDefaults(o map[string]any) {
 	case "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet":
 		delete(spec, "revisionHistoryLimit")
 		delete(spec, "progressDeadlineSeconds")
-		if strategy, ok := spec["strategy"].(map[string]any); ok {
-			delete(strategy, "rollingUpdate")
-		}
+		// strategy.rollingUpdate (maxSurge/maxUnavailable) is user configuration,
+		// not a churny server default — do not strip it.
 	}
 }
 
@@ -362,13 +369,38 @@ func computeFieldChanges(prefix string, a, b any) []FieldChange {
 	}
 	switch av := a.(type) {
 	case map[string]any:
-		bv, _ := b.(map[string]any)
+		bv, ok := b.(map[string]any)
+		if !ok {
+			// Kind changed (map → scalar/list). Recursing would cast b to a
+			// nil map and silently drop b's real value; report the whole
+			// field change instead.
+			return []FieldChange{{Path: prefix, Old: a, New: b}}
+		}
 		return mapDiff(prefix, av, bv)
 	case []any:
-		bv, _ := b.([]any)
-		// Lists are compared as a whole if any difference exists.
+		bv, ok := b.([]any)
+		if !ok {
+			// Kind changed (list → map/scalar); report whole.
+			return []FieldChange{{Path: prefix, Old: a, New: b}}
+		}
 		if reflect.DeepEqual(av, bv) {
 			return nil
+		}
+		// Same-length lists: drill into each element by index so a single
+		// changed field (e.g. a container image or a port) is reported at
+		// its exact path, not as a whole-list replacement. This is what lets
+		// callers attribute the change to its source. Lists of differing
+		// length are a structural change and are reported whole.
+		if len(av) == len(bv) {
+			out := make([]FieldChange, 0)
+			for i := range av {
+				idxPath := strconv.Itoa(i)
+				if "" != prefix {
+					idxPath = prefix + "." + idxPath
+				}
+				out = append(out, computeFieldChanges(idxPath, av[i], bv[i])...)
+			}
+			return out
 		}
 		return []FieldChange{{Path: prefix, Old: av, New: bv}}
 	default:

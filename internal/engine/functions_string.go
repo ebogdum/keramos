@@ -85,9 +85,12 @@ func fnIndent(value any, args ...any) (any, error) {
 	if n > maxRepeatWidth {
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "indent: width %d exceeds %d", n, maxRepeatWidth)
 	}
-	pad := strings.Repeat(" ", n)
 	s := fmt.Sprintf("%v", value)
 	lines := strings.Split(s, "\n")
+	if err := checkOutputSize(n, len(lines)); nil != err {
+		return nil, err
+	}
+	pad := strings.Repeat(" ", n)
 	for i := range lines {
 		lines[i] = pad + lines[i]
 	}
@@ -108,9 +111,12 @@ func fnNindent(value any, args ...any) (any, error) {
 	if n > maxRepeatWidth {
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "nindent: width %d exceeds %d", n, maxRepeatWidth)
 	}
-	pad := strings.Repeat(" ", n)
 	s := fmt.Sprintf("%v", value)
 	lines := strings.Split(s, "\n")
+	if err := checkOutputSize(n, len(lines)); nil != err {
+		return nil, err
+	}
+	pad := strings.Repeat(" ", n)
 	for i := range lines {
 		lines[i] = pad + lines[i]
 	}

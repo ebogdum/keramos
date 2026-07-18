@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ebogdum/keramos/internal/action"
+	"github.com/ebogdum/keramos/internal/diff"
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/kube"
 	"github.com/ebogdum/keramos/internal/logger"
@@ -26,14 +27,14 @@ type workspaceResult struct {
 
 // workspaceRunOpts is shared across install/upgrade/uninstall.
 type workspaceRunOpts struct {
-	dir                  string
-	parallel             int
-	continueOnError      bool
-	atomic               bool
-	dryRun               bool
-	healthGate           bool
-	progress             bool
-	healthGateTimeout    time.Duration
+	dir               string
+	parallel          int
+	continueOnError   bool
+	atomic            bool
+	dryRun            bool
+	healthGate        bool
+	progress          bool
+	healthGateTimeout time.Duration
 }
 
 func (o *workspaceRunOpts) bindFlags(cmd *cobra.Command) {
@@ -171,23 +172,38 @@ func newWorkspaceDiffCommand() *cobra.Command {
 				return err
 			}
 			workspaceDir := absOrDot(dir)
+			w := cmd.OutOrStdout()
 			for _, m := range order {
-				fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s (ns=%s) ===\n", m.Name, m.Namespace)
-				client, kErr := kube.NewClient(kubeconfig, kubeContext, m.Namespace)
-				if nil != kErr {
-					fmt.Fprintf(cmd.OutOrStdout(), "  (no client: %v)\n", kErr)
-					continue
-				}
-				_ = client
-				rel, _ := action.Install(nil, m.PackagePath(workspaceDir), &action.InstallOptions{
+				fmt.Fprintf(w, "\n=== %s (ns=%s) ===\n", m.Name, m.Namespace)
+				rel, rErr := action.Install(nil, m.PackagePath(workspaceDir), &action.InstallOptions{
 					ReleaseName: m.Name,
 					Namespace:   m.Namespace,
 					Profile:     m.Profile,
 					DryRun:      "client",
 				})
-				if nil != rel {
-					fmt.Fprintf(cmd.OutOrStdout(), "  rendered %d bytes of manifest\n", len(rel.Manifest))
+				if nil != rErr {
+					fmt.Fprintf(w, "  render error: %v\n", rErr)
+					continue
 				}
+				// Compare the render against the member's stored state, if any.
+				base := ""
+				if client, kErr := kube.NewClient(kubeconfig, kubeContext, m.Namespace); nil == kErr {
+					storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+					if cur, sErr := storage.Last(m.Name); nil == sErr {
+						base = cur.Manifest
+					}
+				}
+				changes, dErr := diff.Compute(base, rel.Manifest, allShownFilters())
+				if nil != dErr {
+					fmt.Fprintf(w, "  diff error: %v\n", dErr)
+					continue
+				}
+				if 0 == len(changes) {
+					fmt.Fprintln(w, "  no changes")
+					continue
+				}
+				fmt.Fprint(w, formatPlanChanges(changes, false, nil, "state"))
+				fmt.Fprint(w, changeSummary(changes))
 			}
 			return nil
 		},

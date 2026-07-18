@@ -389,7 +389,27 @@ func fnRepeat(value any, args ...any) (any, error) {
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
 			"repeat: count %d exceeds %d", int(n), maxRepeat)
 	}
-	return strings.Repeat(fmt.Sprintf("%v", value), int(n)), nil
+	s := fmt.Sprintf("%v", value)
+	// Cap the RESULT size too. Capping only the count lets chained repeats
+	// (`x | repeat 65536 | repeat 65536`) amplify to gigabytes and OOM.
+	if err := checkOutputSize(len(s), int(n)); nil != err {
+		return nil, err
+	}
+	return strings.Repeat(s, int(n)), nil
+}
+
+// maxTemplateOutputBytes bounds the byte size a single expansion helper may
+// produce, so chained/large expansions cannot OOM the renderer.
+const maxTemplateOutputBytes = 32 * 1024 * 1024 // 32 MB
+
+// checkOutputSize rejects an expansion whose result (unit bytes × count) would
+// exceed the per-expression output cap.
+func checkOutputSize(unit, count int) error {
+	if unit > 0 && count > maxTemplateOutputBytes/unit {
+		return keramoserrors.NewErrorf(keramoserrors.ErrFunction,
+			"expansion result would exceed the %d-byte output cap", maxTemplateOutputBytes)
+	}
+	return nil
 }
 
 func fnContains(value any, args ...any) (any, error) {
@@ -478,4 +498,3 @@ func fnCat(value any, args ...any) (any, error) {
 	parts = append(parts, stringArgs(args)...)
 	return strings.Join(parts, " "), nil
 }
-

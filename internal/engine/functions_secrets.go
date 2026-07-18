@@ -27,6 +27,12 @@ func validateSopsPath(path string) error {
 		return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
 			"sops path %q must be relative to the package directory", path)
 	}
+	// Reject a leading dash so the value cannot be parsed by the sops CLI as an
+	// option (e.g. --config, --output) instead of a positional file argument.
+	if strings.HasPrefix(path, "-") {
+		return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+			"sops path %q must not begin with '-'", path)
+	}
 	clean := filepath.Clean(path)
 	if strings.HasPrefix(clean, "..") || strings.Contains(clean, string(filepath.Separator)+"..") {
 		return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
@@ -37,10 +43,10 @@ func validateSopsPath(path string) error {
 
 // registerSecretFuncs adds the secrets-bridge engine functions:
 //
-//   ${sops "path/db.enc.yaml"}                 decrypted plaintext (string/yaml)
-//   ${sopsKey "path/db.enc.yaml" "key.path"}   single decrypted key
-//   ${externalSecret "name" "store" "key"}     emits an ExternalSecret CR
-//   ${sealedSecret "name" "namespace" "data"}  emits a SealedSecret stub
+//	${sops "path/db.enc.yaml"}                 decrypted plaintext (string/yaml)
+//	${sopsKey "path/db.enc.yaml" "key.path"}   single decrypted key
+//	${externalSecret "name" "store" "key"}     emits an ExternalSecret CR
+//	${sealedSecret "name" "namespace" "data"}  emits a SealedSecret stub
 //
 // The functions shell out to the host `sops` binary for decryption. When the
 // binary is absent the function returns a structured error rather than a panic.

@@ -22,6 +22,12 @@ import (
 // The provenance contains: package name, version, SHA256 digest, timestamp.
 // Returns the path to the created .prov file (archivePath + ".prov").
 func SignPackage(archivePath, privateKeyPath string) (string, error) {
+	return SignPackageWithPassphrase(archivePath, privateKeyPath, "")
+}
+
+// SignPackageWithPassphrase is SignPackage for a passphrase-protected private
+// key. An empty passphrase is fine for an unprotected key.
+func SignPackageWithPassphrase(archivePath, privateKeyPath, passphrase string) (string, error) {
 	digest, err := fileDigest(archivePath)
 	if nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrSignature, "failed to compute archive digest", err)
@@ -40,6 +46,9 @@ func SignPackage(archivePath, privateKeyPath string) (string, error) {
 	entity, err := readPrivateKeyEntity(keyData)
 	if nil != err {
 		return "", err
+	}
+	if decErr := decryptEntity(entity, passphrase); nil != decErr {
+		return "", decErr
 	}
 
 	provContent := formatProvenance(meta.Name, meta.Version, digest)
@@ -73,6 +82,9 @@ func SignFile(filePath, privateKeyPath string) (string, error) {
 	entity, entErr := readPrivateKeyEntity(keyData)
 	if nil != entErr {
 		return "", entErr
+	}
+	if decErr := decryptEntity(entity, ""); nil != decErr {
+		return "", decErr
 	}
 
 	body := fmt.Sprintf("file: %s\ndigest: %s\nsigned: %s\n",
@@ -140,12 +152,29 @@ func readPrivateKeyEntity(keyData []byte) (*openpgp.Entity, error) {
 	if nil == entity.PrivateKey {
 		return nil, keramoserr.NewError(keramoserr.ErrSignature, "key file does not contain a private key")
 	}
-
-	if entity.PrivateKey.Encrypted {
-		return nil, keramoserr.NewError(keramoserr.ErrSignature, "encrypted private keys are not supported; decrypt the key first")
-	}
-
 	return entity, nil
+}
+
+// decryptEntity decrypts a passphrase-protected private key (and its subkeys)
+// in place. An unencrypted key is left as-is. An encrypted key with an empty
+// passphrase is a clear error rather than a cryptic failure at signing time.
+func decryptEntity(entity *openpgp.Entity, passphrase string) error {
+	pw := []byte(passphrase)
+	if nil != entity.PrivateKey && entity.PrivateKey.Encrypted {
+		if 0 == len(pw) {
+			return keramoserr.NewError(keramoserr.ErrSignature,
+				"private key is passphrase-protected; provide --passphrase-file")
+		}
+		if err := entity.PrivateKey.Decrypt(pw); nil != err {
+			return keramoserr.WrapError(keramoserr.ErrSignature, "failed to decrypt private key (wrong passphrase?)", err)
+		}
+	}
+	for _, sub := range entity.Subkeys {
+		if nil != sub.PrivateKey && sub.PrivateKey.Encrypted && 0 < len(pw) {
+			_ = sub.PrivateKey.Decrypt(pw)
+		}
+	}
+	return nil
 }
 
 func formatProvenance(name, version, digest string) string {

@@ -256,8 +256,10 @@ func TestSwitchNoMatchNoDefault(t *testing.T) {
 	if nil != err {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if nil != result {
-		t.Errorf("expected nil for unmatched switch without default, got %v", result)
+	// An unmatched switch with no $default drops the field/document — it must
+	// omit (matching $if), which reads as nil-or-omit-sentinel here.
+	if nil != result && !isOmit(result) {
+		t.Errorf("expected omit for unmatched switch without default, got %v", result)
 	}
 }
 

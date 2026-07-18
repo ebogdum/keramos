@@ -12,7 +12,8 @@ import (
 // override set, optionally tracing how a single key's value was determined.
 //
 // Example:
-//   keramos values mypkg --set replicas=5 -f overrides.yaml --trace replicas
+//
+//	keramos values mypkg --set replicas=5 -f overrides.yaml --trace replicas
 //
 // Output lists every contribution in resolution order (defaults → layers →
 // values files → --set), highlighting the winning value with `→`.

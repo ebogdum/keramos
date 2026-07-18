@@ -46,11 +46,11 @@ func loadTrustedKeys() (map[string]string, error) {
 // marketplaceIndex is the on-disk plugin index. Each entry must carry a
 // signature produced by an Ed25519 keypair listed in trustedKeys.
 type marketplaceIndex struct {
-	APIVersion string                `json:"apiVersion"`
-	Plugins    []marketplacePlugin   `json:"plugins"`
-	Signatures map[string]string     `json:"signatures"` // pluginName → hex(sig over digest)
-	Digests    map[string]string     `json:"digests"`    // pluginName → hex(sha256(archive bytes))
-	TrustedKeys map[string]string    `json:"trustedKeys"` // keyID → hex(public key)
+	APIVersion  string              `json:"apiVersion"`
+	Plugins     []marketplacePlugin `json:"plugins"`
+	Signatures  map[string]string   `json:"signatures"`  // pluginName → hex(sig over digest)
+	Digests     map[string]string   `json:"digests"`     // pluginName → hex(sha256(archive bytes))
+	TrustedKeys map[string]string   `json:"trustedKeys"` // keyID → hex(public key)
 }
 
 type marketplacePlugin struct {
@@ -224,4 +224,3 @@ func verifyMarketplacePlugin(idx *marketplaceIndex, name string, archive []byte)
 	}
 	return nil
 }
-

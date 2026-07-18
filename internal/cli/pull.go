@@ -63,11 +63,11 @@ to an HTTP repository URL.`,
 			}
 
 			if strings.HasPrefix(ref, "oci://") {
-				registry := &repo.OCIRegistry{}
 				fullRef := ref
 				if "" != version {
 					fullRef = ref + ":" + version
 				}
+				registry := repo.OCIRegistryForRef(fullRef)
 				archivePath, pullErr := registry.Pull(fullRef, destDir)
 				if nil != pullErr {
 					return pullErr

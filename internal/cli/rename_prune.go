@@ -82,9 +82,9 @@ func newRenameCommand() *cobra.Command {
 // sealed-revision pruning so storage doesn't grow unbounded.
 func newPruneCommand() *cobra.Command {
 	var (
-		keep    int
+		keep     int
 		release_ string
-		dryRun  bool
+		dryRun   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "prune",

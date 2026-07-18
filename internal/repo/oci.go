@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"bytes"
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/logger"
 	"github.com/ebogdum/keramos/internal/netguard"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"bytes"
 
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/file"
@@ -36,6 +37,32 @@ type OCIRegistry struct {
 	// InsecureSkipTLSVerify disables certificate validation; surfaced via
 	// `--insecure-skip-tls-verify` on the relevant CLI commands.
 	InsecureSkipTLSVerify bool
+}
+
+// OCIRegistryForRef builds an OCIRegistry for an oci:// reference, honoring the
+// operator's opt-ins: env vars (KERAMOS_OCI_PLAIN_HTTP / KERAMOS_OCI_INSECURE_SKIP_TLS)
+// and a per-host insecure flag recorded via `keramos login --insecure`.
+func OCIRegistryForRef(ref string) *OCIRegistry {
+	reg := &OCIRegistry{
+		PlainHTTP:             "1" == os.Getenv("KERAMOS_OCI_PLAIN_HTTP"),
+		InsecureSkipTLSVerify: "1" == os.Getenv("KERAMOS_OCI_INSECURE_SKIP_TLS"),
+	}
+	host := ociHost(ref)
+	if store, err := LoadCredentialStore(); nil == err && "" != host {
+		if cred, ok := store.GetForHost(host); ok && cred.Insecure {
+			reg.InsecureSkipTLSVerify = true
+		}
+	}
+	return reg
+}
+
+// ociHost extracts the registry host from an oci:// reference.
+func ociHost(ref string) string {
+	trimmed := strings.TrimPrefix(ref, "oci://")
+	if i := strings.IndexAny(trimmed, "/"); i >= 0 {
+		trimmed = trimmed[:i]
+	}
+	return trimmed
 }
 
 // crossHostRedirectBlock refuses redirects that change host so credentials and
@@ -308,7 +335,18 @@ func (o *OCIRegistry) Pull(ref, destDir string) (string, error) {
 		tag = "latest"
 	}
 
-	manifest, err := oras.Copy(ctx, repo, tag, fs, tag, oras.DefaultCopyOptions)
+	// Bound each blob: a hostile registry could otherwise declare and serve a
+	// huge layer and exhaust the disk (ORAS verifies digest/size but sets no
+	// ceiling). Reject oversized descriptors before they are fetched.
+	copyOpts := oras.DefaultCopyOptions
+	copyOpts.PreCopy = func(_ context.Context, desc ocispec.Descriptor) error {
+		if desc.Size > maxArchiveSize {
+			return keramoserr.NewErrorf(keramoserr.ErrRegistry,
+				"OCI blob %s (%d bytes) exceeds the %d-byte limit", desc.Digest, desc.Size, maxArchiveSize)
+		}
+		return nil
+	}
+	manifest, err := oras.Copy(ctx, repo, tag, fs, tag, copyOpts)
 	if nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrRegistry, "failed to pull from registry", err)
 	}

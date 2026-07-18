@@ -49,16 +49,16 @@ without requiring an external audit pipeline.`,
 			records := make([]map[string]any, 0, len(history))
 			for _, rel := range history {
 				records = append(records, map[string]any{
-					"revision":  rel.Revision,
-					"action":    rel.Audit.Action,
-					"user":      rel.Audit.User,
-					"hostname":  rel.Audit.Hostname,
-					"context":   rel.Audit.KubeContext,
-					"flags":     rel.Audit.Flags,
+					"revision":   rel.Revision,
+					"action":     rel.Audit.Action,
+					"user":       rel.Audit.User,
+					"hostname":   rel.Audit.Hostname,
+					"context":    rel.Audit.KubeContext,
+					"flags":      rel.Audit.Flags,
 					"valueFiles": rel.Audit.ValueFiles,
-					"parentRev": rel.Audit.ParentRev,
-					"status":    string(rel.Status),
-					"timestamp": rel.Audit.Timestamp,
+					"parentRev":  rel.Audit.ParentRev,
+					"status":     string(rel.Status),
+					"timestamp":  rel.Audit.Timestamp,
 				})
 			}
 			if "json" == output {

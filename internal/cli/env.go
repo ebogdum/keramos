@@ -77,16 +77,16 @@ func collectKeramosEnv() map[string]string {
 	}
 
 	return map[string]string{
-		"KERAMOS_BIN":          bin,
-		"KERAMOS_CACHE_HOME":   cacheRoot,
-		"KERAMOS_CONFIG_HOME":  configRoot,
-		"KERAMOS_DATA_HOME":    dataRoot,
-		"KERAMOS_PLUGINS":      pluginsRoot,
-		"KERAMOS_NAMESPACE":    ns,
-		"KERAMOS_KUBECONFIG":   os.Getenv("KUBECONFIG"),
-		"KERAMOS_KUBECONTEXT":  os.Getenv("KERAMOS_KUBECONTEXT"),
-		"KERAMOS_REGISTRY_CONFIG": filepath.Join(configRoot, "registry.json"),
-		"KERAMOS_REPOSITORY_CACHE": filepath.Join(cacheRoot, "repository"),
+		"KERAMOS_BIN":               bin,
+		"KERAMOS_CACHE_HOME":        cacheRoot,
+		"KERAMOS_CONFIG_HOME":       configRoot,
+		"KERAMOS_DATA_HOME":         dataRoot,
+		"KERAMOS_PLUGINS":           pluginsRoot,
+		"KERAMOS_NAMESPACE":         ns,
+		"KERAMOS_KUBECONFIG":        os.Getenv("KUBECONFIG"),
+		"KERAMOS_KUBECONTEXT":       os.Getenv("KERAMOS_KUBECONTEXT"),
+		"KERAMOS_REGISTRY_CONFIG":   filepath.Join(configRoot, "registry.json"),
+		"KERAMOS_REPOSITORY_CACHE":  filepath.Join(cacheRoot, "repository"),
 		"KERAMOS_REPOSITORY_CONFIG": filepath.Join(configRoot, "repositories.yaml"),
 	}
 }

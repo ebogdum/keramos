@@ -17,24 +17,24 @@ import (
 
 func newInstallCommand() *cobra.Command {
 	var (
-		valueFiles      []string
-		sets            []string
-		setStrings      []string
-		setFiles        []string
-		setJSON         []string
-		profile         string
-		noWait          bool
-		timeout         time.Duration
-		dryRun          string
-		description     string
-		noAtomic        bool
-		noForce         bool
-		noHooks         bool
-		createNamespace bool
-		includeCRDs     bool
-		labels          []string
-		apiVersions     []string
-		kubeVersion     string
+		valueFiles          []string
+		sets                []string
+		setStrings          []string
+		setFiles            []string
+		setJSON             []string
+		profile             string
+		noWait              bool
+		timeout             time.Duration
+		dryRun              string
+		description         string
+		noAtomic            bool
+		noForce             bool
+		noHooks             bool
+		createNamespace     bool
+		includeCRDs         bool
+		labels              []string
+		apiVersions         []string
+		kubeVersion         string
 		postRenderer        string
 		postRenderers       []string
 		postRendererTimeout time.Duration
@@ -43,13 +43,13 @@ func newInstallCommand() *cobra.Command {
 		hookTimeout         time.Duration
 		keyring             string
 		envName             string
-		output          string
-		generateName    bool
-		verify          bool
-		skipRequires    bool
-		historyMax      int
-		recreatePods    bool
-		force           bool
+		output              string
+		generateName        bool
+		verify              bool
+		skipRequires        bool
+		historyMax          int
+		recreatePods        bool
+		force               bool
 	)
 
 	cmd := &cobra.Command{
@@ -112,25 +112,25 @@ func newInstallCommand() *cobra.Command {
 			}
 
 			opts := &action.InstallOptions{
-				ReleaseName:     releaseName,
-				Namespace:       namespace,
-				ValueFiles:      valueFiles,
-				Sets:            sets,
-				SetStrings:      setStrings,
-				SetFiles:        setFiles,
-				SetJSON:         setJSON,
-				Profile:         profile,
-				Wait:            !noWait,
-				Timeout:         timeout,
-				DryRun:          dryRun,
-				Description:     description,
-				Atomic:          !noAtomic,
-				NoHooks:         noHooks,
-				CreateNamespace: createNamespace,
-				IncludeCRDs:     includeCRDs,
-				Labels:          labelMap,
-				APIVersions:     apiVersions,
-				KubeVersion:     kubeVersion,
+				ReleaseName:         releaseName,
+				Namespace:           namespace,
+				ValueFiles:          valueFiles,
+				Sets:                sets,
+				SetStrings:          setStrings,
+				SetFiles:            setFiles,
+				SetJSON:             setJSON,
+				Profile:             profile,
+				Wait:                !noWait,
+				Timeout:             timeout,
+				DryRun:              dryRun,
+				Description:         description,
+				Atomic:              !noAtomic,
+				NoHooks:             noHooks,
+				CreateNamespace:     createNamespace,
+				IncludeCRDs:         includeCRDs,
+				Labels:              labelMap,
+				APIVersions:         apiVersions,
+				KubeVersion:         kubeVersion,
 				PostRenderer:        postRenderer,
 				PostRenderers:       postRenderers,
 				PostRendererTimeout: postRendererTimeout,

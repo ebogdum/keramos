@@ -117,31 +117,53 @@ func fnUntilStep(value any, args ...any) (any, error) {
 	if 0 == step {
 		return nil, keramoserrors.NewError(keramoserrors.ErrFunction, "untilStep: step must be non-zero")
 	}
-	// Pre-compute the range size and reject before allocating.
+	// Pre-compute the range size and reject before allocating. The size is
+	// checked in the float domain FIRST: when stop-start is near the int
+	// range the int expression `(stop-start+step-1)/step` overflows to a
+	// negative value that slips past the maxRangeLen check and panics
+	// `make` with a negative cap. The float pre-check catches that.
 	var size int64
 	if step > 0 {
 		if start >= stop {
 			return []any{}, nil
+		}
+		if (float64(stop)-float64(start))/float64(step) > float64(maxRangeLen) {
+			return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
+				"untilStep: range size exceeds %d", maxRangeLen)
 		}
 		size = int64((stop - start + step - 1) / step)
 	} else {
 		if start <= stop {
 			return []any{}, nil
 		}
+		if (float64(start)-float64(stop))/float64(-step) > float64(maxRangeLen) {
+			return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
+				"untilStep: range size exceeds %d", maxRangeLen)
+		}
 		size = int64((start - stop - step - 1) / -step)
 	}
-	if size > maxRangeLen {
+	if size < 0 || size > maxRangeLen {
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
 			"untilStep: range size %d exceeds %d", size, maxRangeLen)
 	}
 	out := make([]any, 0, size)
 	if step > 0 {
-		for i := start; i < stop; i += step {
+		for i := start; i < stop; {
 			out = append(out, i)
+			next := i + step
+			if next < i { // integer overflow wrapped negative; stop
+				break
+			}
+			i = next
 		}
 	} else {
-		for i := start; i > stop; i += step {
+		for i := start; i > stop; {
 			out = append(out, i)
+			next := i + step
+			if next > i { // overflow with negative step; stop
+				break
+			}
+			i = next
 		}
 	}
 	return out, nil

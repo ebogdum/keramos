@@ -2,87 +2,106 @@
 
 ## Synopsis
 
-`keramos diff` shows what would change if you ran `keramos upgrade` against a release with a given package + values. By default it compares keramos's stored manifest against the freshly rendered manifest (a structured, per-resource client-side diff). Add `--server-side` to instead compare the LIVE cluster objects against a server-side apply dry-run, so the cluster's defaulters and admission webhooks contribute to the comparison — the diff the cluster would actually compute, not a textual diff of two YAML files.
+`keramos diff` is a **purely file-oriented** comparison — it never reads cluster
+or release state. It renders and compares local inputs: two package
+directories, two rendered manifest files, one package under two value sets, or
+one package at two git revisions. Use it to answer "what is different between
+these two things on disk", independent of any cluster.
+
+For "what would change against the recorded state" use [`keramos plan`](plan.md);
+for "what differs from the live cluster" use [`keramos drift`](drift.md).
 
 ## When to use it
 
-Run before any production upgrade. The output is a structured per-resource diff with each changed field on its own line. Pair with `keramos plan` if you want to capture the rendered manifest into a reviewable file before applying.
+- Compare two chart versions before upgrading a dependency.
+- See how `staging` values differ from `prod` values for the same package.
+- Review what a git change to a package actually does to the rendered output.
+
+## The four modes
+
+| Invocation | Compares |
+|---|---|
+| `keramos diff ./a ./b` | two package directories (renders both) |
+| `keramos diff a.yaml b.yaml` | two rendered manifest files (no rendering) |
+| `keramos diff ./pkg --to-set k=v` | one package under two value sets |
+| `keramos diff ./pkg --from-ref X --to-ref Y` | one package at two git revisions |
+
+The mode is chosen from the arguments: two directories → mode 1; two files →
+mode 2; one directory with `--from-*/--to-*` value flags → mode 3; one
+directory with `--from-ref/--to-ref` → mode 4.
 
 ## Usage
 
 ```
-keramos diff <release-name> <package-path> [flags]
+keramos diff <a> [b] [flags]
 ```
 
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | — | — | help for diff |
-| `--no-color` | — | — | disable colored diff output |
-| `--profile` | string | — | profile name to apply |
-| `--revision` | int | — | compare against a specific revision |
-| `--server-side` | — | — | diff live cluster state against a server-side apply dry-run |
-| `--set` | stringArray | — | set key=value overrides (repeatable) |
-| `--set-file` | stringArray | — | set key=path; value read from path (repeatable) |
-| `--set-json` | stringArray | — | set key=<json>; value parsed as JSON (repeatable) |
-| `--set-string` | stringArray | — | set key=value forcing string interpretation (repeatable) |
-| `--show-annotations` | — | — | include metadata.annotations |
-| `--show-defaulted-fields` | — | — | include server-side defaults (clusterIP, port protocol, etc.) |
-| `--show-finalizers` | — | — | include metadata.finalizers |
-| `--show-generation` | — | — | include resourceVersion/uid/generation/creationTimestamp |
-| `--show-image-pull-policy` | — | — | include containers[].imagePullPolicy |
-| `--show-labels` | — | — | include metadata.labels |
-| `--show-managed-fields` | — | — | include metadata.managedFields |
-| `--show-owner-refs` | — | — | include metadata.ownerReferences |
-| `--show-secret-rotation` | — | — | include rotated Secret data values |
-| `--show-status` | — | — | include changes under .status |
-| `--smart` | bool | true | use Kubernetes-aware structured diff (use `--smart=false` for raw line-level unified diff) |
-| `-f, --values` | stringArray | — | values file overrides (repeatable) |
-
-## Persistent flags inherited from `keramos`
-
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| `-f, --values` | stringArray | — | values file applied to BOTH sides (repeatable) |
+| `--set` | stringArray | — | key=value applied to BOTH sides (repeatable) |
+| `--set-string` | stringArray | — | key=value (string) applied to BOTH sides |
+| `--profile` | string | — | profile applied to BOTH sides |
+| `--from-values` | stringArray | — | values file for the FROM side only (mode 3) |
+| `--to-values` | stringArray | — | values file for the TO side only (mode 3) |
+| `--from-set` | stringArray | — | key=value for the FROM side only (mode 3) |
+| `--to-set` | stringArray | — | key=value for the TO side only (mode 3) |
+| `--from-profile` | string | — | profile for the FROM side only (mode 3) |
+| `--to-profile` | string | — | profile for the TO side only (mode 3) |
+| `--from-ref` | string | — | git revision for the FROM side (mode 4) |
+| `--to-ref` | string | — | git revision for the TO side (mode 4, default: working tree) |
+| `--smart` | bool | true | smart per-resource diff; `--smart=false` for raw unified diff |
+| `--no-color` | — | — | disable colored output |
 
 ## Examples
 
-Diff a candidate upgrade:
+Compare two package versions (in → out):
 
 ```sh
-keramos diff my-app ./my-app -n prod
+keramos diff ./chart-v1 ./chart-v2
 ```
 
-Compare against an alternate values file:
+```
+diff: ./chart-v1 → ./chart-v2
 
-```sh
-keramos diff my-app ./my-app -f new.yaml -n prod
+~ update  Deployment/myapp
+      ~ spec.template.spec.containers.0.image
+          - "nginx:1.24"
+          + "nginx:1.25"
+
+Summary: 0 added, 1 changed, 0 removed.
 ```
 
-Diff against a specific historical revision (compare current package + values to what revision 5 looked like):
+Compare two rendered manifest files:
 
 ```sh
-keramos diff my-app ./my-app --revision 5 -n prod
+keramos template ./a > a.yaml
+keramos template ./b > b.yaml
+keramos diff a.yaml b.yaml
 ```
 
-Show fields normally hidden (server-side defaults, managed fields):
+Compare the same package under staging vs prod values:
 
 ```sh
-keramos diff my-app ./my-app --show-defaulted-fields --show-managed-fields -n prod
+keramos diff ./chart --from-values staging.yaml --to-values prod.yaml
 ```
 
-Force a raw line-level unified diff (no structural awareness):
+Compare a package across git revisions:
 
 ```sh
-keramos diff my-app ./my-app --smart=false -n prod
+keramos diff ./chart --from-ref v1.2.0 --to-ref v1.3.0
+```
+
+Fall back to a raw line-level unified diff:
+
+```sh
+keramos diff ./chart-v1 ./chart-v2 --smart=false
 ```
 
 ## See also
 
-- [`upgrade`](upgrade.md)
-- [`plan`](plan.md)
-- [`drift`](drift.md)
+- [`plan`](plan.md) — compare a package against the recorded state
+- [`drift`](drift.md) — compare package, state, and the live cluster
+- [`template`](template.md) — render a package to a manifest

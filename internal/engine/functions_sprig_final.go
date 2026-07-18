@@ -135,12 +135,22 @@ func fnSeq(value any, args ...any) (any, error) {
 	}
 	out := make([]any, 0)
 	if step > 0 {
-		for i := start; i <= end; i += step {
+		for i := start; i <= end; {
 			out = append(out, i)
+			next := i + step
+			if next < i { // integer overflow wrapped negative; stop
+				break
+			}
+			i = next
 		}
 	} else {
-		for i := start; i >= end; i += step {
+		for i := start; i >= end; {
 			out = append(out, i)
+			next := i + step
+			if next > i { // overflow with negative step; stop
+				break
+			}
+			i = next
 		}
 	}
 	return out, nil

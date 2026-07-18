@@ -5,70 +5,117 @@ import (
 	"time"
 
 	"github.com/ebogdum/keramos/internal/action"
+	"github.com/ebogdum/keramos/internal/diff"
+	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/ebogdum/keramos/internal/pkg"
 	"github.com/spf13/cobra"
 )
 
 func newDriftCommand() *cobra.Command {
-	var output string
+	var (
+		releaseName string
+		profile     string
+		valueFiles  []string
+		sets        []string
+		setStrings  []string
+		noColor     bool
+		serverSide  bool
+	)
 	cmd := &cobra.Command{
-		Use:   "drift <release-name>",
-		Short: "Detect drift between a release's stored manifest and live cluster state",
-		Long: `Compare the manifest that keramos installed against what is currently in the cluster.
+		Use:   "drift [package-path]",
+		Short: "Three-way compare: package vs recorded state vs live cluster",
+		Long: `Compare three views of a release side by side and show, per resource and
+field, where they disagree:
 
-This is the primitive Argo CD users rely on: a list of resources that were
-mutated (kubectl edit, controller mutation, hand-written kustomize) since
-install or last upgrade. Use 'keramos reconcile' to re-apply the stored manifest.`,
-		Args: cobra.ExactArgs(1),
+  package  — what the directory would render right now
+  state    — what keramos last recorded (the stored manifest)
+  running  — what is actually in the cluster
+
+Two kinds of divergence are flagged:
+
+  ⚠ cluster drift   — state ≠ running: something changed the cluster (kubectl
+                      edit, a controller, a webhook) since the last apply.
+  → pending apply   — package ≠ state: the directory has edits not yet applied
+                      (this is also what 'keramos plan' previews).
+
+The release is derived from the package's keramos.yaml name; use -r to override.
+Comparison is limited to keramos-managed fields, so cluster-injected noise
+(status, managedFields, server defaults) is ignored. Use 'keramos reconcile' to
+push the stored state back onto a drifted cluster.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if 1 == len(args) {
+				dir = args[0]
+			}
 			client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
 			if nil != err {
 				return err
 			}
-			items, err := action.Drift(client, args[0])
-			if nil != err {
-				return err
+			if "" == releaseName {
+				meta, mErr := pkg.LoadPackageMetadata(dir)
+				if nil != mErr {
+					return mErr
+				}
+				if "" == meta.Name {
+					return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+						"package at %q has no 'name' in keramos.yaml; pass -r/--release", dir)
+				}
+				releaseName = meta.Name
 			}
-			if 0 == len(items) {
-				fmt.Fprintln(cmd.OutOrStdout(), "No drift detected.")
+			pkgManifest, rErr := renderPkgManifest(dir, profile, valueFiles, sets, setStrings)
+			if nil != rErr {
+				return rErr
+			}
+			// Server-side mode: compare the LIVE cluster objects against what a
+			// server-side apply of the package would actually produce, so
+			// admission webhooks and API-server defaulting are reflected — the
+			// change the cluster would really compute, not a client-side render.
+			if serverSide {
+				live, merged, ssErr := client.ServerSideDiff(pkgManifest)
+				if nil != ssErr {
+					return ssErr
+				}
+				changes, cErr := diff.Compute(live, merged, diff.Filters{})
+				if nil != cErr {
+					return cErr
+				}
+				w := cmd.OutOrStdout()
+				if 0 == len(changes) {
+					fmt.Fprintln(w, "In sync — the live cluster matches a server-side apply of the package.")
+					return nil
+				}
+				fmt.Fprintf(w, "drift (server-side): live cluster → apply-dry-run   (release %s)\n\n", releaseName)
+				fmt.Fprint(w, formatPlanChanges(changes, !noColor, nil, "live"))
+				fmt.Fprint(w, changeSummary(changes))
 				return nil
 			}
-			if "json" == output {
-				out, fmtErr := FormatJSON(items)
-				if nil != fmtErr {
-					return fmtErr
-				}
-				fmt.Fprint(cmd.OutOrStdout(), out)
+			stateManifest, liveManifest, sErr := action.StateAndLiveManifests(client, releaseName)
+			if nil != sErr {
+				return sErr
+			}
+			resources, tErr := threeWay(pkgManifest, stateManifest, liveManifest)
+			if nil != tErr {
+				return tErr
+			}
+			w := cmd.OutOrStdout()
+			if 0 == len(resources) {
+				fmt.Fprintln(w, "In sync — package, state, and cluster agree on every managed field.")
 				return nil
 			}
-			if "yaml" == output {
-				out, fmtErr := FormatYAML(items)
-				if nil != fmtErr {
-					return fmtErr
-				}
-				fmt.Fprint(cmd.OutOrStdout(), out)
-				return nil
-			}
-			rows := make([][]string, 0, len(items))
-			for _, it := range items {
-				ns := it.Namespace
-				if "" == ns {
-					ns = "(cluster)"
-				}
-				rows = append(rows, []string{
-					it.Kind.String(),
-					it.ResourceKind,
-					ns,
-					it.Name,
-					fmt.Sprintf("%d", len(it.FieldDiffs)),
-				})
-			}
-			fmt.Fprint(cmd.OutOrStdout(),
-				FormatTable([]string{"DRIFT", "KIND", "NAMESPACE", "NAME", "FIELDS"}, rows))
+			fmt.Fprintf(w, "drift: package ↔ state ↔ running   (release %s)\n\n", releaseName)
+			fmt.Fprint(w, formatThreeWay(resources, !noColor))
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&output, "output", "o", "table", "output format: table, json, yaml")
+	cmd.Flags().StringVarP(&releaseName, "release", "r", "", "state/release name (default: derived from keramos.yaml)")
+	cmd.Flags().StringVar(&profile, "profile", "", "profile to apply when rendering the package side")
+	cmd.Flags().StringArrayVarP(&valueFiles, "values", "f", nil, "values file for the package side (repeatable)")
+	cmd.Flags().StringArrayVar(&sets, "set", nil, "key=value for the package side (repeatable)")
+	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "key=value (string) for the package side (repeatable)")
+	cmd.Flags().BoolVar(&serverSide, "server-side", false, "compare the live cluster against a server-side apply dry-run (reflects admission/defaulting) instead of the three-way client-side view")
+	cmd.Flags().BoolVar(&noColor, "no-color", false, "disable colored output")
 	return cmd
 }
 

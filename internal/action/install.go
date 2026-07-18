@@ -23,23 +23,23 @@ import (
 
 // InstallOptions configures an install operation.
 type InstallOptions struct {
-	ReleaseName     string
-	Namespace       string
-	ValueFiles      []string
-	Sets            []string
-	SetStrings      []string
-	SetFiles        []string
-	SetJSON         []string
-	Profile         string
-	Wait            bool
-	Timeout         time.Duration
-	DryRun          string
-	Description     string
-	Atomic          bool
-	NoHooks         bool
-	CreateNamespace bool
-	IncludeCRDs     bool
-	Labels          map[string]string
+	ReleaseName         string
+	Namespace           string
+	ValueFiles          []string
+	Sets                []string
+	SetStrings          []string
+	SetFiles            []string
+	SetJSON             []string
+	Profile             string
+	Wait                bool
+	Timeout             time.Duration
+	DryRun              string
+	Description         string
+	Atomic              bool
+	NoHooks             bool
+	CreateNamespace     bool
+	IncludeCRDs         bool
+	Labels              map[string]string
 	APIVersions         []string
 	KubeVersion         string
 	PostRenderer        string        // single command (legacy)
@@ -92,8 +92,9 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 		return nil, err
 	}
 
-	// Step 2: Resolve full merged values (defaults + overrides).
-	mergedValues, err := values.ResolveAll(map[string]any(resolved.Values), opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
+	// Step 2: Resolve full merged values (defaults + overrides), keeping the
+	// resolution trace so we can record where each value came from in the state.
+	mergedValues, valueTrace, err := values.ResolveAllWithTrace(map[string]any(resolved.Values), opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
 	if nil != err {
 		return nil, err
 	}
@@ -238,8 +239,9 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 			Version:    resolved.Metadata.Version,
 			AppVersion: resolved.Metadata.AppVersion,
 		},
-		Values:     mergedValues,
-		UserValues: userValues,
+		Values:        mergedValues,
+		UserValues:    userValues,
+		Provenance:    valueTrace.Provenance(),
 		Manifest:      manifest,
 		Notes:         notes,
 		Tests:         renderedTests,
@@ -339,16 +341,20 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 		return failInstall(client, storage, rel, manifest, opts, true, postErr)
 	}
 
-	// Step 12: Mark deployed
+	// Step 12: Mark deployed (retry so a transient write error doesn't leave a
+	// fully-applied release stuck Pending).
 	rel.Status = release.StatusDeployed
-	if updateErr := storage.Update(rel); nil != updateErr {
+	if updateErr := updateReleaseWithRetry(storage, rel); nil != updateErr {
 		return rel, updateErr
 	}
 
-	// Step 13: Install required co-deployed packages
+	// Step 13: Install required co-deployed packages. A failure here is
+	// surfaced (not just logged): the primary release IS deployed — rel is
+	// returned — but the caller must know a declared dependency did not install.
 	if !opts.SkipRequires {
 		if reqErr := installRequires(client, packagePath, opts); nil != reqErr {
-			logger.Warn("failed to install required packages: %v", reqErr)
+			return rel, keramoserr.WrapError(keramoserr.ErrDependency,
+				"release deployed but a required package failed to install", reqErr)
 		}
 	}
 
@@ -400,12 +406,17 @@ func installRequires(client kube.KubeClient, packagePath string, opts *InstallOp
 			parentValues := reqNode.Parent.Values
 			scoped := deptree.ScopedRequireValues(parentValues, reqNode.Name)
 			if 0 < len(scoped) {
-				// Write scoped values to a temp file and pass as value file
+				// Write scoped values to a temp file and pass as value file.
+				// A write failure must abort — otherwise the required package is
+				// installed WITHOUT its parent's requires.<name> overrides,
+				// silently applying wrong/default configuration.
 				tmpFile, tmpErr := writeScopedValuesTemp(scoped)
-				if nil == tmpErr {
-					scopedValueFiles = append(scopedValueFiles, tmpFile)
-					defer func(f string) { _ = os.Remove(f) }(tmpFile)
+				if nil != tmpErr {
+					return keramoserr.WrapErrorf(keramoserr.ErrDependency, tmpErr,
+						"failed to write scoped values for required package %s", reqNode.Name)
 				}
+				scopedValueFiles = append(scopedValueFiles, tmpFile)
+				defer func(f string) { _ = os.Remove(f) }(tmpFile)
 			}
 		}
 
@@ -450,7 +461,6 @@ func writeScopedValuesTemp(vals map[string]any) (string, error) {
 
 	return tmpFile.Name(), tmpFile.Close()
 }
-
 
 // failInstall records an install failure. It marks the release Failed and
 // persists that status, optionally removes the applied manifest (when atomic

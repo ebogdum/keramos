@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
+	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/netguard"
 	"github.com/ebogdum/keramos/internal/repo"
 	"github.com/spf13/cobra"
@@ -53,7 +55,9 @@ func newSearchRepoCommand() *cobra.Command {
 					continue
 				}
 				for name, entries := range idx.Entries {
-					if !matchesKeyword(name, keyword) {
+					// Match the keyword against the chart name OR any entry's
+					// description/keywords, not just the name.
+					if !matchesKeywordBroad(name, entries, keyword) {
 						continue
 					}
 					if 0 == len(entries) {
@@ -95,21 +99,44 @@ func newSearchHubCommand() *cobra.Command {
 	cmd.Flags().IntVar(&maxColWidth, "max-col-width", 50, "maximum column width for output")
 	cmd.Flags().BoolVar(&regexp_, "regexp", false, "treat the keyword as a regular expression")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		_ = maxColWidth // flag accepted; output already wraps per-column
-		_ = regexp_     // accepted; the hub's `ts_query_web` does fuzzy matching natively
 		results, err := searchArtifactHubAt(endpoint, args[0], kind, limit)
 		if nil != err {
 			return err
+		}
+		// --regexp: post-filter the hub's fuzzy matches by an actual regular
+		// expression over the package name and description.
+		if regexp_ {
+			re, reErr := regexp.Compile(args[0])
+			if nil != reErr {
+				return keramoserr.NewErrorf(keramoserr.ErrCLIValidation, "invalid --regexp pattern: %v", reErr)
+			}
+			kept := make([]hubResult, 0, len(results))
+			for _, p := range results {
+				if re.MatchString(p.URL) || re.MatchString(p.Description) {
+					kept = append(kept, p)
+				}
+			}
+			results = kept
 		}
 		if 0 == len(results) {
 			fmt.Fprintf(cmd.OutOrStdout(), "No results found for %q\n", args[0])
 			return nil
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%-50s %-15s %-15s %-50s %s\n",
-			"NAME", "VERSION", "APP VERSION", "REPO URL", "DESCRIPTION")
+		w := maxColWidth
+		if w < 1 {
+			w = 1
+		}
+		trunc := func(s string) string {
+			if len(s) > w {
+				return s[:w]
+			}
+			return s
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%-*s %-15s %-15s %-*s %s\n",
+			w, "NAME", "VERSION", "APP VERSION", w, "REPO URL", "DESCRIPTION")
 		for _, p := range results {
-			fmt.Fprintf(cmd.OutOrStdout(), "%-50s %-15s %-15s %-50s %s\n",
-				p.URL, p.Version, p.AppVersion, p.RepoURL, p.Description)
+			fmt.Fprintf(cmd.OutOrStdout(), "%-*s %-15s %-15s %-*s %s\n",
+				w, trunc(p.URL), p.Version, p.AppVersion, w, trunc(p.RepoURL), p.Description)
 		}
 		return nil
 	}
@@ -243,4 +270,3 @@ func matchesKeywordBroad(name string, entries []repo.IndexEntry, keyword string)
 	}
 	return false
 }
-

@@ -8,17 +8,22 @@ import (
 	"github.com/ebogdum/keramos/internal/kube"
 	"github.com/ebogdum/keramos/internal/logger"
 	"github.com/ebogdum/keramos/internal/release"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // UninstallOptions configures an uninstall operation.
 type UninstallOptions struct {
-	ReleaseName     string
-	Namespace       string
-	KeepHistory     bool
-	Timeout         time.Duration
-	NoHooks         bool
-	Description     string
-	IgnoreNotFound  bool
+	ReleaseName    string
+	Namespace      string
+	KeepHistory    bool
+	Timeout        time.Duration
+	NoHooks        bool
+	Description    string
+	IgnoreNotFound bool
+	// Wait blocks until every deleted resource is actually gone from the
+	// cluster (bounded by Timeout), instead of returning as soon as the DELETE
+	// calls are issued.
+	Wait bool
 }
 
 // Uninstall removes a release and its resources from the cluster.
@@ -74,6 +79,17 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 		return current, combineFailure(delErr, markFailed(storage, current))
 	}
 
+	// Step 4b: Optionally block until the deleted resources are actually gone.
+	if opts.Wait {
+		timeout := opts.Timeout
+		if 0 == timeout {
+			timeout = 5 * time.Minute
+		}
+		if waitErr := waitForDeletion(client, current.Manifest, ns, timeout); nil != waitErr {
+			return current, combineFailure(waitErr, markFailed(storage, current))
+		}
+	}
+
 	// Step 5: Execute post-delete hooks
 	var postResults []release.HookResult
 	var postErr error
@@ -105,4 +121,47 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 
 	logger.Debug("uninstall of %s complete", opts.ReleaseName)
 	return current, nil
+}
+
+// waitForDeletion polls until every resource in the manifest is gone from the
+// cluster or the timeout elapses. A resource is considered deleted when Lookup
+// returns nil (not found).
+func waitForDeletion(client kube.KubeClient, manifest, defaultNS string, timeout time.Duration) error {
+	all, err := kube.ParseManifests(manifest)
+	if nil != err {
+		return err
+	}
+	// Only wait for resources that DeleteManifests actually deletes. Resources
+	// annotated resource-policy: keep are intentionally left behind, so waiting
+	// on them would time out forever and report a false uninstall failure.
+	resources := make([]*unstructured.Unstructured, 0, len(all))
+	for _, r := range all {
+		anns := r.GetAnnotations()
+		if "keep" == anns["keramos.sh/resource-policy"] || "keep" == anns["helm.sh/resource-policy"] {
+			continue
+		}
+		resources = append(resources, r)
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		remaining := 0
+		for _, r := range resources {
+			ns := r.GetNamespace()
+			if "" == ns {
+				ns = defaultNS
+			}
+			obj, lErr := client.Lookup(r.GetAPIVersion(), r.GetKind(), ns, r.GetName())
+			if nil == lErr && nil != obj {
+				remaining++
+			}
+		}
+		if 0 == remaining {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return keramoserr.NewErrorf(keramoserr.ErrKube,
+				"timed out after %s waiting for %d resource(s) to be deleted", timeout, remaining)
+		}
+		time.Sleep(2 * time.Second)
+	}
 }

@@ -136,6 +136,13 @@ func LoadRules(packagePath string) ([]Rule, error) {
 			if "" == string(r.Severity) {
 				r.Severity = SeverityDeny
 			}
+			// Fail closed on an unrecognized/typo'd severity ("deney", "block").
+			// Otherwise HasDeny would treat it as non-blocking and let a
+			// violation the author intended as a hard deny pass silently.
+			if SeverityDeny != r.Severity && SeverityWarn != r.Severity {
+				return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+					"policy %q has unknown severity %q (use 'deny' or 'warn')", r.Name, r.Severity)
+			}
 			out = append(out, r)
 		}
 		return nil
@@ -261,7 +268,11 @@ func evalRule(r Rule, doc map[string]any) []Violation {
 	}
 
 	for _, path := range r.Require.Fields {
-		if !anyNonZero(collectDotted(doc, path)) {
+		// Require = present and non-empty at EVERY position the path reaches,
+		// including every element when it crosses an array. Any-semantics was a
+		// fail-open: a rule requiring securityContext.runAsNonRoot passed when
+		// only one of several containers set it.
+		if !requireFieldSatisfied(doc, path) {
 			emit(fmt.Sprintf("required field %q is missing or empty", path))
 		}
 	}
@@ -289,7 +300,7 @@ func evalRule(r Rule, doc map[string]any) []Violation {
 			img, _ := c["image"].(string)
 			ok := false
 			for _, allowed := range r.Require.ImageRegistries {
-				if strings.HasPrefix(img, allowed) {
+				if imageMatchesRegistry(img, allowed) {
 					ok = true
 					break
 				}
@@ -302,7 +313,7 @@ func evalRule(r Rule, doc map[string]any) []Violation {
 	if r.Require.ImageNotTagged {
 		for _, c := range containers {
 			img, _ := c["image"].(string)
-			if strings.HasSuffix(img, ":latest") || !strings.Contains(img, ":") {
+			if imageIsUnpinned(img) {
 				emit(fmt.Sprintf("container image %q uses :latest or no tag", img))
 			}
 		}
@@ -409,9 +420,59 @@ func collectDotted(node any, path string) []any {
 	return nil
 }
 
+// requireFieldSatisfied reports whether a dotted path is present and non-empty
+// at EVERY position it reaches. When the path crosses a slice, all elements
+// must satisfy it (and an empty slice fails). Unlike anyNonZero, a present
+// scalar counts even when it is the zero value for its type (e.g. bool false or
+// int 0) — require checks presence, not truthiness — so a required boolean
+// explicitly set to false is not misreported as missing.
+func requireFieldSatisfied(node any, path string) bool {
+	if "" == path {
+		return requireLeafPresent(node)
+	}
+	head, rest, _ := strings.Cut(path, ".")
+	switch n := node.(type) {
+	case map[string]any:
+		v, ok := n[head]
+		if !ok {
+			return false
+		}
+		return requireFieldSatisfied(v, rest)
+	case []any:
+		if 0 == len(n) {
+			return false
+		}
+		for _, elem := range n {
+			if !requireFieldSatisfied(elem, path) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// requireLeafPresent reports whether a leaf value counts as present-and-non-empty
+// for a require check. Empty string / nil / empty collection fail; any other
+// scalar (including bool false and 0) passes.
+func requireLeafPresent(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case string:
+		return "" != x
+	case []any:
+		return 0 < len(x)
+	case map[string]any:
+		return 0 < len(x)
+	default:
+		return true
+	}
+}
+
 // anyNonZero reports whether any collected value is present and non-zero. Used
-// so forbid/require field checks work identically for scalar paths and for
-// paths that fan out across slices.
+// so forbid field checks work for scalar paths and for paths that fan out
+// across slices.
 func anyNonZero(vals []any) bool {
 	for _, v := range vals {
 		if !isZero(v) {
@@ -447,4 +508,33 @@ func numericValue(v any) (float64, bool) {
 		return n, true
 	}
 	return 0, false
+}
+
+// imageMatchesRegistry reports whether an image reference belongs to an allowed
+// registry/repo prefix, with a component boundary so "registry.internal" does
+// NOT match "registry.internal.attacker.com". The prefix must be the whole
+// reference or be followed by '/' (path) or ':' (port/tag).
+func imageMatchesRegistry(img, allowed string) bool {
+	return img == allowed ||
+		strings.HasPrefix(img, allowed+"/") ||
+		strings.HasPrefix(img, allowed+":")
+}
+
+// imageIsUnpinned reports whether an image reference lacks an explicit version
+// (no tag, or the :latest tag). A digest-pinned reference (name@sha256:...) is
+// considered pinned. A ':' from a registry port (localhost:5000/img) is not
+// mistaken for a tag — only a ':' in the final path component counts.
+func imageIsUnpinned(img string) bool {
+	if strings.Contains(img, "@") {
+		return false // digest-pinned
+	}
+	name := img
+	if i := strings.LastIndex(img, "/"); i >= 0 {
+		name = img[i+1:]
+	}
+	tag := ""
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		tag = name[i+1:]
+	}
+	return "" == tag || "latest" == tag
 }

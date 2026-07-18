@@ -44,8 +44,14 @@ type Resolver struct {
 // NewResolver starts a resolution from the given defaults. Pass nil for an
 // empty starting point.
 func NewResolver(defaults map[string]any) *Resolver {
+	current := layer.DeepMerge(nil, defaults)
+	if nil == current {
+		// DeepMerge(nil, nil) yields a nil map; a subsequent --set would then
+		// panic on assignment to a nil map. Start from an empty map instead.
+		current = make(map[string]any)
+	}
 	r := &Resolver{
-		current: layer.DeepMerge(nil, defaults),
+		current: current,
 		trace:   make(Trace),
 	}
 	r.recordTree("", defaults, Step{Source: SourceDefault, Origin: "values.yaml"})
@@ -77,8 +83,17 @@ func (r *Resolver) ApplySet(expr string, source Source) error {
 	if err := setNestedValue(r.current, parts, parsed); nil != err {
 		return err
 	}
-	r.trace[strings.Join(parts, ".")] = append(r.trace[strings.Join(parts, ".")],
-		Step{Source: source, Origin: expr, Value: parsed})
+	path := strings.Join(parts, ".")
+	// If this key previously held a map, its sub-leaf provenance no longer
+	// applies — prune it so the trace matches the now-scalar value.
+	if _, isMap := parsed.(map[string]any); !isMap {
+		for existing := range r.trace {
+			if strings.HasPrefix(existing, path+".") {
+				delete(r.trace, existing)
+			}
+		}
+	}
+	r.trace[path] = append(r.trace[path], Step{Source: source, Origin: expr, Value: parsed})
 	return nil
 }
 
@@ -94,7 +109,24 @@ func (r *Resolver) Trace() Trace {
 	return out
 }
 
-// recordTree walks `m` adding a Step for every leaf under `prefix`.
+// Provenance flattens the trace into a "where did each value come from" map:
+// dotted key -> "source (origin)" of the winning contribution. Suitable for
+// recording in a release so the origin of every value survives in the state.
+func (t Trace) Provenance() map[string]string {
+	out := make(map[string]string, len(t))
+	for key, steps := range t {
+		if 0 == len(steps) {
+			continue
+		}
+		s := steps[len(steps)-1]
+		out[key] = fmt.Sprintf("%s (%s)", s.Source, s.Origin)
+	}
+	return out
+}
+
+// recordTree walks `m` adding a Step for every leaf under `prefix`. When a
+// path changes shape between contributions (scalar↔map), stale trace entries
+// are pruned so the recorded provenance matches the final value structure.
 func (r *Resolver) recordTree(prefix string, m map[string]any, base Step) {
 	for k, v := range m {
 		path := k
@@ -102,8 +134,17 @@ func (r *Resolver) recordTree(prefix string, m map[string]any, base Step) {
 			path = prefix + "." + k
 		}
 		if nested, ok := v.(map[string]any); ok {
+			// Now a subtree: drop any prior scalar-leaf record at this exact path.
+			delete(r.trace, path)
 			r.recordTree(path, nested, base)
 			continue
+		}
+		// Now a leaf: drop any prior sub-leaf records beneath this path, which
+		// no longer exist in the merged result.
+		for existing := range r.trace {
+			if strings.HasPrefix(existing, path+".") {
+				delete(r.trace, existing)
+			}
 		}
 		step := base
 		step.Value = v

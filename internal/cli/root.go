@@ -13,6 +13,10 @@ var (
 	kubeconfig  string
 	kubeContext string
 	debugFlag   bool
+
+	allowPlaintextAuth bool
+	ociPlainHTTP       bool
+	ociInsecureSkipTLS bool
 )
 
 // NewRootCommand creates and returns the top-level keramos CLI command.
@@ -24,6 +28,18 @@ func NewRootCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			logger.Init(false, debugFlag)
 			logger.Debug("debug mode enabled")
+			// A transport opt-in flag is exactly equivalent to exporting its
+			// environment variable — the fetch/registry code reads the env.
+			// Only set on true so an unset flag never clears an existing export.
+			if allowPlaintextAuth {
+				_ = os.Setenv("KERAMOS_ALLOW_PLAINTEXT_AUTH", "1")
+			}
+			if ociPlainHTTP {
+				_ = os.Setenv("KERAMOS_OCI_PLAIN_HTTP", "1")
+			}
+			if ociInsecureSkipTLS {
+				_ = os.Setenv("KERAMOS_OCI_INSECURE_SKIP_TLS", "1")
+			}
 			return nil
 		},
 		SilenceUsage:  true,
@@ -34,6 +50,9 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
 	cmd.PersistentFlags().StringVar(&kubeContext, "kube-context", "", "Kubernetes context to use")
 	cmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug output")
+	cmd.PersistentFlags().BoolVar(&allowPlaintextAuth, "allow-plaintext-auth", false, "send credentials over plaintext HTTP (equivalent to KERAMOS_ALLOW_PLAINTEXT_AUTH=1)")
+	cmd.PersistentFlags().BoolVar(&ociPlainHTTP, "oci-plain-http", false, "use plain HTTP for OCI registries (equivalent to KERAMOS_OCI_PLAIN_HTTP=1)")
+	cmd.PersistentFlags().BoolVar(&ociInsecureSkipTLS, "oci-insecure-skip-tls-verify", false, "skip TLS verification for OCI registries (equivalent to KERAMOS_OCI_INSECURE_SKIP_TLS=1)")
 
 	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(newTemplateCommand())

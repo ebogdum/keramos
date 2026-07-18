@@ -29,12 +29,12 @@ const (
 type Node struct {
 	Name      string
 	Source    string // resolved local path
-	Kind     NodeKind
-	Children []*Node // ordered children (layers first, then requires)
-	Parent   *Node
-	Depth    int
-	Metadata *pkg.PackageMetadata
-	Values   map[string]any
+	Kind      NodeKind
+	Children  []*Node // ordered children (layers first, then requires)
+	Parent    *Node
+	Depth     int
+	Metadata  *pkg.PackageMetadata
+	Values    map[string]any
 	Templates map[string]string
 	Partials  map[string]any
 	Hooks     map[string]string
@@ -59,12 +59,24 @@ func BuildWithOverrides(packagePath string, overrides map[string]any) (*Node, er
 	}
 
 	visited := make(map[string]bool)
-	return buildNode(absPath, KindRoot, "", nil, 0, visited, overrides)
+	count := 0
+	return buildNode(absPath, KindRoot, "", nil, 0, visited, &count, overrides)
 }
 
-func buildNode(absPath string, kind NodeKind, name string, parent *Node, depth int, visited map[string]bool, rootOverrides map[string]any) (*Node, error) {
+// maxTreeNodes bounds the total nodes built for one dependency tree. Cycles are
+// caught separately; this bounds a DAG whose packages are reachable through
+// many aliased paths, which would otherwise rebuild subtrees exponentially
+// (a DoS from a small malicious package set).
+const maxTreeNodes = 10000
+
+func buildNode(absPath string, kind NodeKind, name string, parent *Node, depth int, visited map[string]bool, count *int, rootOverrides map[string]any) (*Node, error) {
 	if visited[absPath] {
 		return nil, keramoserr.NewErrorf(keramoserr.ErrCycle, "cycle detected in dependency tree: %s", absPath)
+	}
+	*count++
+	if *count > maxTreeNodes {
+		return nil, keramoserr.NewErrorf(keramoserr.ErrPackageInvalid,
+			"dependency tree exceeds the %d-node limit (aliased/fan-out graph too large)", maxTreeNodes)
 	}
 	visited[absPath] = true
 
@@ -114,7 +126,7 @@ func buildNode(absPath string, kind NodeKind, name string, parent *Node, depth i
 		if "" != ls.Alias {
 			childName = ls.Alias
 		}
-		child, childErr := buildNode(childPath, KindLayer, childName, node, depth+1, visited, rootOverrides)
+		child, childErr := buildNode(childPath, KindLayer, childName, node, depth+1, visited, count, rootOverrides)
 		if nil != childErr {
 			return nil, childErr
 		}
@@ -135,7 +147,7 @@ func buildNode(absPath string, kind NodeKind, name string, parent *Node, depth i
 		if "" != req.Alias {
 			childName = req.Alias
 		}
-		child, childErr := buildNode(childPath, KindRequire, childName, node, depth+1, visited, rootOverrides)
+		child, childErr := buildNode(childPath, KindRequire, childName, node, depth+1, visited, count, rootOverrides)
 		if nil != childErr {
 			return nil, childErr
 		}
@@ -502,4 +514,3 @@ func extractCause(err error) error {
 	}
 	return err
 }
-

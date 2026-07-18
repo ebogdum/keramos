@@ -46,12 +46,13 @@ Examples:
 				}
 				password = strings.TrimRight(line, "\r\n")
 			}
-			_ = insecure // flag accepted for compatibility; credential storage is the same regardless
-
 			cred, err := buildCredential(username, password, token, apiKey)
 			if nil != err {
 				return err
 			}
+			// Record the operator's opt-in to reach this host over an untrusted
+			// transport; the registry/HTTP clients consult it per host.
+			cred.Insecure = insecure
 
 			store, err := repo.LoadCredentialStore()
 			if nil != err {
@@ -74,7 +75,7 @@ Examples:
 	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read password from stdin (mutually exclusive with --password)")
 	cmd.Flags().StringVar(&token, "token", "", "bearer token")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key")
-	cmd.Flags().BoolVar(&insecure, "insecure", false, "allow plaintext connections (credential storage is unchanged)")
+	cmd.Flags().BoolVar(&insecure, "insecure", false, "reach this host over an untrusted transport (skip TLS verification / allow plain HTTP)")
 
 	return cmd
 }

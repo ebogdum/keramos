@@ -16,6 +16,9 @@ import (
 const (
 	// maxIndexSize is the maximum allowed size for a remote index.yaml (50 MB).
 	maxIndexSize = 50 * 1024 * 1024
+	// maxArchiveSize bounds a downloaded package archive (1 GB) so a hostile
+	// registry cannot exhaust the disk before extraction caps apply.
+	maxArchiveSize = 1024 * 1024 * 1024
 )
 
 var (
@@ -61,6 +64,14 @@ type RepoConfig struct {
 	CAFile   string `yaml:"caFile,omitempty"`
 	CertFile string `yaml:"certFile,omitempty"`
 	KeyFile  string `yaml:"keyFile,omitempty"`
+	// InsecureSkipTLSVerify disables server-certificate verification for
+	// fetches from this repo. Opt-in via `repo add --insecure-skip-tls-verify`.
+	InsecureSkipTLSVerify bool `yaml:"insecureSkipTLSVerify,omitempty"`
+	// PassCredentials forwards the repo's credentials to a redirect target on
+	// the first hop even when the host differs. PassCredentialsAll forwards on
+	// every redirect hop. Both relax the default (cross-host redirects blocked).
+	PassCredentials    bool `yaml:"passCredentials,omitempty"`
+	PassCredentialsAll bool `yaml:"passCredentialsAll,omitempty"`
 }
 
 // RepoFile holds the list of configured repositories.
@@ -165,7 +176,7 @@ func (rf *RepoFile) Save() error {
 
 // FetchIndex downloads the index.yaml from a repository URL.
 func FetchIndex(repoURL string) (*IndexFile, error) {
-	client, err := DefaultClient()
+	client, err := ClientForURL(repoURL)
 	if nil != err {
 		return nil, err
 	}
@@ -228,7 +239,7 @@ func FetchIndexWith(client *AuthenticatedClient, repoURL string) (*IndexFile, er
 // DownloadPackage downloads a package archive from a repository.
 // It returns the path to the downloaded file in a temp directory.
 func DownloadPackage(repoURL, name, version string) (string, error) {
-	client, err := DefaultClient()
+	client, err := ClientForURL(repoURL)
 	if nil != err {
 		return "", err
 	}
@@ -327,7 +338,7 @@ func DownloadArchive(rawURL string) (string, error) {
 	if err := validateHTTPSURL(rawURL); nil != err {
 		return "", err
 	}
-	client, err := DefaultClient()
+	client, err := ClientForURL(rawURL)
 	if nil != err {
 		return "", err
 	}
@@ -409,8 +420,16 @@ func downloadArchive(client *AuthenticatedClient, archiveURL, fileName string) (
 	}
 	defer outFile.Close()
 
-	if _, err := io.Copy(outFile, resp.Body); nil != err {
+	// Bound the download: a hostile registry could otherwise stream an
+	// arbitrarily large (or never-ending) body and exhaust the disk before the
+	// extractor's per-file/total caps ever run. Mirror the index-fetch cap.
+	written, err := io.Copy(outFile, io.LimitReader(resp.Body, maxArchiveSize+1))
+	if nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrRepo, "failed to write downloaded package", err)
+	}
+	if written > maxArchiveSize {
+		return "", keramoserr.NewErrorf(keramoserr.ErrRepo,
+			"downloaded package exceeds maximum allowed size of %d bytes", maxArchiveSize)
 	}
 
 	success = true

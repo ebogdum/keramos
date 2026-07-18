@@ -254,7 +254,9 @@ func processSwitch(m map[string]any, switchExpr any, ctx *RenderContext, funcs *
 		return processControlFlowResult(defaultVal, ctx, funcs)
 	}
 
-	return nil, nil
+	// No matching case and no $default: omit the field entirely (drop the key),
+	// matching $if. Returning nil would write an unintended `key: null`.
+	return omit, nil
 }
 
 // processControlFlowResult recursively processes a control flow result.

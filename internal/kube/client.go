@@ -166,6 +166,22 @@ func (c *Client) ApplyManifests(manifests string) error {
 		if applyErr := c.applyResource(obj); nil != applyErr {
 			return applyErr
 		}
+		// A CRD placed in templates/ (rather than crds/) is applied here in
+		// order, but a custom resource OF that CRD later in the same manifest
+		// cannot be mapped until the API server is serving the kind. Wait for
+		// Established and refresh the mapper before continuing, so the CR maps.
+		if "CustomResourceDefinition" == obj.GetKind() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			estErr := c.waitForCRDEstablished(ctx, obj.GetName())
+			cancel()
+			if nil != estErr {
+				return keramoserr.WrapErrorf(keramoserr.ErrKube, estErr,
+					"CRD %s did not become Established", obj.GetName())
+			}
+			if _, refreshErr := c.refreshMapper(); nil != refreshErr {
+				logger.Warn("failed to refresh REST mapper after applying CRD %s: %v", obj.GetName(), refreshErr)
+			}
+		}
 	}
 
 	return nil
@@ -830,22 +846,62 @@ func (c *Client) waitForDaemonSet(ctx context.Context, obj *unstructured.Unstruc
 }
 
 func (c *Client) resolveNamespace(obj *unstructured.Unstructured) string {
-	ns := obj.GetNamespace()
-	if "" != ns {
+	if ns := obj.GetNamespace(); "" != ns {
 		return ns
 	}
-	kind := obj.GetKind()
-	clusterScoped := map[string]bool{
-		"Namespace":                  true,
-		"ClusterRole":               true,
-		"ClusterRoleBinding":        true,
-		"PersistentVolume":          true,
-		"CustomResourceDefinition": true,
+	// Derive scope authoritatively from the cluster's REST mapping. The old
+	// hardcoded list covered only 5 kinds, so any other cluster-scoped kind
+	// (StorageClass, *WebhookConfiguration, PriorityClass, IngressClass,
+	// APIService, cluster-scoped CRs, …) was wrongly namespaced — the apply
+	// 404'd and delete silently NotFound-skipped, orphaning the object.
+	if namespaced, known := c.isNamespacedScoped(obj); known {
+		if namespaced {
+			return c.namespace
+		}
+		return ""
 	}
-	if clusterScoped[kind] {
+	// Mapping unavailable (e.g. a kind whose CRD is not yet registered): fall
+	// back to the static list, defaulting unknown kinds to namespaced.
+	if staticClusterScoped[obj.GetKind()] {
 		return ""
 	}
 	return c.namespace
+}
+
+// staticClusterScoped is a fallback used only when the REST mapper cannot
+// resolve a kind's scope (e.g. a not-yet-registered CRD).
+var staticClusterScoped = map[string]bool{
+	"Namespace":                true,
+	"ClusterRole":              true,
+	"ClusterRoleBinding":       true,
+	"PersistentVolume":         true,
+	"CustomResourceDefinition": true,
+}
+
+// isNamespacedScoped reports whether obj's kind is namespace-scoped per the
+// cluster's REST mapping. known=false when the mapping cannot be resolved.
+func (c *Client) isNamespacedScoped(obj *unstructured.Unstructured) (namespaced, known bool) {
+	// No cluster connection (dry-run / unit test): defer to the static list.
+	if nil == c.discovery {
+		return false, false
+	}
+	mapper, err := c.ensureMapper()
+	if nil != err {
+		return false, false
+	}
+	gvk := obj.GroupVersionKind()
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if nil != err {
+		fresh, refreshErr := c.refreshMapper()
+		if nil != refreshErr {
+			return false, false
+		}
+		mapping, err = fresh.RESTMapping(gvk.GroupKind(), gvk.Version)
+		if nil != err {
+			return false, false
+		}
+	}
+	return meta.RESTScopeNameNamespace == mapping.Scope.Name(), true
 }
 
 // ensureMapper initializes or returns the cached REST mapper.

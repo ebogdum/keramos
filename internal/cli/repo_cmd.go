@@ -69,11 +69,14 @@ func newRepoAddCommand() *cobra.Command {
 			if err := rf.Add(name, url); nil != err {
 				return err
 			}
-			// Save TLS material on the entry.
+			// Save TLS material and transport policy on the entry.
 			if updated := rf.Find(name); nil != updated {
 				updated.CAFile = caFile
 				updated.CertFile = certFile
 				updated.KeyFile = keyFile
+				updated.InsecureSkipTLSVerify = insecureSkipTLS
+				updated.PassCredentials = passCredentials
+				updated.PassCredentialsAll = passAll
 			}
 
 			// Stash basic-auth credentials in the unified credential store.
@@ -94,9 +97,6 @@ func newRepoAddCommand() *cobra.Command {
 				if err := store.Save(); nil != err {
 					return err
 				}
-				_ = passCredentials   // forward-compat: future redirect-aware client honors this
-				_ = insecureSkipTLS   // accepted; TLS bypass surface is via repo URL/scheme
-				_ = passAll           // flag accepted; redirect-aware client will honour it
 			}
 
 			if err := rf.Save(); nil != err {

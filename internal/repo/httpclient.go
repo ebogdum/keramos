@@ -8,7 +8,9 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
@@ -30,63 +32,27 @@ type AuthenticatedClient struct {
 	version string
 }
 
-// NewAuthenticatedClient creates an HTTP client that injects auth headers from the given store.
-func NewAuthenticatedClient(store *CredentialStore) (*AuthenticatedClient, error) {
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
-
-	caFile := os.Getenv("KERAMOS_CA_FILE")
-	if "" != caFile {
-		caCert, err := os.ReadFile(caFile)
-		if nil != err {
-			return nil, keramoserr.WrapErrorf(keramoserr.ErrAuth, err, "failed to read CA file: %s", caFile)
-		}
-		pool, err := x509.SystemCertPool()
-		if nil != err {
-			pool = x509.NewCertPool()
-		}
-		pool.AppendCertsFromPEM(caCert)
-		tlsConfig.RootCAs = pool
-	}
-
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: netguard.DialContext(netguard.BlockMetadata, "KERAMOS_ALLOW_INTERNAL_FETCH", defaultConnectTimeout),
-		TLSClientConfig:     tlsConfig,
-		MaxIdleConns:        100,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   defaultOverallTimeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if 0 == len(via) {
-				return nil
-			}
-			originalHost := via[0].URL.Host
-			if req.URL.Host != originalHost {
-				return fmt.Errorf("redirect to different host %q blocked (original: %q)", req.URL.Host, originalHost)
-			}
-			return nil
-		},
-	}
-
-	return &AuthenticatedClient{
-		inner:   client,
-		store:   store,
-		version: "dev",
-	}, nil
+// ClientConfig captures the per-repository transport policy: TLS material,
+// whether to skip certificate verification, and whether to forward credentials
+// across host-changing redirects. The zero value is the safe default —
+// verified TLS and cross-host redirects blocked.
+type ClientConfig struct {
+	CAFile                string
+	CertFile              string
+	KeyFile               string
+	InsecureSkipTLSVerify bool
+	PassCredentials       bool // forward credentials to a redirect target on the first hop
+	PassCredentialsAll    bool // forward credentials on every redirect hop
 }
 
-// NewClientWithTLS returns an AuthenticatedClient with explicit TLS material
-// (CA bundle, client cert, client key). Empty file paths are ignored. Falls
-// back to the default client when all three are empty.
-func NewClientWithTLS(caFile, certFile, keyFile string) (*AuthenticatedClient, error) {
-	if "" == caFile && "" == certFile && "" == keyFile {
-		return DefaultClient()
-	}
+// buildTLSConfig assembles a *tls.Config from explicit material plus the
+// KERAMOS_CA_FILE env fallback, honoring an opt-in verification bypass.
+func buildTLSConfig(cfg ClientConfig) (*tls.Config, error) {
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+	caFile := cfg.CAFile
+	if "" == caFile {
+		caFile = os.Getenv("KERAMOS_CA_FILE")
+	}
 	if "" != caFile {
 		caCert, err := os.ReadFile(caFile)
 		if nil != err {
@@ -99,12 +65,81 @@ func NewClientWithTLS(caFile, certFile, keyFile string) (*AuthenticatedClient, e
 		pool.AppendCertsFromPEM(caCert)
 		tlsConfig.RootCAs = pool
 	}
-	if "" != certFile && "" != keyFile {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if "" != cfg.CertFile && "" != cfg.KeyFile {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if nil != err {
-			return nil, keramoserr.WrapErrorf(keramoserr.ErrAuth, err, "failed to load client cert/key from %s, %s", certFile, keyFile)
+			return nil, keramoserr.WrapErrorf(keramoserr.ErrAuth, err, "failed to load client cert/key from %s, %s", cfg.CertFile, cfg.KeyFile)
 		}
 		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+	if cfg.InsecureSkipTLSVerify {
+		tlsConfig.InsecureSkipVerify = true //nolint:gosec // explicit opt-in via --insecure-skip-tls-verify
+	}
+	return tlsConfig, nil
+}
+
+// redirectPolicy returns the CheckRedirect func for a client config. By default
+// cross-host redirects are blocked. --pass-credentials allows the first
+// cross-host hop and forwards the Authorization header to it;
+// --pass-credentials-all forwards on every hop. The plaintext guard still
+// applies — credentials are never forwarded over http:// unless
+// KERAMOS_ALLOW_PLAINTEXT_AUTH=1.
+// sensitiveAuthHeaders are the credential-bearing headers keramos may set
+// (see injectHeaders). The redirect policy manages ALL of them explicitly
+// rather than trusting net/http, which ignores scheme downgrades and does not
+// know about non-standard headers like X-API-Key.
+var sensitiveAuthHeaders = []string{"Authorization", "X-API-Key"}
+
+func redirectPolicy(cfg ClientConfig) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if 0 == len(via) {
+			return nil
+		}
+		orig := via[0].URL.Host
+		crossHost := req.URL.Host != orig
+		if crossHost && !cfg.PassCredentials && !cfg.PassCredentialsAll {
+			return fmt.Errorf("redirect to different host %q blocked (original: %q); add --pass-credentials to the repo to allow", req.URL.Host, orig)
+		}
+		// Is forwarding credentials to THIS hop authorized?
+		forward := false
+		switch {
+		case cfg.PassCredentialsAll:
+			forward = true
+		case cfg.PassCredentials && 1 == len(via):
+			forward = true // first cross-host hop only
+		case !crossHost:
+			forward = true // same host keeps its own auth
+		}
+		// Never send credentials over plaintext http:// unless explicitly opted
+		// in — this covers a same-host https→http downgrade, which the stdlib
+		// treats as same-host and would otherwise carry the header through.
+		if "https" != req.URL.Scheme && "1" != os.Getenv("KERAMOS_ALLOW_PLAINTEXT_AUTH") {
+			forward = false
+		}
+		if !forward {
+			// Strip every credential header the client set; do not rely on the
+			// stdlib to do it (it misses scheme downgrades and X-API-Key).
+			for _, h := range sensitiveAuthHeaders {
+				req.Header.Del(h)
+			}
+			return nil
+		}
+		// Forwarding authorized: re-attach the original request's credential
+		// headers (the stdlib strips Authorization on cross-host redirects).
+		for _, h := range sensitiveAuthHeaders {
+			if v := via[0].Header.Get(h); "" != v {
+				req.Header.Set(h, v)
+			}
+		}
+		return nil
+	}
+}
+
+// newClient builds an AuthenticatedClient from a config and (optional) store.
+func newClient(cfg ClientConfig, store *CredentialStore) (*AuthenticatedClient, error) {
+	tlsConfig, err := buildTLSConfig(cfg)
+	if nil != err {
+		return nil, err
 	}
 	transport := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
@@ -115,20 +150,90 @@ func NewClientWithTLS(caFile, certFile, keyFile string) (*AuthenticatedClient, e
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
 	client := &http.Client{
-		Transport: transport,
-		Timeout:   defaultOverallTimeout,
-		// Block cross-host redirects so credentials/mTLS material cannot leak.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if 0 == len(via) {
-				return nil
-			}
-			if req.URL.Host != via[0].URL.Host {
-				return fmt.Errorf("redirect to different host %q blocked (original: %q)", req.URL.Host, via[0].URL.Host)
-			}
-			return nil
-		},
+		Transport:     transport,
+		Timeout:       defaultOverallTimeout,
+		CheckRedirect: redirectPolicy(cfg),
 	}
-	return &AuthenticatedClient{inner: client, version: "dev"}, nil
+	return &AuthenticatedClient{inner: client, store: store, version: "dev"}, nil
+}
+
+// NewAuthenticatedClient creates an HTTP client that injects auth headers from the given store.
+func NewAuthenticatedClient(store *CredentialStore) (*AuthenticatedClient, error) {
+	return newClient(ClientConfig{}, store)
+}
+
+// NewClientWithTLS returns an AuthenticatedClient with explicit TLS material
+// (CA bundle, client cert, client key). Empty file paths are ignored. Falls
+// back to the default client when all three are empty.
+func NewClientWithTLS(caFile, certFile, keyFile string) (*AuthenticatedClient, error) {
+	if "" == caFile && "" == certFile && "" == keyFile {
+		return DefaultClient()
+	}
+	return newClient(ClientConfig{CAFile: caFile, CertFile: certFile, KeyFile: keyFile}, nil)
+}
+
+// NewClientWithConfig builds an AuthenticatedClient from a full per-repo config
+// (TLS material, insecure-skip, and redirect credential policy).
+func NewClientWithConfig(cfg ClientConfig, store *CredentialStore) (*AuthenticatedClient, error) {
+	return newClient(cfg, store)
+}
+
+// ClientForURL builds a client honoring the stored configuration of whichever
+// repository's URL is a prefix of rawURL — its TLS material, insecure-skip, and
+// credential-forwarding policy — plus a per-host insecure flag from the
+// credential store (`keramos login --insecure`). Falls back to the default client
+// when no repo matches.
+func ClientForURL(rawURL string) (*AuthenticatedClient, error) {
+	store, storeErr := LoadCredentialStore()
+	if nil != storeErr {
+		store = &CredentialStore{Credentials: map[string]Credential{}}
+	}
+	cfg := ClientConfig{}
+	if rf, err := LoadRepoFile(); nil == err {
+		for _, r := range rf.Repositories {
+			if "" != r.URL && urlUnderRepo(rawURL, r.URL) {
+				cfg.CAFile, cfg.CertFile, cfg.KeyFile = r.CAFile, r.CertFile, r.KeyFile
+				cfg.InsecureSkipTLSVerify = r.InsecureSkipTLSVerify
+				cfg.PassCredentials = r.PassCredentials
+				cfg.PassCredentialsAll = r.PassCredentialsAll
+				break
+			}
+		}
+	}
+	// A host the operator marked insecure at login time also skips TLS verify.
+	if host := hostOf(rawURL); "" != host {
+		if cred, ok := store.GetForHost(host); ok && cred.Insecure {
+			cfg.InsecureSkipTLSVerify = true
+		}
+	}
+	return newClient(cfg, store)
+}
+
+// urlUnderRepo reports whether rawURL belongs to the repository at repoURL:
+// identical scheme+host and a path at or beneath the repo's path. A raw prefix
+// match would let a look-alike host (good.com.attacker.net) or sibling
+// (good.commercial) inherit good.com's TLS-skip / pass-credentials policy.
+func urlUnderRepo(rawURL, repoURL string) bool {
+	a, err1 := url.Parse(rawURL)
+	b, err2 := url.Parse(repoURL)
+	if nil != err1 || nil != err2 {
+		return false
+	}
+	if a.Scheme != b.Scheme || a.Host != b.Host {
+		return false
+	}
+	ap := strings.TrimSuffix(a.Path, "/")
+	bp := strings.TrimSuffix(b.Path, "/")
+	return ap == bp || strings.HasPrefix(ap, bp+"/")
+}
+
+// hostOf extracts the host[:port] from a URL for credential lookup.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if nil != err {
+		return ""
+	}
+	return u.Host
 }
 
 // SetVersion sets the version string used in the User-Agent header.
@@ -194,6 +299,9 @@ func (ac *AuthenticatedClient) Get(url string) (*http.Response, error) {
 func (ac *AuthenticatedClient) injectHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", "keramos/"+ac.version)
 
+	if nil == ac.store {
+		return
+	}
 	cred, ok := ac.store.GetForHost(req.URL.Host)
 	if !ok {
 		return

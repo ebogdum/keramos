@@ -21,6 +21,7 @@ type AdoptOptions struct {
 	Namespace   string
 	Description string
 	Resources   []ResourceRef // each "apiVersion/Kind/namespace/name"
+	Labels      map[string]string
 }
 
 // ResourceRef points at a single in-cluster resource.
@@ -127,6 +128,11 @@ func Adopt(client kube.KubeClient, opts *AdoptOptions) (*release.Release, error)
 	if _, err := storage.Last(opts.ReleaseName); nil == err {
 		return nil, keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
 			"release %s already exists; use 'keramos upgrade' or pick a new name", opts.ReleaseName)
+	} else if he, ok := err.(*keramoserr.KeramosError); !ok || keramoserr.ErrReleaseNotFound != he.Type {
+		// A non-"not found" error (transient list/read failure) is ambiguous —
+		// abort rather than adopt over a release that may in fact exist.
+		return nil, keramoserr.WrapErrorf(keramoserr.ErrRelease, err,
+			"cannot determine whether release %s already exists", opts.ReleaseName)
 	}
 
 	docs := make([]string, 0, len(opts.Resources))
@@ -160,6 +166,7 @@ func Adopt(client kube.KubeClient, opts *AdoptOptions) (*release.Release, error)
 			Version: "0.0.0",
 		},
 		Manifest: manifest,
+		Labels:   opts.Labels,
 		Audit:    audit.Capture("adopt", 0),
 		Info: release.ReleaseInfo{
 			FirstDeployed: now,

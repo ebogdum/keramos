@@ -48,7 +48,6 @@ Example:
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 			defer cancel()
-			_ = ctx
 			// Capture the pre-canary baseline revision so a failure at any
 			// stage rolls back to the state before the canary started — not
 			// to an intermediate canary stage.
@@ -106,7 +105,13 @@ Example:
 				}
 				if i+1 < len(stages) && 0 < bake {
 					logger.Log("baking for %s …", bake)
-					time.Sleep(bake)
+					// Interruptible bake bounded by the overall canary deadline.
+					select {
+					case <-ctx.Done():
+						return keramoserr.NewErrorf(keramoserr.ErrKube,
+							"canary aborted during bake: %v", ctx.Err())
+					case <-time.After(bake):
+					}
 				}
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "canary completed at stage %s\n", stages[len(stages)-1])

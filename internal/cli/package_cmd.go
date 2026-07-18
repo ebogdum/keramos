@@ -2,7 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
+	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/logger"
 	"github.com/ebogdum/keramos/internal/repo"
 	"github.com/spf13/cobra"
@@ -73,8 +77,15 @@ func newPackageCommand() *cobra.Command {
 				if "" == keyPath {
 					return fmt.Errorf("--sign requires --key or --keyring")
 				}
-				_ = passphraseFile // accepted; the underlying key is unprotected in our flow
-				provPath, sErr := repo.SignPackage(archivePath, keyPath)
+				passphrase := ""
+				if "" != passphraseFile {
+					pp, ppErr := readPassphraseFile(passphraseFile)
+					if nil != ppErr {
+						return ppErr
+					}
+					passphrase = pp
+				}
+				provPath, sErr := repo.SignPackageWithPassphrase(archivePath, keyPath, passphrase)
 				if nil != sErr {
 					return sErr
 				}
@@ -97,4 +108,21 @@ func newPackageCommand() *cobra.Command {
 	cmd.AddCommand(newPackageVerifyCmd())
 
 	return cmd
+}
+
+// readPassphraseFile reads a key passphrase from a file, or from stdin when the
+// path is "-". Trailing newline is trimmed.
+func readPassphraseFile(path string) (string, error) {
+	if "-" == path {
+		data, err := io.ReadAll(os.Stdin)
+		if nil != err {
+			return "", keramoserr.WrapError(keramoserr.ErrCLIValidation, "read passphrase from stdin", err)
+		}
+		return strings.TrimRight(string(data), "\r\n"), nil
+	}
+	data, err := os.ReadFile(path)
+	if nil != err {
+		return "", keramoserr.WrapError(keramoserr.ErrCLIValidation, "read passphrase file", err)
+	}
+	return strings.TrimRight(string(data), "\r\n"), nil
 }

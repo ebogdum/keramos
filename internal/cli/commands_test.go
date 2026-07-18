@@ -171,7 +171,7 @@ func TestNewGetCommand_Subcommands(t *testing.T) {
 
 func TestNewDiffCommand_Flags(t *testing.T) {
 	cmd := newDiffCommand()
-	expectedFlags := []string{"values", "set", "profile", "revision", "no-color"}
+	expectedFlags := []string{"values", "set", "profile", "from-values", "to-values", "from-ref", "to-ref", "no-color", "smart"}
 	for _, f := range expectedFlags {
 		if nil == cmd.Flags().Lookup(f) {
 			t.Errorf("expected flag %q on diff command", f)

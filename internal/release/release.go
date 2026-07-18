@@ -26,35 +26,36 @@ const (
 
 // Release represents a deployed keramos package.
 type Release struct {
-	Name      string         `json:"name"`
-	Namespace string         `json:"namespace"`
-	Revision  int            `json:"revision"`
-	Status    Status         `json:"status"`
-	Package   PackageRef     `json:"package"`
-	Values     map[string]any `json:"values"`
-	UserValues map[string]any `json:"userValues,omitempty"`
+	Name          string            `json:"name"`
+	Namespace     string            `json:"namespace"`
+	Revision      int               `json:"revision"`
+	Status        Status            `json:"status"`
+	Package       PackageRef        `json:"package"`
+	Values        map[string]any    `json:"values"`
+	UserValues    map[string]any    `json:"userValues,omitempty"`
 	Manifest      string            `json:"manifest"`
 	Hooks         []HookResult      `json:"hooks,omitempty"`
 	HookTemplates map[string]string `json:"hookTemplates,omitempty"` // rendered hook manifests (filename -> body) for rollback re-execution
 	Tests         map[string]string `json:"tests,omitempty"`         // rendered test manifests (filename -> body)
 	Notes         string            `json:"notes,omitempty"`
 	Labels        map[string]string `json:"labels,omitempty"`
-	Audit         AuditRecord       `json:"audit,omitempty"` // who/what/when for this revision
+	Provenance    map[string]string `json:"provenance,omitempty"` // dotted value key -> "source (origin)": where each value was resolved from
+	Audit         AuditRecord       `json:"audit,omitempty"`      // who/what/when for this revision
 	Info          ReleaseInfo       `json:"info"`
 }
 
 // AuditRecord captures provenance metadata for a release revision so
 // operators can answer "who applied what, with what flags?" months later.
 type AuditRecord struct {
-	Action       string    `json:"action,omitempty"`       // install, upgrade, rollback, uninstall
-	User         string    `json:"user,omitempty"`         // kubeconfig user / OS username
-	Hostname     string    `json:"hostname,omitempty"`     // machine that initiated the operation
-	KeramosVersion  string    `json:"keramosVersion,omitempty"`  // keramos binary version
-	KubeContext  string    `json:"kubeContext,omitempty"`  // active kubeconfig context
-	Flags        []string  `json:"flags,omitempty"`        // CLI flags as passed
-	ValueFiles   []string  `json:"valueFiles,omitempty"`   // -f files supplied
-	Timestamp    time.Time `json:"timestamp,omitempty"`    // operation time
-	ParentRev    int       `json:"parentRev,omitempty"`    // previous revision (for upgrades/rollbacks)
+	Action      string    `json:"action,omitempty"`      // install, upgrade, rollback, uninstall
+	User        string    `json:"user,omitempty"`        // kubeconfig user / OS username
+	Hostname    string    `json:"hostname,omitempty"`    // machine that initiated the operation
+	KeramosVersion string    `json:"keramosVersion,omitempty"` // keramos binary version
+	KubeContext string    `json:"kubeContext,omitempty"` // active kubeconfig context
+	Flags       []string  `json:"flags,omitempty"`       // CLI flags as passed
+	ValueFiles  []string  `json:"valueFiles,omitempty"`  // -f files supplied
+	Timestamp   time.Time `json:"timestamp,omitempty"`   // operation time
+	ParentRev   int       `json:"parentRev,omitempty"`   // previous revision (for upgrades/rollbacks)
 }
 
 // PackageRef identifies the package used in a release.

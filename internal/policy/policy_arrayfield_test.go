@@ -75,8 +75,10 @@ spec:
 	}
 }
 
-// TestRequireFieldAcrossArray confirms require semantics also traverse arrays:
-// a required field satisfied inside a container element is recognized.
+// TestRequireFieldAcrossArray confirms require uses ALL-elements semantics:
+// privilegedManifest has two containers but only one sets the field, so the
+// rule must FAIL (any-semantics here was a security fail-open — a require
+// passing when only one of N containers complies enforces nothing).
 func TestRequireFieldAcrossArray(t *testing.T) {
 	rules := []Rule{{
 		Name:    "require-securityContext",
@@ -84,12 +86,29 @@ func TestRequireFieldAcrossArray(t *testing.T) {
 		Require: Require{Fields: []string{"spec.template.spec.containers.securityContext.privileged"}},
 		Message: "securityContext.privileged must be set",
 	}}
-	// privilegedManifest has one container WITH the field set (non-zero) → satisfied.
 	vs, err := Evaluate(rules, privilegedManifest)
 	if nil != err {
 		t.Fatalf("evaluate: %v", err)
 	}
+	if 0 == len(vs) {
+		t.Fatal("require should FAIL when only one of two containers sets the field")
+	}
+}
+
+// TestRequireFieldBoolFalseIsPresent proves a required boolean explicitly set to
+// false counts as present (require checks presence, not truthiness).
+func TestRequireFieldBoolFalseIsPresent(t *testing.T) {
+	manifest := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\nspec:\n  enabled: false\n"
+	rules := []Rule{{
+		Name:    "require-enabled",
+		Match:   Match{Kinds: []string{"ConfigMap"}},
+		Require: Require{Fields: []string{"spec.enabled"}},
+	}}
+	vs, err := Evaluate(rules, manifest)
+	if nil != err {
+		t.Fatalf("evaluate: %v", err)
+	}
 	if 0 != len(vs) {
-		t.Fatalf("required field present in a container should satisfy the rule, got %d violations", len(vs))
+		t.Fatalf("spec.enabled: false is present and must satisfy require, got %d violations", len(vs))
 	}
 }

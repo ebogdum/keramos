@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	texttemplate "text/template"
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
@@ -23,15 +24,16 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetHooksCommand())
 	cmd.AddCommand(newGetAllCommand())
 	cmd.AddCommand(newGetMetadataCommand())
+	cmd.AddCommand(newGetProvenanceCommand())
 
 	return cmd
 }
 
 func newGetAllCommand() *cobra.Command {
 	var (
-		revision    int
-		output      string
-		tmplStr     string
+		revision int
+		output   string
+		tmplStr  string
 	)
 	cmd := &cobra.Command{
 		Use:   "all <release-name>",
@@ -199,6 +201,67 @@ func newGetManifestCommand() *cobra.Command {
 	_ = manifestOutput
 
 	return cmd
+}
+
+func newGetProvenanceCommand() *cobra.Command {
+	var (
+		revision int
+		output   string
+	)
+	cmd := &cobra.Command{
+		Use:   "provenance <release-name>",
+		Short: "Show where each of a release's values came from",
+		Long: `Print the value provenance recorded in the state: for every value, the
+source it was resolved from (package default, values file, layer, profile, or
+--set) at the time of install/upgrade. Answers "where did this running value
+come from?" from the state itself, without re-rendering the package.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGetProvenance(cmd, args[0], revision, output)
+		},
+	}
+	cmd.Flags().IntVar(&revision, "revision", 0, "get provenance from a specific revision")
+	cmd.Flags().StringVarP(&output, "output", "o", "table", "output format: table, json, yaml")
+	return cmd
+}
+
+func runGetProvenance(cmd *cobra.Command, releaseName string, revision int, output string) error {
+	rel, err := getReleaseRevision(releaseName, revision)
+	if nil != err {
+		return err
+	}
+	if 0 == len(rel.Provenance) {
+		fmt.Fprintln(cmd.OutOrStdout(), "No provenance recorded for this release (installed before provenance tracking, or no values).")
+		return nil
+	}
+	switch output {
+	case "json":
+		out, fmtErr := FormatJSON(rel.Provenance)
+		if nil != fmtErr {
+			return fmtErr
+		}
+		fmt.Fprint(cmd.OutOrStdout(), out)
+		return nil
+	case "yaml":
+		out, fmtErr := FormatYAML(rel.Provenance)
+		if nil != fmtErr {
+			return fmtErr
+		}
+		fmt.Fprint(cmd.OutOrStdout(), out)
+		return nil
+	default:
+		keys := make([]string, 0, len(rel.Provenance))
+		for k := range rel.Provenance {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		rows := make([][]string, 0, len(keys))
+		for _, k := range keys {
+			rows = append(rows, []string{k, rel.Provenance[k]})
+		}
+		fmt.Fprint(cmd.OutOrStdout(), FormatTable([]string{"VALUE", "SOURCE"}, rows))
+		return nil
+	}
 }
 
 func newGetNotesCommand() *cobra.Command {

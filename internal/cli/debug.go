@@ -188,4 +188,3 @@ func collectWarnings(resolved *layer.ResolvedPackage) []string {
 	}
 	return warnings
 }
-

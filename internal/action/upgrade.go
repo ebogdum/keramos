@@ -22,39 +22,39 @@ import (
 
 // UpgradeOptions configures an upgrade operation.
 type UpgradeOptions struct {
-	ReleaseName         string
-	Namespace           string
-	ValueFiles          []string
-	Sets                []string
-	SetStrings          []string
-	SetFiles            []string
-	SetJSON             []string
-	Profile             string
-	Wait                bool
-	Timeout             time.Duration
-	DryRun              string
-	ReuseValues         bool
-	ResetValues         bool
+	ReleaseName          string
+	Namespace            string
+	ValueFiles           []string
+	Sets                 []string
+	SetStrings           []string
+	SetFiles             []string
+	SetJSON              []string
+	Profile              string
+	Wait                 bool
+	Timeout              time.Duration
+	DryRun               string
+	ReuseValues          bool
+	ResetValues          bool
 	ResetThenReuseValues bool
-	Install             bool
-	Description         string
-	Atomic              bool
-	NoHooks             bool
-	CreateNamespace     bool
-	IncludeCRDs         bool
-	Labels              map[string]string
-	APIVersions         []string
-	KubeVersion         string
-	PostRenderer        string
-	PostRenderers       []string
-	PostRendererTimeout time.Duration
-	HistoryMax          int
-	Force               bool
-	CleanupOnFail       bool
-	RecreatePods        bool
-	WaitForJobs         bool
-	HookTimeout         time.Duration
-	Environment         string
+	Install              bool
+	Description          string
+	Atomic               bool
+	NoHooks              bool
+	CreateNamespace      bool
+	IncludeCRDs          bool
+	Labels               map[string]string
+	APIVersions          []string
+	KubeVersion          string
+	PostRenderer         string
+	PostRenderers        []string
+	PostRendererTimeout  time.Duration
+	HistoryMax           int
+	Force                bool
+	CleanupOnFail        bool
+	RecreatePods         bool
+	WaitForJobs          bool
+	HookTimeout          time.Duration
+	Environment          string
 	// Only restricts upgrade to a list of dotted value paths: every key
 	// outside the list reverts to its previous-revision value before render.
 	// Equivalent to surgical patching: `keramos upgrade --only image.tag,replicas`.
@@ -139,15 +139,16 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 	}
 
 	var mergedValues map[string]any
+	var valueTrace values.Trace
 	switch {
 	case opts.ResetThenReuseValues:
 		// Apply package defaults first, then merge previous values, then overlays.
 		base := layer.DeepMerge(map[string]any(resolved.Values), current.Values)
-		mergedValues, err = values.ResolveAll(base, opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
+		mergedValues, valueTrace, err = values.ResolveAllWithTrace(base, opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
 	case opts.ReuseValues && !opts.ResetValues:
-		mergedValues, err = values.ResolveAll(current.Values, opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
+		mergedValues, valueTrace, err = values.ResolveAllWithTrace(current.Values, opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
 	default:
-		mergedValues, err = values.ResolveAll(map[string]any(resolved.Values), opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
+		mergedValues, valueTrace, err = values.ResolveAllWithTrace(map[string]any(resolved.Values), opts.ValueFiles, opts.Sets, opts.SetStrings, opts.SetFiles, opts.SetJSON)
 	}
 	if nil != err {
 		return nil, err
@@ -303,8 +304,9 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 			Version:    resolved.Metadata.Version,
 			AppVersion: resolved.Metadata.AppVersion,
 		},
-		Values:     mergedValues,
-		UserValues: userValues,
+		Values:        mergedValues,
+		UserValues:    userValues,
+		Provenance:    valueTrace.Provenance(),
 		Manifest:      manifest,
 		Notes:         notes,
 		Tests:         renderedTests,
@@ -401,11 +403,24 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 	if applyErr := client.ApplyManifests(manifest); nil != applyErr {
 		sec := markFailed(storage, rel)
 		if opts.CleanupOnFail {
-			// Delete only the resources we introduced (those not in preExisting).
-			introduced := newResourcesOnly(client, manifest, preExisting)
-			if 0 < len(introduced) {
-				if cleanErr := client.DeleteResources(manifest, introduced); nil != cleanErr {
-					sec = append(sec, "cleanup-on-fail delete of partially-applied resources failed: "+cleanErr.Error())
+			if nil == preExisting {
+				// Snapshot failed earlier: honour the logged fallback by deleting
+				// the resources this upgrade introduced versus the previous
+				// revision, instead of silently skipping cleanup.
+				if orphaned, orphanErr := computeOrphanedManifest(manifest, current.Manifest); nil != orphanErr {
+					sec = append(sec, "cleanup-on-fail orphan computation failed: "+orphanErr.Error())
+				} else if "" != orphaned {
+					if delErr := client.DeleteManifests(orphaned); nil != delErr {
+						sec = append(sec, "cleanup-on-fail delete of introduced resources failed: "+delErr.Error())
+					}
+				}
+			} else {
+				// Delete only the resources we introduced (those not in preExisting).
+				introduced := newResourcesOnly(client, manifest, preExisting)
+				if 0 < len(introduced) {
+					if cleanErr := client.DeleteResources(manifest, introduced); nil != cleanErr {
+						sec = append(sec, "cleanup-on-fail delete of partially-applied resources failed: "+cleanErr.Error())
+					}
 				}
 			}
 		}
@@ -457,6 +472,16 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 						sec = append(sec, "cleanup-on-fail re-apply of previous manifest failed: "+reapplyErr.Error())
 					}
 				}
+				// Delete resources introduced by this (failed) upgrade that were
+				// not in the previous revision — otherwise they are orphaned in
+				// the cluster, contradicting the documented behavior.
+				if orphaned, orphanErr := computeOrphanedManifest(manifest, current.Manifest); nil != orphanErr {
+					sec = append(sec, "cleanup-on-fail orphan computation failed: "+orphanErr.Error())
+				} else if "" != orphaned {
+					if delErr := client.DeleteManifests(orphaned); nil != delErr {
+						sec = append(sec, "cleanup-on-fail delete of introduced resources failed: "+delErr.Error())
+					}
+				}
 			}
 			if opts.Atomic {
 				if rbErr := atomicRollbackUpgrade(client, storage, current, rel); nil != rbErr {
@@ -484,16 +509,12 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 		return rel, combineFailure(postErr, sec)
 	}
 
-	// Step 10: Mark new revision deployed, old superseded
+	// Step 10: Mark new revision deployed, all older ones superseded.
 	rel.Status = release.StatusDeployed
-	if updateErr := storage.Update(rel); nil != updateErr {
+	if updateErr := updateReleaseWithRetry(storage, rel); nil != updateErr {
 		return rel, updateErr
 	}
-
-	current.Status = release.StatusSuperseded
-	if updateErr := storage.Update(current); nil != updateErr {
-		logger.Warn("failed to mark previous revision as superseded: %v", updateErr)
-	}
+	supersedeOtherDeployed(storage, opts.ReleaseName, rel.Revision)
 
 	// Step 11: Optional history pruning.
 	if 0 < opts.HistoryMax {
@@ -515,15 +536,60 @@ func pruneReleaseHistory(storage release.Storage, name string, maxKeep int) {
 	if len(history) <= maxKeep {
 		return
 	}
+	// The authoritative "current" release is the highest-revision Deployed one;
+	// never prune it. Older revisions in the cutoff window are pruned even if
+	// they are still (staley) Deployed — a prior run may have failed to mark
+	// them Superseded (see supersedeOtherDeployed).
+	newestDeployed := -1
+	for _, r := range history {
+		if release.StatusDeployed == r.Status && r.Revision > newestDeployed {
+			newestDeployed = r.Revision
+		}
+	}
 	// History is sorted ascending by revision; oldest at index 0.
 	cutoff := len(history) - maxKeep
 	for i := 0; i < cutoff; i++ {
 		rel := history[i]
-		if release.StatusDeployed == rel.Status {
+		if rel.Revision == newestDeployed {
 			continue
 		}
 		if delErr := storage.Delete(rel.Name, rel.Revision); nil != delErr {
 			logger.Warn("failed to prune revision %d of %s: %v", rel.Revision, rel.Name, delErr)
+		}
+	}
+}
+
+// updateReleaseWithRetry persists a release, retrying a few times so a transient
+// API error on the FINAL status write does not leave a fully-applied release
+// stuck in a Pending state (with the cluster already converged).
+func updateReleaseWithRetry(storage release.Storage, rel *release.Release) error {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		if err = storage.Update(rel); nil == err {
+			return nil
+		}
+		time.Sleep(time.Duration(attempt+1) * 200 * time.Millisecond)
+	}
+	return err
+}
+
+// supersedeOtherDeployed demotes every Deployed revision except keepRevision to
+// Superseded, so exactly one Deployed revision (the newest) exists. It is
+// idempotent and self-healing: a supersede missed by a prior run (or a crash
+// between the deploy and supersede writes) is corrected on the next operation.
+func supersedeOtherDeployed(storage release.Storage, name string, keepRevision int) {
+	history, err := storage.History(name)
+	if nil != err {
+		logger.Warn("could not read history to supersede old revisions of %s: %v", name, err)
+		return
+	}
+	for _, r := range history {
+		if r.Revision == keepRevision || release.StatusDeployed != r.Status {
+			continue
+		}
+		r.Status = release.StatusSuperseded
+		if updErr := updateReleaseWithRetry(storage, r); nil != updErr {
+			logger.Warn("failed to mark revision %d of %s superseded: %v", r.Revision, name, updErr)
 		}
 	}
 }

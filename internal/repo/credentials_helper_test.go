@@ -53,9 +53,9 @@ func TestExecCredentialHelperNotFound(t *testing.T) {
 
 func TestMatchCredHelper(t *testing.T) {
 	helpers := map[string]string{
-		"registry.example.com":  "ecr",
-		"*.gcr.io":              "gcr",
-		"ghcr.io":               "gh",
+		"registry.example.com": "ecr",
+		"*.gcr.io":             "gcr",
+		"ghcr.io":              "gh",
 	}
 
 	tests := []struct {
@@ -145,8 +145,8 @@ func TestGetForHostExactMatchPrecedence(t *testing.T) {
 	store := &CredentialStore{
 		Credentials: map[string]Credential{
 			"registry.example.com": {
-				Type:     AuthBearer,
-				Token:    "direct-token",
+				Type:  AuthBearer,
+				Token: "direct-token",
 			},
 		},
 		CredHelpers: map[string]string{

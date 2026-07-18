@@ -11,6 +11,8 @@ import (
 func newAdoptCommand() *cobra.Command {
 	var (
 		description string
+		createNS    bool
+		labels      []string
 	)
 	cmd := &cobra.Command{
 		Use:   "adopt <release-name> <resource-ref>...",
@@ -37,15 +39,25 @@ stores the result as revision 1 of the new release.`,
 				}
 				refs = append(refs, ref)
 			}
+			labelMap, lErr := parseLabelFlags(labels)
+			if nil != lErr {
+				return lErr
+			}
 			client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
 			if nil != err {
 				return err
+			}
+			if createNS {
+				if nsErr := client.CreateNamespace(namespace); nil != nsErr {
+					return nsErr
+				}
 			}
 			rel, err := action.Adopt(client, &action.AdoptOptions{
 				ReleaseName: args[0],
 				Namespace:   namespace,
 				Description: description,
 				Resources:   refs,
+				Labels:      labelMap,
 			})
 			if nil != err {
 				return err
@@ -57,22 +69,7 @@ stores the result as revision 1 of the new release.`,
 		},
 	}
 	cmd.Flags().StringVar(&description, "description", "", "release description recorded in the audit trail")
-	var createNS bool
 	cmd.Flags().BoolVar(&createNS, "create-namespace", false, "create the release namespace if it does not exist")
-	var labels []string
 	cmd.Flags().StringArrayVar(&labels, "labels", nil, "label key=value to attach to the release (repeatable)")
-	// Wire create-namespace + labels: extend RunE preamble.
-	origRunE := cmd.RunE
-	cmd.RunE = func(c *cobra.Command, args []string) error {
-		if createNS {
-			client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
-			if nil != err {
-				return err
-			}
-			_ = client.CreateNamespace(namespace)
-		}
-		_ = labels // recorded on Adopt option in a follow-up; flag accepted for parity.
-		return origRunE(c, args)
-	}
 	return cmd
 }

@@ -2,38 +2,55 @@
 
 ## Synopsis
 
-`keramos plan` renders an upgrade and persists it to a portable plan file (rendered manifest + parameters + content hash). The plan can later be applied with `keramos apply` exactly as planned, even on a different machine. Plans bind to a specific release name and namespace; you cannot apply a plan elsewhere by accident.
+`keramos plan` renders a package directory and compares it against the current
+stored **state** — the Terraform `plan` for keramos. It shows what applying that
+directory would add, change, or destroy, and (by default) *where each change
+comes from*: the source template file, and the origin of every changed value.
+
+It also writes a portable, apply-able plan artifact (rendered manifest +
+parameters + content hash) that `keramos apply` can execute later, unchanged.
 
 ## When to use it
 
-Use in change-management workflows where the "what" is reviewed and approved separately from the "do it". CI generates the plan as an artifact, a human reviewer signs off, then a deploy stage applies the plan via `keramos apply --plan <file>`.
+- Before an upgrade, to review exactly what will change and why.
+- In change-management flows: CI produces the JSON artifact, a human reviews
+  the diff, a deploy stage runs `keramos apply --plan`.
 
 ## What happens when you run it
 
-1. Renders `<package-path>` against the merged values (`--profile` + `-f` + `--set*`).
-2. Resolves which action the plan represents (`install` or `upgrade`).
-3. Captures the rendered manifest, the merged values, the package metadata, and a content hash into a structured plan file.
-4. Writes to `--out` (`-` = stdout, default).
-5. No cluster contact, no resources applied.
+1. Renders `[package-path]` (default `.`) against the merged values
+   (`--profile` + `-f` + `--set*`).
+2. Derives the release identity from the package's `keramos.yaml` `name` (unless
+   `-r/--release` is given) and reads its **latest** stored state.
+3. Diffs the render against that state — every field shown, so an edited label
+   is never hidden — and annotates each change with its provenance.
+4. Optionally writes the apply-able JSON artifact (`--out`, or `--format json`).
+
+No resources are applied. The cluster is read only to fetch the stored state,
+and that is best-effort: with no reachable cluster or no prior state, every
+resource is reported as a create.
 
 ## Usage
 
 ```
-keramos plan <release> <package-path> [flags]
+keramos plan [package-path] [flags]
 ```
+
+The release name is **not** a positional argument — it comes from `keramos.yaml`.
 
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--action` | string | "install" | action the plan represents: install or upgrade |
-| `-h, --help` | — | — | help for plan |
-| `--labels` | stringArray | — | label key=value (repeatable) |
-| `-o, --out` | string | "-" | plan output file (- for stdout) |
-| `--profile` | string | — | profile name to apply |
+| `-r, --release` | string | (from keramos.yaml) | state to compare against; overrides the derived name |
+| `--profile` | string | — | profile to apply |
+| `-f, --values` | stringArray | — | values file (repeatable) |
 | `--set` | stringArray | — | key=value (repeatable) |
 | `--set-string` | stringArray | — | key=value forced as string (repeatable) |
-| `-f, --values` | stringArray | — | values file (repeatable) |
+| `--action` | string | "install" | action the artifact represents: install or upgrade |
+| `-o, --out` | string | "-" | write the JSON plan artifact to this file |
+| `--format` | string | "text" | stdout format: `text` (change preview) or `json` (artifact) |
+| `--no-color` | — | — | disable colored diff output |
 
 ## Persistent flags inherited from `keramos`
 
@@ -46,32 +63,55 @@ keramos plan <release> <package-path> [flags]
 
 ## Examples
 
-Generate a plan for a fresh install:
+Plan the package in the current directory against its state:
 
 ```sh
-keramos plan hello ./my-app -n prod -o hello-1.3.plan
+cd ./mychart
+keramos plan
 ```
 
-Generate a plan for an upgrade with overrides applied:
+Output (in → out):
 
-```sh
-keramos plan hello ./my-app --action upgrade -f overrides.yaml --set image.tag=1.3.0 -o hello-1.3.plan
+```
+keramos plan: update  mychart / apps  (package .)
+
+~ update  Deployment/mychart-api
+      from: deployment.yaml
+      ~ spec.replicas
+          - 1   (state)
+          + 3   ← set (replicas=3)
+      ~ spec.template.spec.containers.0.image
+          - "registry/api:1.4.0"   (state)
+          + "registry/api:1.5.0"   ← values-file (prod.yaml)
+
+Plan: 0 to add, 1 to change, 0 to destroy.
 ```
 
-Apply the saved plan in a separate (review-gated) step:
+Read the origins: `spec.replicas` changed because of `--set replicas=3`; the
+image changed because `prod.yaml` set it. `from:` names the template to open.
+
+Compare against a differently-named state:
 
 ```sh
-keramos apply --plan hello-1.3.plan
+keramos plan -r prod-web .
 ```
 
-Pipe stdout to file via shell redirection (equivalent to `-o`):
+Produce the apply-able artifact and apply it later:
 
 ```sh
-keramos plan hello ./my-app > hello-1.3.plan
+keramos plan --out plan.json
+keramos apply --plan plan.json
+```
+
+Emit the artifact to stdout for a pipeline:
+
+```sh
+keramos plan --format json > plan.json
 ```
 
 ## See also
 
-- [`apply`](apply.md)
-- [`diff`](diff.md)
+- [`apply`](apply.md) — execute a plan artifact
+- [`diff`](diff.md) — compare two files/versions (no cluster)
+- [`drift`](drift.md) — compare package, state, and the live cluster
 - [`upgrade`](upgrade.md)

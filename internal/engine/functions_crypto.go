@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/md5"
@@ -195,8 +196,8 @@ func fnDecryptAES(value any, args ...any) (any, error) {
 }
 
 // fnGenPrivateKey generates a PEM-encoded private key. Type is selected by the
-// pipeline value: "rsa" (default 2048), "ecdsa" (P256), "ed25519" not yet
-// supported by Sprig parity in keramos's variant.
+// pipeline value: "rsa" (default 2048), "ecdsa" (P256), or "ed25519"
+// (PKCS#8-encoded).
 func fnGenPrivateKey(value any, args ...any) (any, error) {
 	kind := strings.ToLower(fmt.Sprintf("%v", value))
 	switch kind {
@@ -234,6 +235,16 @@ func fnGenPrivateKey(value any, args ...any) (any, error) {
 			return nil, keramoserrors.WrapError(keramoserrors.ErrFunction, "genPrivateKey: ecdsa marshal failed", err)
 		}
 		return string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})), nil
+	case "ed25519":
+		_, key, err := ed25519.GenerateKey(rand.Reader)
+		if nil != err {
+			return nil, keramoserrors.WrapError(keramoserrors.ErrFunction, "genPrivateKey: ed25519 keygen failed", err)
+		}
+		der, err := x509.MarshalPKCS8PrivateKey(key)
+		if nil != err {
+			return nil, keramoserrors.WrapError(keramoserrors.ErrFunction, "genPrivateKey: ed25519 marshal failed", err)
+		}
+		return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})), nil
 	}
 	return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "genPrivateKey: unsupported type %q", kind)
 }

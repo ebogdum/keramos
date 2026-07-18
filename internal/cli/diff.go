@@ -2,168 +2,339 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/ebogdum/keramos/internal/diff"
 	"github.com/ebogdum/keramos/internal/engine"
-	"github.com/ebogdum/keramos/internal/kube"
+	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/layer"
-	"github.com/ebogdum/keramos/internal/release"
 	"github.com/ebogdum/keramos/internal/values"
 	"github.com/spf13/cobra"
 )
+
+// diffSide describes how one side of a comparison is produced, for labelling.
+type diffSide struct {
+	manifest string
+	label    string
+}
 
 func newDiffCommand() *cobra.Command {
 	var (
 		valueFiles []string
 		sets       []string
 		setStrings []string
-		setFiles   []string
-		setJSON    []string
 		profile    string
-		revision   int
+		fromValues []string
+		toValues   []string
+		fromSets   []string
+		toSets     []string
+		fromProf   string
+		toProf     string
+		fromRef    string
+		toRef      string
 		noColor    bool
 		smart      bool
-		serverSide bool
-		filters    diff.Filters
 	)
 
 	cmd := &cobra.Command{
-		Use:   "diff <release-name> <package-path>",
-		Short: "Show what would change on upgrade",
-		Long: `Compare current release manifests with what would be rendered from the given package.
+		Use:   "diff <a> [b]",
+		Short: "Compare two packages, manifests, value sets, or git revisions (files only)",
+		Long: `Diff is purely file-oriented — it never reads cluster or release state.
+(To compare a package against the recorded state use 'keramos plan'; against the
+live cluster use 'keramos drift'.) It renders and compares local inputs.
 
-Smart mode (default) groups changes by Kubernetes resource and suppresses
-noise classes (status, managed fields, server-set defaults, secret
-rotation values). Each noise class can be re-enabled with its own --show-* flag.
+Four modes, chosen from the arguments:
 
-Use --smart=false to fall back to a raw line-level unified diff.`,
-		Args: cobra.ExactArgs(2),
+  1. Two package directories — render each and diff:
+       keramos diff ./chart-v1 ./chart-v2
+
+  2. Two rendered manifest files — diff them directly, no rendering:
+       keramos diff old.yaml new.yaml
+
+  3. One package, two value sets — render it both ways and diff:
+       keramos diff ./chart --from-values staging.yaml --to-values prod.yaml
+       keramos diff ./chart --to-set replicas=5
+
+  4. One package, two git revisions — render each revision and diff:
+       keramos diff ./chart --from-ref v1.2.0 --to-ref HEAD
+
+Shared -f/--set/--profile apply to BOTH sides (useful in mode 1). The
+--from-*/--to-* flags set each side independently (mode 3). Output is a smart
+per-resource change preview; --smart=false gives a raw line-level unified diff.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDiff(cmd, args[0], args[1], valueFiles, sets, setStrings, setFiles, setJSON, profile, revision, noColor, smart, serverSide, filters)
+			from, to, err := resolveDiffSides(args, diffSideOpts{
+				valueFiles: valueFiles, sets: sets, setStrings: setStrings, profile: profile,
+				fromValues: fromValues, toValues: toValues, fromSets: fromSets, toSets: toSets,
+				fromProf: fromProf, toProf: toProf, fromRef: fromRef, toRef: toRef,
+			})
+			if nil != err {
+				return err
+			}
+			return writeDiff(cmd, from, to, smart, !noColor)
 		},
 	}
 
-	cmd.Flags().StringArrayVarP(&valueFiles, "values", "f", nil, "values file overrides (repeatable)")
-	cmd.Flags().StringArrayVar(&sets, "set", nil, "set key=value overrides (repeatable)")
-	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "set key=value forcing string interpretation (repeatable)")
-	cmd.Flags().StringArrayVar(&setFiles, "set-file", nil, "set key=path; value read from path (repeatable)")
-	cmd.Flags().StringArrayVar(&setJSON, "set-json", nil, "set key=<json>; value parsed as JSON (repeatable)")
-	cmd.Flags().StringVar(&profile, "profile", "", "profile name to apply")
-	cmd.Flags().IntVar(&revision, "revision", 0, "compare against a specific revision")
-	cmd.Flags().BoolVar(&noColor, "no-color", false, "disable colored diff output")
-
-	cmd.Flags().BoolVar(&smart, "smart", true, "use Kubernetes-aware structured diff")
-	cmd.Flags().BoolVar(&serverSide, "server-side", false, "diff live cluster state against a server-side apply dry-run (reflects defaulting and admission mutation)")
-	cmd.Flags().BoolVar(&filters.ShowStatus, "show-status", false, "include changes under .status")
-	cmd.Flags().BoolVar(&filters.ShowManagedFields, "show-managed-fields", false, "include metadata.managedFields")
-	cmd.Flags().BoolVar(&filters.ShowGeneration, "show-generation", false, "include resourceVersion/uid/generation/creationTimestamp")
-	cmd.Flags().BoolVar(&filters.ShowDefaultedFields, "show-defaulted-fields", false, "include server-side defaults (clusterIP, port protocol, etc.)")
-	cmd.Flags().BoolVar(&filters.ShowAnnotations, "show-annotations", false, "include metadata.annotations")
-	cmd.Flags().BoolVar(&filters.ShowLabels, "show-labels", false, "include metadata.labels")
-	cmd.Flags().BoolVar(&filters.ShowImagePullPolicy, "show-image-pull-policy", false, "include containers[].imagePullPolicy")
-	cmd.Flags().BoolVar(&filters.ShowFinalizers, "show-finalizers", false, "include metadata.finalizers")
-	cmd.Flags().BoolVar(&filters.ShowOwnerRefs, "show-owner-refs", false, "include metadata.ownerReferences")
-	cmd.Flags().BoolVar(&filters.ShowSecretRotation, "show-secret-rotation", false, "include rotated Secret data values")
-
+	cmd.Flags().StringArrayVarP(&valueFiles, "values", "f", nil, "values file applied to BOTH sides (repeatable)")
+	cmd.Flags().StringArrayVar(&sets, "set", nil, "key=value applied to BOTH sides (repeatable)")
+	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "key=value (string) applied to BOTH sides (repeatable)")
+	cmd.Flags().StringVar(&profile, "profile", "", "profile applied to BOTH sides")
+	cmd.Flags().StringArrayVar(&fromValues, "from-values", nil, "values file for the FROM side only (mode 3)")
+	cmd.Flags().StringArrayVar(&toValues, "to-values", nil, "values file for the TO side only (mode 3)")
+	cmd.Flags().StringArrayVar(&fromSets, "from-set", nil, "key=value for the FROM side only (mode 3)")
+	cmd.Flags().StringArrayVar(&toSets, "to-set", nil, "key=value for the TO side only (mode 3)")
+	cmd.Flags().StringVar(&fromProf, "from-profile", "", "profile for the FROM side only (mode 3)")
+	cmd.Flags().StringVar(&toProf, "to-profile", "", "profile for the TO side only (mode 3)")
+	cmd.Flags().StringVar(&fromRef, "from-ref", "", "git revision for the FROM side (mode 4)")
+	cmd.Flags().StringVar(&toRef, "to-ref", "", "git revision for the TO side (mode 4, default: working tree)")
+	cmd.Flags().BoolVar(&smart, "smart", true, "smart per-resource diff; --smart=false for raw unified diff")
+	cmd.Flags().BoolVar(&noColor, "no-color", false, "disable colored output")
 	return cmd
 }
 
-func runDiff(cmd *cobra.Command, releaseName, packagePath string, valueFiles, sets, setStrings, setFiles, setJSON []string, profile string, revision int, noColor bool, smart bool, serverSide bool, filters diff.Filters) error {
-	// Step 1: Get current release manifest
-	client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
+type diffSideOpts struct {
+	valueFiles, sets, setStrings []string
+	profile                      string
+	fromValues, toValues         []string
+	fromSets, toSets             []string
+	fromProf, toProf             string
+	fromRef, toRef               string
+}
+
+// resolveDiffSides interprets the arguments and flags into two labelled
+// manifests to compare, selecting one of the four diff modes.
+func resolveDiffSides(args []string, o diffSideOpts) (diffSide, diffSide, error) {
+	hasFromTo := 0 < len(o.fromValues) || 0 < len(o.toValues) || 0 < len(o.fromSets) ||
+		0 < len(o.toSets) || "" != o.fromProf || "" != o.toProf
+	hasRef := "" != o.fromRef || "" != o.toRef
+
+	if 2 == len(args) {
+		if hasRef || hasFromTo {
+			return diffSide{}, diffSide{}, keramoserr.NewError(keramoserr.ErrCLIValidation,
+				"--from-*/--to-*/--*-ref flags take a single package argument; you passed two")
+		}
+		aDir, bDir := isDir(args[0]), isDir(args[1])
+		if aDir && bDir {
+			// Mode 1: two package directories.
+			fm, err := renderPkgManifest(args[0], o.profile, o.valueFiles, o.sets, o.setStrings)
+			if nil != err {
+				return diffSide{}, diffSide{}, err
+			}
+			tm, err := renderPkgManifest(args[1], o.profile, o.valueFiles, o.sets, o.setStrings)
+			if nil != err {
+				return diffSide{}, diffSide{}, err
+			}
+			return diffSide{fm, args[0]}, diffSide{tm, args[1]}, nil
+		}
+		if isFile(args[0]) && isFile(args[1]) {
+			// Mode 2: two rendered manifest files.
+			fm, err := os.ReadFile(args[0])
+			if nil != err {
+				return diffSide{}, diffSide{}, keramoserr.WrapError(keramoserr.ErrCLIValidation, "read manifest", err)
+			}
+			tm, err := os.ReadFile(args[1])
+			if nil != err {
+				return diffSide{}, diffSide{}, keramoserr.WrapError(keramoserr.ErrCLIValidation, "read manifest", err)
+			}
+			return diffSide{string(fm), args[0]}, diffSide{string(tm), args[1]}, nil
+		}
+		return diffSide{}, diffSide{}, keramoserr.NewError(keramoserr.ErrCLIValidation,
+			"both arguments must be package directories, or both rendered manifest files")
+	}
+
+	// Single positional.
+	dir := args[0]
+	if !isDir(dir) {
+		return diffSide{}, diffSide{}, keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+			"%q is not a package directory; give a second argument to diff two files", dir)
+	}
+	if hasRef {
+		// Mode 4: two git revisions of the same package.
+		fromRef := o.fromRef
+		if "" == fromRef {
+			return diffSide{}, diffSide{}, keramoserr.NewError(keramoserr.ErrCLIValidation,
+				"--from-ref is required for a git-revision diff")
+		}
+		fm, err := renderPkgAtRef(dir, fromRef, o.profile, o.valueFiles, o.sets, o.setStrings)
+		if nil != err {
+			return diffSide{}, diffSide{}, err
+		}
+		var tm string
+		toLabel := "working tree"
+		if "" != o.toRef {
+			tm, err = renderPkgAtRef(dir, o.toRef, o.profile, o.valueFiles, o.sets, o.setStrings)
+			toLabel = o.toRef
+		} else {
+			tm, err = renderPkgManifest(dir, o.profile, o.valueFiles, o.sets, o.setStrings)
+		}
+		if nil != err {
+			return diffSide{}, diffSide{}, err
+		}
+		return diffSide{fm, "@" + fromRef}, diffSide{tm, "@" + toLabel}, nil
+	}
+	if hasFromTo {
+		// Mode 3: one package rendered under two value sets.
+		fm, err := renderPkgManifest(dir, firstNonEmpty(o.fromProf, o.profile),
+			append(append([]string{}, o.valueFiles...), o.fromValues...),
+			append(append([]string{}, o.sets...), o.fromSets...), o.setStrings)
+		if nil != err {
+			return diffSide{}, diffSide{}, err
+		}
+		tm, err := renderPkgManifest(dir, firstNonEmpty(o.toProf, o.profile),
+			append(append([]string{}, o.valueFiles...), o.toValues...),
+			append(append([]string{}, o.sets...), o.toSets...), o.setStrings)
+		if nil != err {
+			return diffSide{}, diffSide{}, err
+		}
+		return diffSide{fm, "from"}, diffSide{tm, "to"}, nil
+	}
+	return diffSide{}, diffSide{}, keramoserr.NewError(keramoserr.ErrCLIValidation,
+		"nothing to compare against: pass a second package/manifest, or --from-values/--to-values, or --from-ref/--to-ref")
+}
+
+// writeDiff renders the comparison, smart by default with a raw-unified fallback.
+func writeDiff(cmd *cobra.Command, from, to diffSide, smart, color bool) error {
+	w := cmd.OutOrStdout()
+	fmt.Fprintf(w, "diff: %s → %s\n\n", from.label, to.label)
+	if smart {
+		changes, err := diff.Compute(from.manifest, to.manifest, allShownFilters())
+		if nil != err {
+			return keramoserr.WrapError(keramoserr.ErrInternal, "compute diff", err)
+		}
+		if 0 == len(changes) {
+			fmt.Fprintln(w, "No differences.")
+			return nil
+		}
+		fmt.Fprint(w, formatPlanChanges(changes, color, nil, ""))
+		fmt.Fprint(w, changeSummary(changes))
+		return nil
+	}
+	out := UnifiedDiff(from.manifest, to.manifest, from.label, to.label)
+	if "" == out {
+		fmt.Fprintln(w, "No differences.")
+		return nil
+	}
+	if color {
+		out = ColorizeDiff(out)
+	}
+	fmt.Fprint(w, out)
+	return nil
+}
+
+// renderPkgManifest resolves and renders a package directory to a manifest,
+// with no cluster access — the shared engine path used by plan/template.
+func renderPkgManifest(dir, profile string, valueFiles, sets, setStrings []string) (string, error) {
+	resolved, err := layer.Resolve(dir, profile)
 	if nil != err {
-		return err
+		return "", err
 	}
-
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
-
-	var current *release.Release
-	if 0 < revision {
-		current, err = storage.Get(releaseName, revision)
-	} else {
-		current, err = storage.Last(releaseName)
-	}
+	merged, err := values.ResolveAll(map[string]any(resolved.Values), valueFiles, sets, setStrings, nil, nil)
 	if nil != err {
-		return err
+		return "", err
 	}
-
-	// Step 2: Render new package
-	resolved, err := layer.Resolve(packagePath, profile)
-	if nil != err {
-		return err
+	name := ""
+	ver := ""
+	appVer := ""
+	if nil != resolved.Metadata {
+		name, ver, appVer = resolved.Metadata.Name, resolved.Metadata.Version, resolved.Metadata.AppVersion
 	}
-
-	mergedValues, err := values.ResolveAll(map[string]any(resolved.Values), valueFiles, sets, setStrings, setFiles, setJSON)
-	if nil != err {
-		return err
-	}
-
 	ctx := &engine.RenderContext{
-		Values: mergedValues,
+		Values: merged,
 		Package: map[string]any{
-			"name":       resolved.Metadata.Name,
-			"version":    resolved.Metadata.Version,
-			"appVersion": resolved.Metadata.AppVersion,
+			"name": name, "version": ver, "appVersion": appVer,
 		},
 		Release: map[string]any{
-			"name":      releaseName,
-			"namespace": current.Namespace,
-			"revision":  current.Revision + 1,
-			"isUpgrade": true,
-			"isInstall": false,
+			"name": name, "namespace": namespace, "revision": 1,
+			"isInstall": true, "isUpgrade": false,
 		},
 		Capabilities: map[string]any{},
 		Files:        resolved.Files,
 	}
+	return engine.New().Render(resolved.Templates, resolved.Partials, ctx)
+}
 
-	eng := engine.New()
-	newManifest, err := eng.Render(resolved.Templates, resolved.Partials, ctx)
+// renderPkgAtRef checks out the package directory at a git revision into a temp
+// worktree and renders it there. Requires the directory to be inside a git repo.
+func renderPkgAtRef(dir, ref, profile string, valueFiles, sets, setStrings []string) (string, error) {
+	// A ref beginning with '-' would be parsed by `git archive` as an option
+	// (e.g. --output, --remote) rather than a tree-ish, since it sits before
+	// the `--` separator. Reject it.
+	if strings.HasPrefix(ref, "-") {
+		return "", keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+			"git revision %q must not begin with '-'", ref)
+	}
+	root, relErr := gitRepoRoot(dir)
+	if nil != relErr {
+		return "", relErr
+	}
+	rel, err := filepath.Rel(root, mustAbs(dir))
 	if nil != err {
-		return err
+		return "", keramoserr.WrapError(keramoserr.ErrCLIValidation, "locate package within repo", err)
 	}
+	tmp, err := os.MkdirTemp("", "keramos-diff-ref-")
+	if nil != err {
+		return "", keramoserr.WrapError(keramoserr.ErrInternal, "temp dir", err)
+	}
+	defer os.RemoveAll(tmp)
 
-	// Choose the two sides being compared. By default this is keramos's stored
-	// manifest versus the freshly rendered manifest (client-side). With
-	// --server-side, compare the LIVE cluster objects against what the API
-	// server would produce from a dry-run apply of the rendered manifest —
-	// reflecting defaulting and admission-webhook mutation.
-	baseManifest := current.Manifest
-	proposedManifest := newManifest
-	if serverSide {
-		live, merged, ssErr := client.ServerSideDiff(newManifest)
-		if nil != ssErr {
-			return ssErr
-		}
-		baseManifest = live
-		proposedManifest = merged
+	// `git archive <ref> -- <rel>` emits a tar of that subtree; pipe into tar -x.
+	archive := exec.Command("git", "-C", root, "archive", "--format=tar", ref, "--", rel)
+	untar := exec.Command("tar", "-x", "-C", tmp)
+	pipe, err := archive.StdoutPipe()
+	if nil != err {
+		return "", keramoserr.WrapError(keramoserr.ErrInternal, "git archive pipe", err)
 	}
+	untar.Stdin = pipe
+	var aerr strings.Builder
+	archive.Stderr = &aerr
+	if err := untar.Start(); nil != err {
+		return "", keramoserr.WrapError(keramoserr.ErrInternal, "start tar", err)
+	}
+	if err := archive.Run(); nil != err {
+		return "", keramoserr.WrapErrorf(keramoserr.ErrCLIValidation, err,
+			"git archive %s failed: %s", ref, strings.TrimSpace(aerr.String()))
+	}
+	if err := untar.Wait(); nil != err {
+		return "", keramoserr.WrapError(keramoserr.ErrInternal, "extract archive", err)
+	}
+	return renderPkgManifest(filepath.Join(tmp, rel), profile, valueFiles, sets, setStrings)
+}
 
-	// Step 3: Compute diff (smart-by-default, raw on --smart=false).
-	if smart {
-		changes, dErr := diff.Compute(baseManifest, proposedManifest, filters)
-		if nil != dErr {
-			return dErr
-		}
-		if 0 == len(changes) {
-			fmt.Fprintln(cmd.OutOrStdout(), "No meaningful changes (noise filtered). Use --show-* flags to see filtered classes, or --smart=false for raw line diff.")
-			return nil
-		}
-		fmt.Fprint(cmd.OutOrStdout(), diff.FormatHuman(changes, !noColor))
-		return nil
+func gitRepoRoot(dir string) (string, error) {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if nil != err {
+		return "", keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+			"%q is not inside a git repository; --from-ref/--to-ref need git", dir)
 	}
+	return strings.TrimSpace(string(out)), nil
+}
 
-	diffOutput := UnifiedDiff(baseManifest, proposedManifest, "current", "proposed")
-	if "" == diffOutput {
-		fmt.Fprintln(cmd.OutOrStdout(), "No changes detected.")
-		return nil
+func mustAbs(p string) string {
+	a, err := filepath.Abs(p)
+	if nil != err {
+		return p
 	}
-	if noColor {
-		fmt.Fprint(cmd.OutOrStdout(), diffOutput)
-		return nil
+	return a
+}
+
+func isDir(p string) bool {
+	fi, err := os.Stat(p)
+	return nil == err && fi.IsDir()
+}
+
+func isFile(p string) bool {
+	fi, err := os.Stat(p)
+	return nil == err && !fi.IsDir()
+}
+
+func firstNonEmpty(a, b string) string {
+	if "" != a {
+		return a
 	}
-	fmt.Fprint(cmd.OutOrStdout(), ColorizeDiff(diffOutput))
-	return nil
+	return b
 }
 
 // UnifiedDiff produces a unified diff between two strings.

@@ -13,9 +13,10 @@ import (
 // newInitCommand scaffolds a new keramos package from a built-in template.
 //
 // Usage:
-//   keramos init webapp myapp
-//   keramos init batch myjob
-//   keramos init operator my-operator
+//
+//	keramos init webapp myapp
+//	keramos init batch myjob
+//	keramos init operator my-operator
 func newInitCommand() *cobra.Command {
 	var (
 		template string

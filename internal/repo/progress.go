@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	progressMinSize     = 1024 * 1024 // 1MB threshold
-	progressInterval    = 500 * time.Millisecond
-	progressMBDivisor   = 1024.0 * 1024.0
+	progressMinSize   = 1024 * 1024 // 1MB threshold
+	progressInterval  = 500 * time.Millisecond
+	progressMBDivisor = 1024.0 * 1024.0
 )
 
 // ProgressWriter wraps an io.Writer and prints download progress to stderr.

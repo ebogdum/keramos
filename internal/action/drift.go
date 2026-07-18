@@ -3,6 +3,7 @@ package action
 import (
 	"context"
 	"reflect"
+	"strings"
 	"time"
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
@@ -11,6 +12,53 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+// StateAndLiveManifests returns a release's stored manifest ("state") and the
+// live cluster objects for the resources in it ("running"), as two combined
+// manifests. It is the data source for the three-way `keramos drift` view.
+// Resources absent from the cluster are omitted from the live manifest.
+func StateAndLiveManifests(client kube.KubeClient, releaseName string) (state string, live string, err error) {
+	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	current, cErr := storage.Last(releaseName)
+	if nil != cErr {
+		return "", "", cErr
+	}
+	liveManifest, lErr := collectLiveManifest(client, current.Manifest, current.Namespace)
+	if nil != lErr {
+		return "", "", lErr
+	}
+	return current.Manifest, liveManifest, nil
+}
+
+// collectLiveManifest fetches the live object for every resource in a manifest
+// and joins them into one manifest, defaulting namespace-scoped resources to
+// defaultNS. Not-found resources are skipped (their absence is visible as a
+// resource missing from the running side).
+func collectLiveManifest(client kube.KubeClient, manifest, defaultNS string) (string, error) {
+	resources, err := kube.ParseManifests(manifest)
+	if nil != err {
+		return "", err
+	}
+	docs := make([]string, 0, len(resources))
+	for _, want := range resources {
+		if "" == want.GetNamespace() && "" != defaultNS {
+			want.SetNamespace(defaultNS)
+		}
+		live, fErr := fetchLive(client, want)
+		if nil != fErr {
+			if isNotFound(fErr) {
+				continue
+			}
+			return "", keramoserr.WrapErrorf(keramoserr.ErrKube, fErr, "fetch %s/%s", want.GetKind(), want.GetName())
+		}
+		docs = append(docs, marshalUnstructured(live))
+	}
+	// marshalUnstructured emits compact JSON with no trailing newline, so the
+	// separator must carry its own leading newline; "---\n" alone would glue
+	// the marker to the previous "}" and the YAML decoder would reject it,
+	// silently dropping every live resource after the first.
+	return strings.Join(docs, "\n---\n"), nil
+}
 
 // DriftKind classifies a drifted resource.
 type DriftKind int
@@ -35,12 +83,12 @@ func (k DriftKind) String() string {
 
 // DriftItem records a single drift finding.
 type DriftItem struct {
-	Kind          DriftKind
-	APIVersion    string
-	ResourceKind  string
-	Namespace     string
-	Name          string
-	FieldDiffs    []FieldDiff
+	Kind           DriftKind
+	APIVersion     string
+	ResourceKind   string
+	Namespace      string
+	Name           string
+	FieldDiffs     []FieldDiff
 	StoredManifest string
 	LiveManifest   string
 }
@@ -52,24 +100,10 @@ type FieldDiff struct {
 	Got  any // value observed in cluster
 }
 
-// Drift compares the stored manifest of a release against the live cluster
-// state and returns each diverging resource. Keramos-managed-only fields are
-// considered: server-defaulted fields and runtime status are ignored.
-//
-// This is the primitive behind `keramos drift <release>`. Operators detect
-// post-install changes (kubectl edit, controller mutations) without rendering
-// the package again.
-func Drift(client kube.KubeClient, releaseName string) ([]DriftItem, error) {
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
-	current, err := storage.Last(releaseName)
-	if nil != err {
-		return nil, err
-	}
-	return driftAgainstManifestInNamespace(client, current.Manifest, current.Namespace)
-}
-
-// DriftAgainstManifest is the variant that takes a manifest directly,
-// useful for the controller and `keramos drift --manifest`.
+// DriftAgainstManifest compares a manifest against the live cluster state and
+// returns each diverging resource. Keramos-managed-only fields are considered:
+// server-defaulted fields and runtime status are ignored. Used by the
+// reconcile path to decide what to converge.
 func DriftAgainstManifest(client kube.KubeClient, manifest string) ([]DriftItem, error) {
 	return driftAgainstManifestInNamespace(client, manifest, "")
 }
@@ -97,11 +131,11 @@ func driftAgainstManifestInNamespace(client kube.KubeClient, manifest, defaultNS
 		if nil != fetchErr {
 			if isNotFound(fetchErr) {
 				out = append(out, DriftItem{
-					Kind:          DriftMissing,
-					APIVersion:    want.GetAPIVersion(),
-					ResourceKind:  want.GetKind(),
-					Namespace:     want.GetNamespace(),
-					Name:          want.GetName(),
+					Kind:           DriftMissing,
+					APIVersion:     want.GetAPIVersion(),
+					ResourceKind:   want.GetKind(),
+					Namespace:      want.GetNamespace(),
+					Name:           want.GetName(),
 					StoredManifest: marshalUnstructured(want),
 				})
 				continue
@@ -245,11 +279,19 @@ func Reconcile(client kube.KubeClient, releaseName string, timeout time.Duration
 	if 0 == len(driftItems) {
 		return nil, nil
 	}
-	if applyErr := client.ApplyManifests(current.Manifest); nil != applyErr {
-		return nil, applyErr
+	// Honour the documented contract: resources annotated resource-policy: keep
+	// are not re-applied (their drift is intentionally preserved).
+	applyManifest, filterErr := stripKeepPolicy(current.Manifest)
+	if nil != filterErr {
+		return nil, filterErr
 	}
-	if waitErr := client.WaitForReady(current.Manifest, timeout); nil != waitErr {
-		return nil, waitErr
+	if "" != applyManifest {
+		if applyErr := client.ApplyManifests(applyManifest); nil != applyErr {
+			return nil, applyErr
+		}
+		if waitErr := client.WaitForReady(applyManifest, timeout); nil != waitErr {
+			return nil, waitErr
+		}
 	}
 	out := make([]string, 0, len(driftItems))
 	for _, d := range driftItems {
@@ -261,3 +303,22 @@ func Reconcile(client kube.KubeClient, releaseName string, timeout time.Duration
 // keep apimachinery imported even if unused after refactors.
 var _ = metav1.GetOptions{}
 var _ = context.Background
+
+// stripKeepPolicy returns the manifest with resources annotated
+// resource-policy: keep removed, so reconcile does not re-apply (and thus
+// preserve) their intentionally-drifted state.
+func stripKeepPolicy(manifest string) (string, error) {
+	resources, err := kube.ParseManifests(manifest)
+	if nil != err {
+		return "", err
+	}
+	docs := make([]string, 0, len(resources))
+	for _, r := range resources {
+		anns := r.GetAnnotations()
+		if "keep" == anns["keramos.sh/resource-policy"] || "keep" == anns["helm.sh/resource-policy"] {
+			continue
+		}
+		docs = append(docs, marshalUnstructured(r))
+	}
+	return strings.Join(docs, "\n---\n"), nil
+}

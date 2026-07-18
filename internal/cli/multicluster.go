@@ -7,6 +7,7 @@ import (
 
 	"github.com/ebogdum/keramos/internal/action"
 	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/ebogdum/keramos/internal/logger"
 	"github.com/ebogdum/keramos/internal/release"
 	"github.com/spf13/cobra"
 )
@@ -145,15 +146,17 @@ func rollbackMulti(name string, results []multiResult) {
 			defer wg.Done()
 			client, err := kube.NewClient(kubeconfig, ctx, namespace)
 			if nil != err {
+				logger.Warn("rollback: cannot reach cluster %q to uninstall %q: %v", ctx, name, err)
 				return
 			}
-			_, _ = action.Uninstall(client, &action.UninstallOptions{
+			if _, uErr := action.Uninstall(client, &action.UninstallOptions{
 				ReleaseName: name,
 				Namespace:   namespace,
 				KeepHistory: false,
-			})
+			}); nil != uErr {
+				logger.Warn("rollback: uninstall of %q on cluster %q failed (manual cleanup may be needed): %v", name, ctx, uErr)
+			}
 		}(r.Context)
 	}
 	wg.Wait()
 }
-

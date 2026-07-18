@@ -11,12 +11,13 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/internal/errors"
 	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/ebogdum/keramos/internal/logger"
 	"github.com/ebogdum/keramos/internal/release"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // newMetricsCommand exposes `keramos metrics <release>` — sample CPU/memory
@@ -28,9 +29,9 @@ import (
 // message rather than producing meaningless zeros.
 func newMetricsCommand() *cobra.Command {
 	var (
-		duration time.Duration
-		interval time.Duration
-		output   string
+		duration  time.Duration
+		interval  time.Duration
+		output    string
 		recommend bool
 	)
 	cmd := &cobra.Command{
@@ -140,8 +141,8 @@ func extractPodControllerNames(manifest string) []string {
 
 // metricSample is a single CPU/memory measurement for one container.
 type metricSample struct {
-	Pod       string
-	Container string
+	Pod        string
+	Container  string
 	CPU_mCores int64 // millicores
 	Mem_Bytes  int64
 	When       time.Time
@@ -156,12 +157,22 @@ func sampleMetrics(ctx context.Context, client kube.KubeClient, namespace string
 	if err := pollOnce(ctx, client, namespace, prefixes, &samples); nil != err {
 		return nil, err
 	}
+	consecutiveFailures := 0
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return samples, nil
 		case <-tick.C:
-			_ = pollOnce(ctx, client, namespace, prefixes, &samples)
+			if err := pollOnce(ctx, client, namespace, prefixes, &samples); nil != err {
+				consecutiveFailures++
+				logger.Warn("metrics poll failed (%d consecutive): %v", consecutiveFailures, err)
+				if consecutiveFailures >= 5 {
+					return samples, keramoserr.WrapErrorf(keramoserr.ErrKube, err,
+						"metrics sampling aborted after %d consecutive poll failures", consecutiveFailures)
+				}
+			} else {
+				consecutiveFailures = 0
+			}
 		}
 	}
 	return samples, nil
