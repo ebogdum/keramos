@@ -2,18 +2,28 @@
 
 ## Synopsis
 
-`keramos workspace plan` reads `keramos-workspace.yaml` and prints the topological order in which `keramos workspace install` / `upgrade` would process the declared members. With `--levels`, output is grouped by Kahn topological depth — members in the same level have no inter-dependencies among themselves and are eligible to run in parallel (under `--parallel N` on install/upgrade). The command is read-only; no cluster contact, no file writes.
+`keramos workspace plan` reads `keramos-workspace.yaml` and prints the order in which
+`keramos workspace install` and `upgrade` will process the members. Nothing is
+applied and the cluster is not contacted — it is a preview of the dependency
+ordering. With `--levels` it groups the members by depth, so you can see which
+ones are eligible to run in parallel.
 
 ## When to use it
 
-Run before `install` / `upgrade` to confirm dependency resolution, particularly after editing member `dependsOn` declarations. The `--levels` view tells you exactly where parallelism kicks in: a level with three members can run all three in parallel.
+- Before an install or upgrade, to confirm the dependency order is what you
+  expect — especially after editing a `dependsOn` list.
+- To see where parallelism kicks in: any level with more than one member can
+  run those members concurrently under `--parallel`.
+- To catch a dependency cycle early — a cycle stops the command with an error
+  naming the members involved.
 
-## What happens when you run it
+## What happens
 
-1. Reads `<dir>/keramos-workspace.yaml` (default: current directory).
-2. Builds the dependency graph from each member's `dependsOn` list.
-3. Computes the topological order (with cycle detection — a cycle aborts with a clear error naming the involved members).
-4. Prints the plan: flat list by default; level-grouped with `--levels`.
+1. Reads `keramos-workspace.yaml` from `--dir` (default `.`).
+2. Builds the dependency graph from every member's `dependsOn` list.
+3. Sorts the members so each one comes after everything it depends on.
+4. Prints the order: a numbered flat list by default, or one group per level
+   with `--levels`.
 
 ## Usage
 
@@ -25,44 +35,67 @@ keramos workspace plan [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--dir` | string | . | directory containing `keramos-workspace.yaml` |
-| `-h, --help` | bool | false | help for plan |
-| `--levels` | bool | false | group output by topological depth (parallelisable groups) |
+| `--dir` | string | `.` | Directory containing `keramos-workspace.yaml`. Point it elsewhere to plan a workspace in another directory. |
+| `--levels` | bool | `false` | Group the output by dependency depth instead of a flat list, so members that can run in parallel appear together. |
 
-## Persistent flags inherited from `keramos`
+Inherits the global flags.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
+**INPUT — `keramos-workspace.yaml` with two members**, where `api` depends on
+`postgres`:
 
-Flat list of members in install order:
+```yaml
+apiVersion: keramos/v1
+defaults:
+  namespace: apps
+members:
+  - name: postgres
+    path: ./postgres
+  - name: api
+    path: ./api
+    dependsOn: [postgres]
+```
+
+**Run it:**
 
 ```sh
 keramos workspace plan
 ```
 
-Level-grouped view (each group can run in parallel):
+**OUTPUT:**
+
+```
+1. postgres (path=./postgres, ns=apps, profile=)
+2. api (path=./api, ns=apps, profile=)
+```
+
+`postgres` is listed first because `api` declares `dependsOn: [postgres]`, so it
+must come up before `api`. Both inherit `ns=apps` from `defaults.namespace`, and
+`profile=` is empty because neither member sets one.
+
+**Group the same two members by level:**
 
 ```sh
 keramos workspace plan --levels
 ```
 
-Plan a workspace at a non-default path:
+**OUTPUT:**
 
-```sh
-keramos workspace plan --dir ./platform --levels
 ```
+level 0 (1 members, parallelisable):
+  - postgres (path=./postgres, ns=apps)
+level 1 (1 members, parallelisable):
+  - api (path=./api, ns=apps)
+```
+
+`postgres` has no dependencies, so it sits alone at level 0; `api` waits for
+level 0 to finish, so it lands at level 1. Add a second dependency-free package
+and it would join `postgres` at level 0 and run alongside it under `--parallel`.
 
 ## See also
 
-- [`workspace`](workspace.md)
-- [`workspace install`](workspace-install.md)
-- [`workspace upgrade`](workspace-upgrade.md)
-- [`workspace status`](workspace-status.md)
-- [`keramos-workspace.yaml` reference](../reference/keramos-workspace-yaml.md)
-- [Workspaces guide](../guides/workspaces.md)
+- [`workspace`](workspace.md) — the workspace index
+- [`workspace install`](workspace-install.md), [`workspace upgrade`](workspace-upgrade.md)
+  — run the members in this order
+- [`plan`](plan.md) — the single-release analogue

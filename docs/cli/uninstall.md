@@ -1,22 +1,27 @@
 # keramos uninstall
 
-## Synopsis
-
-`keramos uninstall` removes a release from the cluster. Pre-delete hooks fire, the release's resources are deleted (with cascade as defined by their owner references), post-delete hooks fire, and finally the release record is removed unless `--keep-history` is set.
+`keramos uninstall` deletes a release's resources from the cluster, keeping its
+revision history for auditing unless you ask to purge it.
 
 ## When to use it
 
-Use this when a release is no longer needed. For test or experimental environments where you want to clean up everything keramos installed across the cluster, prefer `keramos purge`. To preserve the release record for audit while removing the cluster resources, the default behaviour already does that — pass `--purge` to also drop the history.
+- To tear down a release you no longer need.
+- To remove the resources but keep the history so you can still audit or
+  reinstall (the default).
+- To wipe the release completely, history included, with `--purge`.
 
-## What happens when you run it
+## What happens
 
-1. Reads the current release record.
-2. Marks the release status `uninstalling`.
-3. Runs `pre-delete` hooks.
-4. Deletes the release's resources from the cluster (relying on owner-references for cascading where applicable).
-5. With the default `--wait`, blocks until resources are gone.
-6. Runs `post-delete` hooks.
-7. Marks the release status `uninstalled`. With `--purge`, also deletes the release record (Secrets) entirely; otherwise the record is kept for audit.
+1. Reads the release's latest revision (the input state). With
+   `--ignore-not-found`, a missing release exits zero instead of erroring.
+2. Marks the release uninstalling, then runs pre-delete hooks unless `--no-hooks`.
+3. Deletes the release's manifest from the cluster, in reverse apply order.
+4. Waits until every deleted resource is actually gone unless `--no-wait`.
+5. Runs post-delete hooks, then either keeps the stored history (default,
+   status becomes superseded) or deletes it entirely with `--purge`.
+
+Requires a reachable cluster. Purging history removes the record `rollback` and
+`history` rely on.
 
 ## Usage
 
@@ -24,20 +29,21 @@ Use this when a release is no longer needed. For test or experimental environmen
 keramos uninstall <release-name> [flags]
 ```
 
+The release name is the only positional argument; there is no package path.
+
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--description` | string | — | description recorded against the uninstall revision |
-| `-h, --help` | — | — | help for uninstall |
-| `--ignore-not-found` | — | — | exit zero when the release is not found |
-| `--keep-history` | — | behaviour; explicit positive form | keep release history |
-| `--no-hooks` | — | — | skip lifecycle hooks for this operation |
-| `--no-wait` | — | — | do not wait for resource deletion |
-| `-o, --output` | string | "table" | output format: table, json, yaml |
-| `--purge` | — | — | delete release history (default: history is kept) |
-| `--timeout` | duration | 5m0s | timeout for resource deletion |
-| `--wait` | — | — | wait for resource deletion to complete (default) |
+| `--purge` | — | — | also delete the stored history (default keeps it) |
+| `--keep-history` | — | on | keep the stored history (the default; explicit positive form) |
+| `--no-hooks` | — | — | skip pre-delete and post-delete hooks |
+| `--wait` | — | on | block until every deleted resource is gone (default behaviour) |
+| `--no-wait` | — | — | return once deletion is requested, without confirming removal |
+| `--timeout` | duration | 5m0s | how long the deletion wait may run before failing |
+| `--ignore-not-found` | — | — | exit zero when the release doesn't exist |
+| `--description` | string | — | free-text note recorded against the uninstall revision |
+| `-o, --output` | string | table | result format: `table`, `json`, or `yaml` |
 
 ## Persistent flags inherited from `keramos`
 
@@ -46,42 +52,67 @@ keramos uninstall <release-name> [flags]
 | `--debug` | — | enable debug output |
 | `--kube-context` | string | Kubernetes context to use |
 | `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| `-n, --namespace` | string | namespace of the release |
 
-## Examples
+## Worked example — the input state and what remains after
 
-Uninstall a release:
+**INPUT 1 — the stored release.** `web` is deployed at revision 2 in namespace
+`apps`:
 
-```sh
-keramos uninstall my-app -n my-app-prod
+```yaml
+# keramos get web -n apps  →  before uninstall
+name: web
+namespace: apps
+revision: 2
+status: deployed
 ```
 
-Uninstall but keep the release record for audit:
+**INPUT 2 — the command.** You uninstall without `--purge`:
 
 ```sh
-keramos uninstall my-app --keep-history -n my-app-prod
+keramos uninstall web -n apps
 ```
 
-Uninstall without running pre/post-delete hooks (skip when hooks themselves are broken):
+**OUTPUT:**
 
-```sh
-keramos uninstall hello --no-hooks -n prod
+```
+release web uninstalled
+release history kept (use --purge to remove)
 ```
 
-Uninstall and also remove the release history record (cannot rollback after this):
+**State after** (resources gone, history retained):
 
-```sh
-keramos uninstall hello --purge -n prod
+```yaml
+# keramos history web -n apps  →  still lists the revisions
+# keramos get web -n apps      →  status: superseded (record kept for audit)
+name: web
+status: superseded
 ```
 
-Idempotent uninstall in CI — exit 0 even if the release was already gone:
+**Tracing every line back to the inputs:**
+
+| Output / state | Which input it came from | Why |
+|---|---|---|
+| `release web uninstalled` | INPUT 2 `<release-name>` | the named release's resources were deleted |
+| `release history kept` | INPUT 2 (no `--purge`) | history is kept by default |
+| resources gone from the cluster | `--wait` (default) | the command blocked until every resource was removed |
+| `status: superseded` | history retained | the record stays for audit and possible reinstall |
+
+Wipe the release completely, history included:
 
 ```sh
-keramos uninstall hello --ignore-not-found -n prod
+keramos uninstall web -n apps --purge
+```
+
+Make teardown idempotent in CI — exit zero even if it's already gone:
+
+```sh
+keramos uninstall web -n apps --ignore-not-found
 ```
 
 ## See also
 
-- [`purge`](purge.md)
-- [`history`](history.md)
-- [Hooks guide](../guides/hooks.md)
+- [`install`](install.md) — create a release
+- [`purge`](purge.md) — remove keramos-managed resources in bulk
+- [`history`](history.md) — list a release's revisions
+- [`rollback`](rollback.md) — restore an earlier revision (needs kept history)

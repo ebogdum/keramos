@@ -1,20 +1,25 @@
 # keramos package sign
 
-## Synopsis
-
-`keramos package sign` produces a detached PGP `.prov` (provenance) signature alongside an existing `.keramos.tgz` archive. The `.prov` file is a cleartext-signed envelope that includes the archive's SHA-256 digest, package name, and version. Consumers verify it with `keramos package verify` or with `--verify` on `keramos pull` / `keramos install`. The `--key` flag points at the **private key file** — typically an exported PGP secret key in armoured form.
+Sign an existing `.keramos.tgz` archive with a PGP private key, producing a
+detached `.prov` provenance file.
 
 ## When to use it
 
-Use when packaging happened without `--sign` (e.g. an archive built upstream that you want to re-sign before redistribution) or when re-signing after a key rotation. For new archives, prefer `keramos package <pkg-dir> --sign --key <path>` which packages and signs in one shot.
+- To sign an archive that was built without `--sign`, or to re-sign one after
+  a key rotation.
+- When the archive and the signing key live on different machines, so signing
+  is a separate step from packaging.
 
-## What happens when you run it
+## What happens
 
-1. Reads the archive at `<archive.keramos.tgz>` and computes its SHA-256.
-2. Loads the PGP private key at `--key`.
-3. Constructs the provenance manifest (name, version, digest, signer fingerprint).
-4. PGP-signs the manifest and writes `<archive.keramos.tgz>.prov` next to the archive.
-5. No cluster contact, no network.
+1. keramos reads `<archive.keramos.tgz>` and computes its digest.
+2. It loads the PGP private key from `--key` (required) and produces a
+   cleartext-signed provenance document over the archive.
+3. It writes `<archive.keramos.tgz>.prov` next to the archive and prints
+   `Successfully signed: <prov-path>`.
+
+Anyone can later confirm the archive is untampered with
+[`keramos package verify`](package-verify.md) using your public key.
 
 ## Usage
 
@@ -26,44 +31,29 @@ keramos package sign <archive.keramos.tgz> [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | bool | false | help for sign |
-| `--key` | string | "" | path to PGP private key file (required) |
+| `--key` | string | — | path to the PGP private key file (required) |
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Sign an archive with an exported secret key file:
+Sign an archive, then verify it validates against the matching public key:
 
 ```sh
-keramos package sign ./build/my-app-1.0.0.keramos.tgz --key /path/to/secret-key.asc
+keramos package sign ./build/my-app-1.0.0.keramos.tgz --key ./cosign.key
 ```
 
-Result is `./build/my-app-1.0.0.keramos.tgz.prov` next to the archive.
-
-Re-sign an archive after key rotation (overwrites the existing `.prov`):
+```
+Successfully signed: ./build/my-app-1.0.0.keramos.tgz.prov
+```
 
 ```sh
-keramos package sign ./build/my-app-1.0.0.keramos.tgz --key /path/to/new-key.asc
+keramos package verify ./build/my-app-1.0.0.keramos.tgz --keyring ./cosign.pub
 ```
 
-Sign and immediately verify in one shell pipeline:
-
-```sh
-keramos package sign   ./build/my-app-1.0.0.keramos.tgz --key /path/to/key.asc
-keramos package verify ./build/my-app-1.0.0.keramos.tgz --keyring /path/to/pubkey.asc
-```
+The verify command exits 0 with no output, confirming the signature is valid.
 
 ## See also
 
-- [`package`](package.md) — package and sign in one command
-- [`package verify`](package-verify.md)
-- [`keyring add`](keyring-add.md)
-- [Signing guide](../guides/signing.md)
+- [`package`](package.md) — package and sign in one step (`--sign`)
+- [`package verify`](package-verify.md) — check the signature
+- [`keyring`](keyring.md) — manage trusted public keys
+- [`publish`](publish.md)

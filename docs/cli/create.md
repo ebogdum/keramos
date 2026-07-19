@@ -1,22 +1,30 @@
 # keramos create
 
-## Synopsis
-
-`keramos create` scaffolds a new package in the named directory. The output is a small but complete keramos package — `keramos.yaml`, `values.yaml`, a `templates/` directory with a working Deployment + Service + ConfigMap, an `_helpers.yaml` partial for shared label snippets, and a `README.md`. The result is immediately renderable with `keramos template` and immediately installable with `keramos install`.
+`keramos create` scaffolds a ready-to-edit keramos package — a working
+Deployment + Service with values already wired in — in a new directory.
 
 ## When to use it
 
-Use when starting a new package from scratch. For richer starting points — an operator-pattern package with CRD scaffolding, a batch-job pattern, or a stateful service template — use `keramos init <template>` instead. For migrating an existing Helm chart, use `keramos migrate`.
+- You want a working starter you can render and edit immediately, not a
+  menu of layouts.
+- You want the batteries-included set: a helpers partial, notes, and a
+  `.keramosignore` already in place.
+- For a choice of workload shapes (webapp, batch, operator, blank) use
+  [`keramos init`](init.md) instead.
 
-## What happens when you run it
+## What happens
 
-1. Creates the directory `<name>` (errors if it already exists).
-2. Writes `<name>/keramos.yaml` with `apiVersion: keramos/v1`, `name: <name>`, `version: 0.1.0`, and a brief description.
-3. Writes `<name>/values.yaml` with conventional defaults (replicas, image, service, resources).
-4. Writes `<name>/templates/deployment.yaml`, `service.yaml`, `configmap.yaml`, and `_helpers.yaml`.
-5. Writes `<name>/README.md` with a one-line description and install instructions.
+1. Creates a directory named after `<name>` (fails if it already exists).
+2. Writes `keramos.yaml` (`name`, `version`, `description`) and a `values.yaml`
+   seeded with `replicaCount`, `image`, and `service.port`.
+3. Writes a `templates/` directory: `deployment.yaml`, `service.yaml`, a
+   `_helpers.yaml` partial, and `notes.yaml`.
+4. Writes a `.keramosignore` listing patterns to skip when packaging.
+5. Prints `created package <name>/`.
 
-The scaffolded package is intentionally minimal — open the files and customise rather than treating them as fixed.
+The templates read the seeded values via `${values.*}`, so the package
+renders and lints as-is. Edit the files, then run [`keramos lint`](lint.md) and
+[`keramos template`](template.md).
 
 ## Usage
 
@@ -26,47 +34,51 @@ keramos create <name> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for create |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Scaffold a new package and enter the directory:
+Scaffold a package called `myapp`:
 
 ```sh
-keramos create my-app
-cd my-app
-ls
-# README.md  keramos.yaml  templates/  values.yaml
+keramos create myapp
 ```
 
-Render the scaffolded package straight away to confirm it's well-formed:
+**OUTPUT:**
+
+```
+created package myapp/
+```
+
+**What you now have on disk:**
+
+```
+myapp/
+├── .keramosignore
+├── keramos.yaml
+├── values.yaml
+└── templates/
+    ├── _helpers.yaml
+    ├── deployment.yaml
+    ├── notes.yaml
+    └── service.yaml
+```
+
+`values.yaml` sets `replicaCount: 1`, `image.repository: nginx`, and
+`service.port: 80`, and the templates reference those values, so the package
+renders straight away:
 
 ```sh
-keramos create my-app
-keramos template ./my-app
+cd myapp
+keramos template .
 ```
 
-Install the scaffolded package into a `kind` cluster as a smoke test:
-
-```sh
-keramos create my-app
-keramos install my-app ./my-app -n my-app --create-namespace
-```
+Change `replicaCount` or the image in `values.yaml` and re-render to watch
+the manifest update.
 
 ## See also
 
-- [`init`](init.md) — scaffold from a richer named template
-- [`migrate`](migrate.md) — convert a Helm chart into a keramos package
-- [Package anatomy](../guides/packages.md) — what every file in a keramos package is for
-- [Quickstart](../guides/quickstart.md) — full create → install → upgrade walkthrough
+- [`init`](init.md) — scaffold from a chosen built-in template
+- [`lint`](lint.md) — validate the scaffolded package
+- [`template`](template.md) — render it to manifests
+- [`values`](values.md) — how values files and `--set` overrides merge

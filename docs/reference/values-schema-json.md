@@ -1,283 +1,120 @@
-# `values.schema.json` Reference
+# values.schema.json
 
-`values.schema.json` is an optional file at the package root that declares the expected shape of `values.yaml` (and any merged overrides). When present, keramos validates the **effective values** against the schema before rendering. This catches typos (`replicaa: 3`), wrong types (`replicas: "three"`), missing required keys, and out-of-range numbers — long before the manifest reaches the cluster.
+An optional file at the package root that declares the expected shape of your
+values. When present, keramos validates the *effective values* (defaults plus all
+overrides) against it before rendering, catching typos, wrong types, missing
+required keys, and out-of-range numbers before manifests reach the cluster. The
+file is a standard JSON Schema Draft 2020-12 document; keramos honours the
+practical subset listed below and silently ignores keywords it does not know.
 
-The file is a standard JSON Schema Draft 2020-12 document. Keramos supports a practical subset; this page enumerates exactly what is and is not honoured, and gives examples of each construct.
-
----
-
-## Where validation runs
-
-- `keramos lint` validates as part of its pass.
-- `keramos install`, `keramos upgrade`, `keramos template`, `keramos diff`, `keramos plan` validate before render.
-- `keramos config` walks the schema interactively to produce a values file from prompts.
-
-A schema violation aborts the operation with a precise message: which path, what was found, what was expected.
-
----
-
-## Supported keywords
-
-### Type primitives
+## Minimal example
 
 ```json
 {
   "type": "object",
+  "required": ["image"],
   "properties": {
-    "replicas":  { "type": "integer" },
-    "image":     { "type": "object" },
-    "args":      { "type": "array" },
-    "name":      { "type": "string" },
-    "enabled":   { "type": "boolean" },
-    "weight":    { "type": "number" },
-    "extra":     { "type": "null" }
-  }
-}
-```
-
-A `type` may also be a list to permit unions: `"type": ["string", "null"]`.
-
-### Required fields
-
-```json
-{
-  "type": "object",
-  "required": ["name", "image"],
-  "properties": {
-    "name":  { "type": "string" },
-    "image": { "type": "object" }
-  }
-}
-```
-
-A missing required field at any nested level is reported with its full dotted path.
-
-### String constraints
-
-| Keyword | Meaning |
-|---|---|
-| `minLength` / `maxLength` | inclusive length bounds |
-| `pattern` | RE2 regular expression (Go regexp; not full PCRE) |
-| `enum` | allowed values |
-| `const` | the only allowed value |
-| `format` | well-known formats: `email`, `uri`, `uuid`, `ipv4`, `ipv6`, `date`, `date-time`, `hostname` |
-
-```json
-{
-  "type": "string",
-  "pattern": "^[a-z][a-z0-9-]{0,62}$",
-  "format": "hostname",
-  "minLength": 1
-}
-```
-
-### Numeric constraints
-
-| Keyword | Meaning |
-|---|---|
-| `minimum` / `maximum` | inclusive bounds |
-| `exclusiveMinimum` / `exclusiveMaximum` | exclusive bounds |
-| `multipleOf` | must be evenly divisible |
-
-```json
-{
-  "type": "integer",
-  "minimum": 1,
-  "maximum": 100,
-  "multipleOf": 1
-}
-```
-
-### Array constraints
-
-| Keyword | Meaning |
-|---|---|
-| `items` | schema applied to every element |
-| `minItems` / `maxItems` | length bounds |
-| `uniqueItems` | reject duplicates (deep-equal comparison) |
-
-```json
-{
-  "type": "array",
-  "items": { "type": "string", "format": "uri" },
-  "minItems": 1,
-  "uniqueItems": true
-}
-```
-
-### Object constraints
-
-| Keyword | Meaning |
-|---|---|
-| `properties` | per-key schemas |
-| `additionalProperties` | `false` rejects unknown keys; a schema validates them |
-| `patternProperties` | per-regex schemas applied to matching keys |
-| `minProperties` / `maxProperties` | key-count bounds |
-| `dependentRequired` | when key X exists, also require Y |
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "tls":      { "type": "boolean" },
-    "tlsCert":  { "type": "string" },
-    "tlsKey":   { "type": "string" }
-  },
-  "additionalProperties": false,
-  "dependentRequired": {
-    "tls": ["tlsCert", "tlsKey"]
-  }
-}
-```
-
-### Combinators
-
-| Keyword | Meaning |
-|---|---|
-| `allOf` | must satisfy every subschema |
-| `anyOf` | must satisfy at least one |
-| `oneOf` | must satisfy exactly one |
-| `not` | must NOT satisfy the subschema |
-
-```json
-{
-  "oneOf": [
-    { "type": "object", "required": ["existingSecret"] },
-    { "type": "object", "required": ["password"] }
-  ]
-}
-```
-
-### References
-
-Local references only. Keramos resolves `$ref` against the same document, supporting both `#/$defs/...` and `#/definitions/...`. **Remote refs (`https://example.com/schema.json#/...`) are not supported** — the schema document must be self-contained.
-
-```json
-{
-  "$defs": {
+    "replicaCount": { "type": "integer", "minimum": 1 },
     "image": {
       "type": "object",
       "required": ["repository"],
       "properties": {
         "repository": { "type": "string" },
-        "tag":        { "type": "string" },
-        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+        "tag": { "type": "string" }
       }
     }
-  },
-  "type": "object",
-  "properties": {
-    "image":    { "$ref": "#/$defs/image" },
-    "sidecar":  { "$ref": "#/$defs/image" }
   }
 }
 ```
 
-Self-referential cycles are detected and rejected (depth limit 32) so a malformed schema cannot send keramos into an infinite loop.
+## Where validation runs
 
----
+- `keramos install`, `keramos upgrade`, and `keramos template` validate the effective
+  values before rendering; a violation aborts with the failing path and reason.
+- `keramos lint` checks that the file is valid JSON and validates the package's
+  own values against it.
+- `keramos config` walks the schema to build a values file interactively.
 
-## What is *not* supported
+## Supported keywords
 
-These JSON Schema keywords are recognised by the file but ignored at validation time:
+The validator recognises the keywords below. Anything else in the document is
+ignored (not an error), so richer schemas still load — they just are not
+enforced.
 
-- `$schema` (descriptive only)
-- `$id`
-- `title`, `description`, `examples`, `default` — kept and surfaced by `keramos config` and `keramos show schema`
-- Remote `$ref`
-- `if` / `then` / `else` (conditional schemas)
-- `unevaluatedProperties` / `unevaluatedItems`
-- `contentEncoding`, `contentMediaType`, `contentSchema`
+| Group | Keywords | Notes |
+|---|---|---|
+| Type | `type` | One of `object`, `array`, `string`, `integer`, `number`, `boolean`, `null`, or a list of these for a union (`["string","null"]`). |
+| Object | `properties`, `required`, `additionalProperties`, `patternProperties`, `minProperties`, `maxProperties`, `dependentRequired` | `additionalProperties` may be `false` or a subschema. `patternProperties` keys are regexes (capped at 512 bytes). |
+| Array | `items`, `minItems`, `maxItems`, `uniqueItems` | `items` is a single subschema applied to every element. |
+| String | `minLength`, `maxLength`, `pattern`, `format` | `pattern` is a regex (capped at 512 bytes). |
+| Number | `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | `integer` additionally requires a whole number. |
+| Combinators | `allOf`, `anyOf`, `oneOf`, `not` | `oneOf` must match exactly one subschema. |
+| References | `$ref`, `$defs`, `definitions` | Only same-document JSON pointers (`#/$defs/...`); external refs are not resolved. Recursion is capped at 32 levels. |
+| Values | `enum`, `const` | Exact-value constraints; numbers compare by value. |
 
-Use `oneOf`/`anyOf` plus `dependentRequired` to express conditional rules without `if/then/else`.
+When a schema omits `type`, keramos infers intent from the keywords present, so a
+root object with only `properties`/`required` still validates as an object.
 
----
+### format values
 
-## A complete example
+`format` is enforced for: `email`, `uri`, `uri-reference`, `uuid`, `ipv4`,
+`ipv6`, `hostname`, `date`, `date-time`, `time`. Any other format is accepted
+without checking.
+
+## Full example
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "my-app values",
   "type": "object",
-  "required": ["image"],
-  "additionalProperties": false,
+  "required": ["image", "service"],
+  "additionalProperties": true,
   "properties": {
-    "replicas": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 50,
-      "default": 1,
-      "description": "Replica count."
-    },
+    "replicaCount": { "type": "integer", "minimum": 1, "maximum": 10 },
     "image": {
-      "$ref": "#/$defs/image"
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
     },
     "service": {
       "type": "object",
       "properties": {
         "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
-      },
-      "additionalProperties": false
+      }
     },
+    "ingress": { "$ref": "#/$defs/ingress" }
+  },
+  "$defs": {
     "ingress": {
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
-        "host":    { "type": "string", "format": "hostname" },
-        "tls":     { "type": "boolean" }
-      },
-      "dependentRequired": {
-        "tls": ["host"]
+        "host": { "type": "string", "format": "hostname" }
       }
-    },
-    "auth": {
-      "oneOf": [
-        { "type": "object", "required": ["existingSecret"], "properties": { "existingSecret": { "type": "string" } } },
-        { "type": "object", "required": ["password"], "properties": { "password": { "type": "string", "minLength": 8 } } }
-      ]
-    }
-  },
-  "$defs": {
-    "image": {
-      "type": "object",
-      "required": ["repository"],
-      "properties": {
-        "repository": { "type": "string", "minLength": 1 },
-        "tag":        { "type": "string", "default": "latest" },
-        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"], "default": "IfNotPresent" }
-      },
-      "additionalProperties": false
     }
   }
 }
 ```
 
-Validation rejects values like:
+Against these values validation fails with two errors — the string tag and the
+out-of-range port:
 
 ```yaml
-replicas: 100              # exceeds maximum
+replicaCount: "two"     # $.replicaCount: expected integer, got string
 image:
-  repository: ""           # fails minLength
+  repository: nginx
 service:
-  type: Invalid            # not in enum
-ingress:
-  tls: true                # tls requires host (dependentRequired)
-auth:
-  password: short          # fails minLength: 8 in the password branch of oneOf
+  port: 99999           # $.service.port: 99999 greater than maximum 65535
 ```
 
-with messages naming the exact path and the violated keyword.
+## See also
 
----
-
-## Generating values from the schema
-
-`keramos config` walks the schema interactively, prompting for each property, honouring `default`, `enum`, and `description`, and writing the resulting object to the path of your choice (default: `values.local.yaml`):
-
-```
-keramos config <package-dir> -o values.dev.yaml
-```
-
-`keramos show schema <package>` prints the schema (resolved through layers — children's schemas merge into the parent's `properties`).
+- [values.yaml](values-yaml.md) — the file this schema constrains.
+- [`keramos lint`](../cli/lint.md) — validate the schema and values.
+- [`keramos config`](../cli/config.md) — build values from the schema.
+- [Schema validation guide](../guides/schema-validation.md).

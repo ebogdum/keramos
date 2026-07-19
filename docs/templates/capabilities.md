@@ -1,23 +1,61 @@
 # Capabilities
 
-The `capabilities` root namespace exposes information about the cluster the template is rendering against. The two practically-useful pieces of information are the cluster's Kubernetes version (used to gate version-specific fields) and the `lookup` function (used to read live resources).
+The `capabilities` namespace exposes what the template knows about the cluster
+it renders against. The two useful pieces are the Kubernetes version (for gating
+version-specific fields) and the `lookup` function (for reading live resources).
 
 ## `capabilities.kubeVersion`
 
-Keramos stores the Kubernetes version the template is rendering against under `capabilities.kubeVersion`. The keys preserve their Go-struct casing (capitalised), unlike the lowercase root namespaces (`values`, `release`, `package`, `capabilities`).
+Keramos stores the cluster version under `capabilities.kubeVersion`. The keys keep
+their Go-struct casing (capitalised), unlike the lowercase root namespaces.
 
-| Path | Type | Description |
-|---|---|---|
-| `capabilities.kubeVersion.Version` | string | full version string, e.g. `"1.28.5"`. Always populated. |
-| `capabilities.kubeVersion.GitVersion` | string | server's reported `gitVersion`, e.g. `"v1.28.5+k3s1"`. |
-| `capabilities.kubeVersion.Major` | string | major version, e.g. `"1"`. May be empty when `--kube-version` is used without a full server probe. |
-| `capabilities.kubeVersion.Minor` | string | minor version, e.g. `"28"`. May be empty in offline `keramos template` mode. |
+| Path | Meaning |
+|---|---|
+| `capabilities.kubeVersion.Version` | full version string, e.g. `1.30.2` |
+| `capabilities.kubeVersion.GitVersion` | server's reported git version |
+| `capabilities.kubeVersion.Major` | major, e.g. `1` — live cluster only |
+| `capabilities.kubeVersion.Minor` | minor, e.g. `30` — live cluster only |
 
-When running against a real cluster (`keramos install`/`keramos upgrade`/`keramos diff`), all four fields are populated from the API server's `/version` endpoint. When running offline (`keramos template`), only `Version` and `GitVersion` are populated from the `--kube-version` flag (or a default of `1.28.0` if not specified).
+Against a live cluster (`keramos install` / `upgrade` / `diff`), all four are
+populated from the API server. Under `keramos template`, only `Version` and
+`GitVersion` are set — both to the `--kube-version` value — and `Major` / `Minor`
+are always null.
 
-### Branching on the Kubernetes version
+There is **no default** version. If you run `keramos template` without
+`--kube-version`, `capabilities.kubeVersion` is unset and any version gate
+errors. Pass the flag when a template branches on the version:
 
-Use `semverCompare` with the version on the left of the pipe and the constraint as the literal argument:
+**Template:**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caps
+data:
+  version: "${capabilities.kubeVersion.Version}"
+  major:   "${capabilities.kubeVersion.Major}"
+```
+
+**`keramos template ./pkg --kube-version 1.30.2`:**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caps
+data:
+  version: "1.30.2"
+  major: null
+```
+
+### Branching on the version
+
+Use `semverCompare` with the version on the **left** of the pipe and the
+constraint as a literal argument. The pipeline form is required — a function
+argument is a literal, not a path (see
+[Expressions](expressions.md#arguments-are-literals-not-paths)), so only the
+left side is resolved:
 
 ```yaml
 $if: ${capabilities.kubeVersion.Version | semverCompare '>=1.27.0-0'}
@@ -28,99 +66,105 @@ spec:
         - name: hold
 ```
 
-The pipeline form is required because keramos function arguments are parsed as literal tokens — only the value to the left of `|` is a path lookup. So `${semverCompare '>=1.27.0-0' capabilities.kubeVersion.Version}` does **not** work; the second argument would be the literal string `"capabilities.kubeVersion.Version"` rather than the resolved version.
+With `--kube-version 1.30.2`, `${... | semverCompare '>=1.27.0-0'}` renders
+`true`.
 
-### Detecting Pod-spec fields available in a given version
-
-```yaml
-spec:
-  template:
-    spec:
-      containers:
-        - name: app
-          image: ${values.image}
-      $if: ${capabilities.kubeVersion.Version | semverCompare '>=1.26.0-0'}
-      hostUsers: false                      # 1.26+ user-namespace field
-```
-
-### Refusing to render against unsupported clusters
+### Refusing an unsupported cluster
 
 ```yaml
 $if: ${capabilities.kubeVersion.Version | semverCompare '<1.25.0-0'}
 data: ${'this package requires Kubernetes 1.25 or newer' | fail}
 ```
 
-`fail` aborts the render with the supplied message.
+`fail` aborts the render with your message.
 
 ## `capabilities.apiVersions`
 
-The set of group/versions the cluster has registered. Keramos populates it from the API server's discovery during cluster-bound operations and from the `--api-versions` flag when running offline.
+The set of group/versions the cluster has registered. Keramos fills it from API
+discovery on live operations, and from `--api-versions` (repeatable) when
+running offline. The value is a map keyed by group/version.
 
-The map is exposed at the path `capabilities.apiVersions` and yields a `key: bool` map when serialised (e.g. via `toYaml`):
-
-```yaml
-apps/v1: true
-networking.k8s.io/v1: true
-monitoring.coreos.com/v1: true
-```
-
-### Limitation: keys with slashes are not directly addressable
-
-Keramos's path engine cannot traverse map keys that contain `/` or `.` mid-segment, and there is no method-call syntax. So neither of these compile:
+There is **no method call, slash-path, or bracket access** in keramos's native
+`${...}` engine, so none of these work:
 
 ```yaml
-${capabilities.apiVersions.apps/v1}            # ✗ slash splits the path
-${capabilities.apiVersions.has 'apps/v1'}      # ✗ no method call
-${capabilities.apiVersions['apps/v1']}         # ✗ bracket form not supported
+${capabilities.apiVersions.has('apps/v1')}   # no method call
+${capabilities.apiVersions.apps/v1}          # slash splits the path
+${capabilities.apiVersions['apps/v1']}       # no bracket form
 ```
 
-This means there is no clean template-time check for "is `monitoring.coreos.com/v1` registered?" today. The practical patterns are:
+(The `.Has` method exists only in Helm-compatibility mode, which uses Go
+`{{ }}` templates, not keramos expressions.) So there is no clean template-time
+"is this GVK registered?" check. Practical alternatives:
 
-1. **Trust the operator** — assume the apiVersion is present if the user supplied it via `--api-versions` (CI gates) or because the package's `kubeVersion:` constraint covers it.
-2. **Render the resource unconditionally** and let the API server's apply error if the kind is missing. Combined with `--cleanup-on-fail`, the failure rolls back cleanly.
-3. **Gate at install time, not template time** — a `pre-install` hook can run `kubectl get crd ... || exit 1` to verify a CRD is present before the install proceeds.
+1. **Trust the operator** — assume the GVK is present when the package's
+   `kubeVersion` constraint covers it, or when CI passes `--api-versions`.
+2. **Render unconditionally** and let the API server reject a missing kind;
+   with `--cleanup-on-fail` the failure rolls back cleanly.
+3. **Gate at install time** — a `pre-install` hook runs
+   `kubectl get crd ... || exit 1` before the install proceeds.
 
-For most version-driven branching, `kubeVersion` + `semverCompare` is sufficient (the API server's GVK availability tracks the version closely).
+For version-driven branching, `kubeVersion` + `semverCompare` is usually enough.
 
-## `lookup` — read-side cluster state
+## `lookup` — reading cluster state
 
-The `lookup` function pulls a live resource into the render. Signature:
+`lookup` pulls a live resource into the render:
 
 ```
 lookup(apiVersion, kind, namespace, name)
 ```
 
-All four arguments are literals. Returns the resource as a map, `nil` if missing, or a list (`{items: [...]}`) when `name` is empty.
+All four arguments are literals. It returns the resource as a map, or a falsy
+value when the resource is absent — `nil` under `keramos template` (no cluster),
+an empty map against a live cluster. Pass an empty `name` to list a kind.
 
-**Input — read a ConfigMap that may not exist yet:**
+Guard on the result so a missing resource simply drops the block:
+
+**Template:**
 
 ```yaml
 $if: ${lookup 'v1' 'ConfigMap' 'kube-system' 'cluster-info'}
 data:
-  publicCAFile: ${(lookup 'v1' 'ConfigMap' 'kube-system' 'cluster-info').data.kubeconfig | quote}
+  found: "yes"
 ```
 
-When the ConfigMap doesn't exist, `lookup` returns nil; `$if` evaluates falsy; the document is dropped.
+Under `keramos template` this renders nothing — `lookup` returns nil, `$if` is
+falsy.
 
-**Input — list pods in a namespace:**
+To read a field out of the result, pipe it through `get` or `dig` rather than a
+dotted sub-path (the engine can't index the result of a call inline):
 
 ```yaml
-$if: ${lookup 'v1' 'Pod' 'default' ''}
 data:
-  count: ${(lookup 'v1' 'Pod' 'default' '').items | len}
+  ca: ${lookup 'v1' 'ConfigMap' 'kube-system' 'cluster-info' | get 'data' | get 'ca.crt'}
 ```
 
-### Caching
+`dig` walks several keys and takes a fallback as its last argument:
 
-Keramos caches `lookup` results within a single render so repeated lookups for the same (apiVersion, kind, namespace, name) tuple don't re-hit the API server. Across renders, lookups re-run.
+```yaml
+data:
+  ca: ${lookup 'v1' 'ConfigMap' 'kube-system' 'cluster-info' | dig 'data' 'ca.crt' ''}
+```
 
-## Offline mode behaviour
+Keramos caches `lookup` results within a single render, so repeated lookups of the
+same tuple hit the API server once.
 
-`keramos template` runs without kubeconfig. In that mode:
+## Offline behaviour
 
-- `capabilities.kubeVersion.Version` returns the value of `--kube-version <ver>` if supplied, else `"1.28.0"`.
-- `capabilities.kubeVersion.Major`/`.Minor` are typically empty (only populated by a real server probe).
-- `capabilities.apiVersions` contains exactly the entries supplied via `--api-versions` (repeatable). Without that flag, the map is empty.
-- `lookup` returns `nil` for everything.
+Under `keramos template` (no kubeconfig):
 
-This means templates that depend on `lookup` for required data **will** render to empty/false branches under `keramos template`. To preview against a specific cluster's view, run `keramos diff` or `keramos plan` (both use the live API for capabilities and lookup) instead.
+- `capabilities.kubeVersion.Version` / `.GitVersion` come from `--kube-version`;
+  omit the flag and they are unset (nil).
+- `capabilities.kubeVersion.Major` / `.Minor` are always null.
+- `capabilities.apiVersions` contains exactly the `--api-versions` entries.
+- `lookup` returns nil for everything.
+
+Templates that depend on `lookup` therefore take their empty/false branches
+under `keramos template`. To preview against a real cluster's view, use `keramos diff`
+or `keramos plan`, which read live capabilities and lookups.
+
+## See also
+
+- [Expressions](expressions.md) — why `semverCompare` needs the pipeline form
+- [Function reference](functions.md) — `semverCompare`, `fail`, `get`, `dig`
+- [Control flow](control-flow.md) — `$if` gating on capabilities and `lookup`

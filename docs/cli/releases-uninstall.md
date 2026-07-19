@@ -2,19 +2,27 @@
 
 ## Synopsis
 
-`keramos releases uninstall` tears down every release declared in `keramos-releases.yaml` in **reverse** topological order — releases at the highest level go first, then progressively lower levels. This ensures that a release whose dependents have already been removed gets uninstalled cleanly without dangling references. Each release goes through the standard `keramos uninstall` flow (pre-delete hooks, resource removal, post-delete hooks, release-record removal).
+`keramos releases uninstall` removes every release in your `keramos-releases.yaml`, in
+**reverse** dependency order — dependents first, their dependencies last. That
+order means nothing is torn out from under a release that still depends on it.
 
 ## When to use it
 
-Use when tearing down a managed platform cleanly — for example, in CI when re-creating a fresh test environment, or when retiring a customer instance. Reverse-order ensures dependents are gone before their dependencies, which avoids orphaned-resource errors.
+- To tear down a whole set cleanly — for example when recreating a test
+  environment or retiring an instance.
+- Reverse order matters: removing dependents before dependencies avoids leaving
+  a release running with its backing services already gone.
 
-## What happens when you run it
+## What happens
 
-1. Reads `--file` (default `keramos-releases.yaml`) from the current directory.
-2. Computes the topological order, then reverses it.
-3. For each release, calls the same code path as `keramos uninstall` (pre-delete hook, resource delete, post-delete hook, release record removal).
-4. Reports per-release outcome.
-5. Exits 0 if every uninstall succeeded; non-zero if any failed.
+1. Reads the spec file (`--file`, default `keramos-releases.yaml`), sorts the
+   releases into dependency order, then reverses it.
+2. For each release in that reversed order, uninstalls it from the entry's
+   `namespace` (falling back to `-n/--namespace`). A release that is already
+   gone is treated as success, not an error.
+3. If one release fails to uninstall, the failure is reported and the command
+   keeps going with the rest — one bad release does not strand the others.
+4. Prints one line per release as it is removed.
 
 ## Usage
 
@@ -24,45 +32,56 @@ keramos releases uninstall [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
+| Flag | Type | Default | Effect |
 |---|---|---|---|
-| `--file` | string | keramos-releases.yaml | spec file path |
-| `-h, --help` | bool | false | help for uninstall |
+| `--file` | string | `keramos-releases.yaml` | read the spec from this path instead of the default |
 
-## Persistent flags inherited from `keramos`
+Inherits the global flags (`--kube-context`, `--kubeconfig`, `-n/--namespace`,
+`--debug`). `-n` sets the namespace for any release that does not name its own.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
+**INPUT** — `keramos-releases.yaml`, the same set you installed:
 
-Tear down the platform in reverse order:
+```yaml
+releases:
+  - name: postgres
+    package: ./charts/postgres
+    namespace: data
+
+  - name: redis
+    package: ./charts/redis
+    namespace: data
+
+  - name: api
+    package: ./charts/api
+    namespace: apps
+    dependsOn:
+      - postgres
+      - redis
+```
+
+**COMMAND:**
 
 ```sh
 keramos releases uninstall
 ```
 
-Tear down using a custom-named manifest:
+**OUTPUT:**
 
-```sh
-keramos releases uninstall --file ./platform.releases.yaml
+```
+[api] uninstalled
+[redis] uninstalled
+[postgres] uninstalled
 ```
 
-Plan first, then uninstall:
-
-```sh
-keramos releases plan
-keramos releases uninstall
-```
+`api` goes first because both datastores depend on it being gone before they
+are removed; `postgres` and `redis` follow. This is the install order from
+[`plan`](releases-plan.md), reversed.
 
 ## See also
 
-- [`releases`](releases.md)
-- [`releases install`](releases-install.md)
-- [`releases upgrade`](releases-upgrade.md)
-- [`uninstall`](uninstall.md) — single-release uninstall
-- [`keramos-releases.yaml` reference](../reference/keramos-releases-yaml.md)
+- [`releases`](releases.md) — the parent command and the spec-file format
+- [`plan`](releases-plan.md) — see the install order this reverses
+- [`install`](releases-install.md) — bring the set back up
+- [`uninstall`](uninstall.md) — uninstall a single release

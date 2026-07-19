@@ -2,11 +2,48 @@
 
 ## Synopsis
 
-`keramos controller` reconciles `KeramosRelease` custom resources declared in the cluster. The controller watches `KeramosRelease` CRs, materialises each into a regular keramos release (install/upgrade/uninstall as the spec demands), and reports outcome on the CR's status. Suitable for GitOps deployments where the desired set of releases is itself stored in the cluster.
+`keramos controller` runs keramos as an in-cluster operator. Instead of you typing
+`keramos install` / `keramos upgrade` from a workstation, you declare what you want
+as `KeramosRelease` custom resources, and a long-running controller process
+reconciles the cluster to match them.
 
-## When to use it
+The workflow has three parts, one per subcommand:
 
-Use when running keramos as a Kubernetes-native operator. Most users will not run this — it is the building block behind GitOps engines that bridge a Git repo to keramos-managed releases.
+```
+controller crd          — print the KeramosRelease CRD definition
+controller install-crd  — register that CRD in the cluster
+controller run          — start the reconcile loop that acts on KeramosReleases
+```
+
+Once the CRD is installed and the loop is running, you (or a GitOps engine)
+create a `KeramosRelease` object like this:
+
+```yaml
+apiVersion: keramos.dev/v1
+kind: KeramosRelease
+metadata:
+  name: web
+  namespace: apps
+spec:
+  package: web            # path under the controller's --package-root
+  releaseName: web        # optional; defaults to metadata.name
+  profile: prod           # optional
+  values:                 # optional inline values
+    replicas: 3
+```
+
+On its next tick the controller renders that package, installs or upgrades the
+release, and writes the result back to the object's `status` (phase, message,
+revision). Edit the `KeramosRelease` and the controller reconciles again; a CR it
+has already applied and that has not changed is skipped.
+
+## Subcommands
+
+| Command | Description |
+|---|---|
+| [`crd`](controller-crd.md) | Print the KeramosRelease CRD YAML to stdout |
+| [`install-crd`](controller-install-crd.md) | Apply the KeramosRelease CRD to the cluster |
+| [`run`](controller-run.md) | Run the reconcile loop in the foreground |
 
 ## Usage
 
@@ -14,46 +51,15 @@ Use when running keramos as a Kubernetes-native operator. Most users will not ru
 keramos controller [command]
 ```
 
-## Subcommands
-
-- [`keramos controller install-crd`](controller-install-crd.md) — Apply the KeramosRelease CRD to the cluster
-- [`keramos controller run`](controller-run.md) — Run the KeramosRelease reconciler in the foreground
-
-## Flags
-
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | — | — | help for controller |
-
-## Persistent flags inherited from `keramos`
-
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Install the KeramosRelease CRD:
+Bring the operator up in the usual order:
 
 ```sh
-keramos controller install-crd
-```
-
-Print the CRD definition:
-
-```sh
-keramos controller crd
-```
-
-Run the reconciliation loop:
-
-```sh
-keramos controller run
+keramos controller install-crd      # once per cluster
+keramos controller run              # long-running; deploy it as a Deployment
 ```
 
 ## See also
 
-- [`keramos-releases.yaml` reference](../reference/keramos-releases-yaml.md)
+- [`install`](install.md) — the one-shot install the controller runs for you
+- [`upgrade`](upgrade.md) — the one-shot upgrade the controller runs for you
+- [`reconcile`](reconcile.md) — manually converge a single release

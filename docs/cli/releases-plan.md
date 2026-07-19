@@ -2,19 +2,26 @@
 
 ## Synopsis
 
-`keramos releases plan` reads `keramos-releases.yaml` and prints the topological order in which `keramos releases install` or `keramos releases upgrade` would process the declared releases. The output groups releases by Kahn level — releases at the same level have no inter-dependencies among themselves and are issued before the next level begins. No changes are made to the cluster; the command is read-only and offline.
+`keramos releases plan` reads your `keramos-releases.yaml` and prints the order in
+which the releases would be applied — a numbered list, dependencies before
+dependents. It touches nothing: no cluster, no writes. It is the dry preview
+you run before `install` or `upgrade`.
 
 ## When to use it
 
-Run before `install` / `upgrade` to confirm the dependency resolution is what you expect, especially after adding or modifying `dependsOn` entries. Useful in CI as a sanity step (`keramos releases plan` exits 0 when the file parses; non-zero on cycles or unknown references).
+- Before an install or upgrade, to confirm the order is what you expect —
+  especially after editing `dependsOn`.
+- As a CI sanity check: `plan` exits non-zero if the file has a dependency
+  cycle or names an unknown release, so a broken spec fails fast.
 
-## What happens when you run it
+## What happens
 
-1. Reads `--file` (default `keramos-releases.yaml`) from the current directory.
-2. Builds the dependency graph from each entry's `dependsOn` list.
-3. Runs Kahn's algorithm to produce a level grouping; cycles produce a clear error naming the involved releases.
-4. Prints the resulting plan to stdout.
-5. No cluster contact, no file writes.
+1. Reads the spec file (`--file`, default `keramos-releases.yaml`).
+2. Builds the dependency graph from each entry's `dependsOn`.
+3. Sorts it into apply order (dependencies first; independent releases by
+   name). A cycle or an unknown `dependsOn` name stops here with an error.
+4. Prints the order as a numbered list — `N. name (package) ns=namespace` —
+   and exits. No cluster is contacted.
 
 ## Usage
 
@@ -24,44 +31,57 @@ keramos releases plan [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
+| Flag | Type | Default | Effect |
 |---|---|---|---|
-| `--file` | string | keramos-releases.yaml | spec file path |
-| `-h, --help` | bool | false | help for plan |
+| `--file` | string | `keramos-releases.yaml` | read the spec from this path instead of the default |
 
-## Persistent flags inherited from `keramos`
+Inherits the global flags. `plan` reads only the file, so the cluster flags
+(`--kube-context`, `--kubeconfig`, `-n`) have no effect on it.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
+**INPUT** — `keramos-releases.yaml`. `api` depends on both `postgres` and
+`redis`; the two datastores depend on nothing:
 
-Print the plan for the default `keramos-releases.yaml` in the current directory:
+```yaml
+releases:
+  - name: postgres
+    package: ./charts/postgres
+    namespace: data
+
+  - name: redis
+    package: ./charts/redis
+    namespace: data
+
+  - name: api
+    package: ./charts/api
+    namespace: apps
+    dependsOn:
+      - postgres
+      - redis
+```
+
+**COMMAND:**
 
 ```sh
 keramos releases plan
 ```
 
-Plan from a custom-named manifest:
+**OUTPUT:**
 
-```sh
-keramos releases plan --file ./platform.releases.yaml
+```
+1. postgres (./charts/postgres) ns=data
+2. redis (./charts/redis) ns=data
+3. api (./charts/api) ns=apps
 ```
 
-CI sanity check — fail the build if the plan can't be computed:
-
-```sh
-keramos releases plan --file ./keramos-releases.yaml || exit 1
-```
+Reading it back to the input: `postgres` and `redis` have no dependency on each
+other, so they come first, ordered by name; `api` lists both in `dependsOn`, so
+it is placed after both. That is exactly the order `keramos releases install` and
+`keramos releases upgrade` follow.
 
 ## See also
 
-- [`releases`](releases.md)
-- [`releases install`](releases-install.md)
-- [`releases upgrade`](releases-upgrade.md)
-- [`keramos-releases.yaml` reference](../reference/keramos-releases-yaml.md)
-- [Cross-release dependencies guide](../guides/releases.md)
+- [`releases`](releases.md) — the parent command and the spec-file format
+- [`install`](releases-install.md) — apply the set in this order
+- [`upgrade`](releases-upgrade.md) — upgrade the set in this order

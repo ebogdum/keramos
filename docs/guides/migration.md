@@ -1,111 +1,186 @@
-# Migrate a Helm chart to a keramos package — Helm to keramos conversion guide
+# Migrate a Helm chart to a keramos package
 
-This guide walks through converting (migrating) an existing **Helm chart** into a **keramos package** using the `keramos migrate` command. If you're searching for a **Helm chart converter**, **Helm chart migration tool**, or **how to import a Helm chart into keramos**, you're in the right place.
+`keramos migrate` converts an existing **Helm chart** directory into a **keramos
+package**: it walks the chart (`Chart.yaml`, `templates/`, `values.yaml`,
+`crds/`, `_helpers.tpl`, `NOTES.txt`) and emits an equivalent keramos package,
+rewriting Go-template constructs to keramos's `${...}` expressions where it can.
+Anything it cannot translate cleanly is flagged for manual review.
 
-The `keramos migrate` command translates a Helm chart directory into a keramos package: it walks the Helm chart structure (`Chart.yaml`, `templates/`, `values.yaml`, `crds/`, `_helpers.tpl`, `NOTES.txt`, `requirements.yaml`/`Chart.lock`) and emits an equivalent keramos package, rewriting go-template constructs to keramos's `${...}` expressions where possible. Constructs the migrator can't translate cleanly are flagged in a `keramos-migration.md` review report inside the output directory.
-
-The companion `keramos helm-compat` command provides the inverse direction: rendering a keramos package as a Helm-compatible artifact for downstream tooling that consumes Helm output (e.g. `helm template`-driven CI gates, Helm-aware OCI scanners, GitOps tools that only know Helm).
-
-> **Glossary search hooks:** "Helm to keramos migration", "convert Helm chart", "Helm chart to keramos package", "Helm migrator", "Helm chart converter", "import Helm chart into keramos", "Helm-compat keramos", "Helm chart keramos replacement".
+The command reference is [`keramos migrate`](../cli/migrate.md). The companion
+[`keramos helm-compat`](../cli/helm-compat.md) runs an unmodified Helm chart under
+keramos without converting it, and exports a keramos package back into Helm's layout.
 
 ## When to migrate
 
-You have an upstream Helm chart you want to install through keramos, **and** any of:
+Migrate when you want to **own** an upstream chart as a keramos package long-term
+and any of these apply:
 
-- You want keramos's expression syntax instead of go-templates with sprig.
+- You want keramos's `${...}` expressions instead of Go-templates with sprig.
 - You want keramos's ownership labels, drift detection, audit trail, and signing.
-- You want to slot the upstream chart into a keramos workspace alongside keramos-native packages.
+- You want to slot the chart into a keramos workspace beside keramos-native packages.
 
-If you only need a one-shot install of an upstream chart, you don't need migration — `keramos install` accepts a Helm chart's tarball or directory directly via the compatibility layer (`keramos helm-compat install`).
+If you only need to run an upstream chart as-is, you do not need migration —
+`keramos helm-compat install` renders and installs the unmodified chart under a
+keramos release record.
 
-Migration is for **owning** the package long-term.
+## Size the job first
 
-## The migrator's job
+Before converting, `keramos helm-compat report` counts the Go-template logic in a
+chart so you can gauge the work:
 
-`keramos migrate` walks a Helm chart directory and produces a keramos package directory:
+```sh
+keramos helm-compat report ./redis
+```
+
+```json
+{
+  "chart": "redis",
+  "templates": 4,
+  "goTemplateBlocks": 36,
+  "notes": [
+    "_helpers.tpl: 7 Go-template blocks (run 'keramos migrate' to translate)",
+    "deployment.yaml: 21 Go-template blocks (run 'keramos migrate' to translate)"
+  ],
+  "recommendations": [
+    "Run 'keramos migrate ./redis' to translate go-template blocks to keramos's ${...} syntax"
+  ]
+}
+```
+
+A chart with few `{{ ... }}` blocks converts with little effort; one packed with
+them needs more review afterward.
+
+## What the migrator produces
 
 | Helm input | keramos output |
 |---|---|
-| `Chart.yaml` | `keramos.yaml` (with `apiVersion: keramos/v1`, layers translated, dependencies translated) |
-| `values.yaml` | `values.yaml` (unchanged) |
-| `values.schema.json` | `values.schema.json` (unchanged) |
+| `Chart.yaml` | `keramos.yaml` (`apiVersion: keramos/v1`, layers/dependencies translated) |
+| `values.yaml` | `values.yaml` |
+| `values.schema.json` | `values.schema.json` |
 | `templates/*.yaml` | `templates/*.yaml` (template body rewritten where possible) |
-| `templates/_helpers.tpl` | `templates/_helpers.yaml` (named templates → keramos `${define}` partials) |
-| `templates/NOTES.txt` | `notes.yaml` |
-| `crds/*.yaml` | `crds/*.yaml` (unchanged) |
-| `Chart.lock` | `keramos.lock` |
-| `requirements.yaml` (Helm v2) | layers entries in `keramos.yaml` |
+| `templates/_helpers.tpl` | `templates/_helpers.yaml` (named-template partials) |
+| `templates/NOTES.txt` | `templates/notes.yaml` |
+| `templates/tests/*` | `tests/*` |
+| `crds/*.yaml` | `crds/*.yaml` |
 
-Inside templates, the migrator translates a curated set of go-template constructs to keramos expressions:
+Inside templates it rewrites a curated set of Go-template constructs to keramos
+expressions — for example:
 
 | Go-template | keramos |
 |---|---|
 | `{{ .Values.x }}` | `${values.x}` |
 | `{{ .Release.Name }}` | `${release.name}` |
-| `{{ if .Values.enabled }}` ... `{{ end }}` | `${if .Values.enabled}` ... `${end}` |
-| `{{ range .Values.items }}` ... `{{ end }}` | `${range .Values.items}` ... `${end}` |
-| `{{ toYaml .Values.x | nindent 4 }}` | `${values.x | toYaml | nindent 4}` |
-| `{{ printf "%s-%s" $a $b }}` | `${printf "%s-%s" $a $b}` |
-| `{{ tpl .Values.foo . }}` | `${tpl .Values.foo}` |
-| `{{ lookup "v1" "Secret" "default" "x" }}` | `${lookup "v1" "Secret" "default" "x"}` |
+| `{{ if .Values.enabled }}` … `{{ end }}` | `${if .Values.enabled}` … `${end}` |
+| `{{ range .Values.items }}` … `{{ end }}` | `${range .Values.items}` … `${end}` |
 | `{{ include "named" . }}` | `${include "named"}` |
-| `{{ index .Values "foo" "bar" }}` | `${get .Values "foo" "bar"}` |
+| `{{ toYaml .Values.x \| nindent 4 }}` | `${values.x \| toYaml \| nindent 4}` |
 
-Conditional blocks, range blocks, and sprig functions (math, string, regex, date, crypto, etc.) are passed through with keramos's equivalents — keramos's expression engine implements every sprig function the migrator can't otherwise translate.
+Constructs it cannot translate cleanly — some multi-variable `with`/`range`
+forms, heavily nested conditionals around YAML structure, or calls to functions
+keramos does not implement — are left unchanged and listed for manual review.
 
-## Things the migrator can't translate
+## Convert
 
-When the migrator finds a construct it can't translate cleanly, it emits the original token unchanged AND adds an entry to the migration's review list:
-
-- `{{ with $foo := ... }}` over multiple variables.
-- `{{ range $i, $e := ... }}` with explicit index naming.
-- Heavily nested conditionals around YAML structure (which sometimes break a 1:1 line translation).
-- Calls to functions keramos doesn't implement (rare; the migrator names them).
-
-## Workflow
+Point `keramos migrate` at the chart. The package is written into `-o/--output`
+(default `<chart-name>-keramos/`); the conversion report prints to stdout — there
+is no separate report file:
 
 ```sh
-keramos migrate ./upstream-chart -d ./migrated/
-# walks upstream-chart, writes ./migrated/<chart-name>/...
-keramos lint ./migrated/<chart-name>
-# review keramos-migration.md inside the output:
-cat ./migrated/<chart-name>/keramos-migration.md
+keramos migrate ./redis -o ./redis-keramos
 ```
 
-The `keramos-migration.md` report lists:
+```
+Output: ./redis-keramos
+Converted 8 files:
+  - keramos.yaml
+  - values.yaml
+  - templates/_helpers.yaml
+  - templates/deployment.yaml
+  - templates/service.yaml
+  - tests/test-connection.yaml
+  - templates/notes.yaml
+  - .keramosignore
 
-- What the migrator did automatically.
-- What it left for manual review (with file + line references).
-- Warnings (deprecated fields, ambiguous translations).
+Migration complete.
+```
 
-## Iteration
+When a construct needs a human, the report names the file, line, and reason
+before `Migration complete.`:
 
-The migrator is deterministic and idempotent — re-running on the same input produces the same output. It's safe to:
+```
+Items requiring manual review (1):
+  templates/deployment.yaml:24 — unsupported Helm function 'lookup'
+    {{- $existing := lookup "v1" "Secret" .Release.Namespace "redis" }}
+```
 
-1. Run `keramos migrate` to get a starting point.
-2. Hand-edit the output to clean up review items.
-3. Commit.
-4. Re-run later when the upstream chart releases a new version, diff the output, and apply the upstream changes selectively.
+Use `--dry-run` to see the report without writing anything, or `--strict` to
+fail the command on any template that cannot be fully auto-converted (useful as
+a CI gate).
 
-## Compatibility layer (the inverse)
-
-`keramos helm-compat` exposes keramos packages to Helm-aware tooling:
+## Review and finish
 
 ```sh
-keramos helm-compat template my-app ./my-pkg                # Helm-shaped manifest output
-keramos helm-compat export ./my-pkg -d ./helm-export/       # writes a Helm chart skeleton
+ls ./redis-keramos
 ```
 
-This is useful when CI runs `helm-diff`, `helm-conftest`, or `helm-secrets`-style tools and you want keramos to look like the Helm chart it would have been. The export is best-effort — keramos's `${...}` expressions may end up as inert literal strings in the exported chart, so the export is suitable for static analysis but not for actual Helm install.
+```
+keramos.yaml  values.yaml  templates/  tests/  .keramosignore
+```
+
+Lint the result, then resolve any flagged items by hand:
+
+```sh
+keramos lint ./redis-keramos
+```
+
+The migrator is deterministic and idempotent — re-running on the same input
+produces the same output — so the workflow is: migrate, hand-edit the review
+items, commit, then re-migrate when the upstream chart releases a new version
+and diff to apply the changes.
+
+## The inverse: expose a keramos package to Helm tooling
+
+`keramos helm-compat` also runs the other direction, for CI or GitOps tools that
+only understand Helm:
+
+```sh
+# Render an unmodified Helm chart to manifests (like `helm template`):
+keramos helm-compat render ./redis
+
+# Install an unmodified Helm chart under a keramos release record:
+keramos helm-compat install redis ./redis -n data
+
+# Export a keramos package AS a Helm v3 chart:
+keramos helm-compat export ./my-pkg --out ./helm-export
+```
+
+```
+exported helm-compat chart to ./helm-export
+```
+
+`export` writes a `Chart.yaml` (`apiVersion: v2`) plus the copied `values.yaml`
+and `templates/` tree. It is best-effort: keramos's `${...}` expressions are copied
+verbatim and resolve only under keramos, so the exported chart is suitable for
+static analysis, not for `helm install`. To hand Helm fully rendered manifests,
+pre-render with `keramos template` and ship the output.
 
 ## Limits
 
-The migrator is **template translation**, not behaviour translation. If the upstream chart relies on:
+`keramos migrate` is **template translation**, not behaviour emulation:
 
-- A specific Helm release-name format used by clients later (`my-release-redis-master`), the migrated keramos package generates the same names (release name interpolation works the same way), but workflow tooling that scrapes the release record may need updates.
-- The Helm release Secret schema (`sh.helm.release.v1.<release>.v<rev>`), keramos's Secret schema differs (`keramos.v1.<release>.v<rev>` with keramos-specific labels). Tools reading Helm releases directly need updating; `keramos helm-compat list` returns the keramos-style data.
-- A specific Helm-only test pattern (`helm test` with `helm.sh/hook: test`), `keramos migrate` rewrites it to `$hook: test` with keramos's lifecycle.
+- Release-name interpolation works the same way, so generated resource names
+  match — but tooling that scrapes keramos's release records reads a keramos-specific
+  schema, not Helm's `sh.helm.release.v1...` secrets.
+- Helm's `helm.sh/hook: test` test pattern is rewritten to keramos's lifecycle.
 
-## Summary
+The goal is a working keramos package you then own and maintain — not to run Helm
+under keramos forever.
 
-`keramos migrate` exists because most Kubernetes packages today are Helm charts and there's no point making users rewrite from scratch. It's a translation tool, not a 1:1 emulator — the goal is to land a working keramos package that you then own, not to run Helm under keramos forever.
+## See also
+
+- [`keramos migrate`](../cli/migrate.md) — command reference
+- [`keramos helm-compat`](../cli/helm-compat.md) — render/install/export/report
+- [`keramos helm-compat export`](../cli/helm-compat-export.md) ·
+  [`keramos helm-compat report`](../cli/helm-compat-report.md)
+- [`keramos lint`](../cli/lint.md) — validate the converted package
+- [Workspaces](workspaces.md) — slot the migrated package into a workspace

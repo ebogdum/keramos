@@ -1,66 +1,69 @@
 # keramos show all
 
-## Synopsis
-
-`keramos show all` prints the package's metadata (`keramos.yaml`), default values (`values.yaml`), and README in one combined document. Convenient when surveying an unfamiliar package: you see identity, configuration surface, and human documentation without running three separate commands.
+`keramos show all` prints a package's chart metadata, default values, and README
+in one document.
 
 ## When to use it
 
-Use as a one-shot inspection of a package directory you don't yet know — typically a freshly-pulled package or one a teammate handed you. For just one slice (chart only, values only, README only), use the dedicated subcommand.
+- Survey an unfamiliar package's identity, configuration surface, and docs in a
+  single command.
+- Review a freshly pulled package before installing it.
 
-## What happens when you run it
+## What happens
 
-1. Reads `<package-path>/keramos.yaml`, `<package-path>/values.yaml`, and `<package-path>/README.md`.
-2. Concatenates them with `---` separators.
-3. Prints to stdout.
-4. No cluster contact, no network access.
+1. Loads the package metadata from `keramos.yaml` and prints it under a `# Chart`
+   heading.
+2. Prints `values.yaml`, when present, under a `# Values` heading.
+3. Prints the first of `README.md` / `README.txt` / `README`, when present,
+   under a `# README` heading.
+
+Missing values or README sections are skipped; only `keramos.yaml` is required.
+No cluster is contacted.
 
 ## Usage
 
 ```
-keramos show all <package-path> [flags]
+keramos show all <package-path>
 ```
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for all |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+**INPUT** — the `webapp` package on disk:
 
-## Examples
-
-Inspect a local package directory:
-
-```sh
-keramos show all ./my-app
+```
+webapp/keramos.yaml     apiVersion: keramos/v1, name: webapp, version: 2.1.0
+webapp/values.yaml   name: webapp, replicas: 2
+webapp/README.md     "# webapp\n\nInstall notes for the webapp package."
 ```
 
-Pull a package and inspect it before installing:
+**OUTPUT** (`keramos show all webapp`) — the three files combined under headings:
 
-```sh
-keramos pull my-app --repo https://charts.example.com --version 1.2.3 -d ./pulled --untar
-keramos show all ./pulled/my-app
+```
+# Chart
+apiVersion: keramos/v1
+name: webapp
+version: 2.1.0
+
+# Values
+name: webapp
+replicas: 2
+
+# README
+# webapp
+
+Install notes for the webapp package.
 ```
 
-Pipe to a pager for browsing:
-
-```sh
-keramos show all ./my-app | less
-```
+Each heading maps to one source file, so you read the whole package top to
+bottom. For a single slice, use the dedicated subcommand.
 
 ## See also
 
-- [`show`](show.md)
-- [`show chart`](show-chart.md)
-- [`show values`](show-values.md)
-- [`show readme`](show-readme.md)
-- [`show crds`](show-crds.md)
+- [`show`](show.md) — the show command index
+- [`show chart`](show-chart.md) — chart metadata only
+- [`show values`](show-values.md) — default values only
+- [`show readme`](show-readme.md) — README only

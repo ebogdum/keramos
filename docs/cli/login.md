@@ -1,19 +1,29 @@
 # keramos login
 
-## Synopsis
-
-`keramos login` stores credentials for a package registry. The credentials are saved in `~/.config/keramos/credentials.json` keyed by host; subsequent `keramos pull`, `keramos install`, `keramos push` commands use them transparently.
+Store credentials for a package registry so later pushes and pulls to that
+host authenticate automatically.
 
 ## When to use it
 
-Use when first interacting with a private repository or to refresh credentials on an existing one. For OCI registries specifically, prefer `keramos registry login` which is symmetric with `keramos registry logout`.
+- Before you `keramos publish`, `keramos pull`, or `keramos registry push` against a
+  registry that requires authentication.
+- Once per host — the credential is saved and reused until you `keramos logout`.
+- To record, per host, that you accept an untrusted transport (`--insecure`).
 
-## What happens when you run it
+## What happens
 
-1. Prompts for username/password if not supplied (interactive mode).
-2. Validates credentials by attempting authentication against the host.
-3. Stores the credential bundle (basic auth, bearer token, or API key) in `~/.config/keramos/credentials.json`, keyed by host.
-4. Subsequent commands targeting that host pick up the credentials transparently.
+1. You give a `<host>` (e.g. `registry.example.com`) and one credential: a
+   username/password pair, a bearer `--token`, or an `--api-key`.
+2. keramos writes the credential to `~/.config/keramos/credentials.json`, keyed by
+   host. The file is created mode `0600` and its parent directory `0700`, so
+   other users on the machine cannot read it.
+3. It prints `Login succeeded for <host>`.
+4. From then on, commands that talk to that host (`publish`, `pull`,
+   `registry push`/`pull`) attach the stored credential — you do not pass it
+   again.
+
+Supply exactly one credential type. If more than one is given, keramos uses the
+bearer token first, then the API key, then basic auth.
 
 ## Usage
 
@@ -25,57 +35,51 @@ keramos login <host> [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--api-key` | string | — | API key |
-| `-h, --help` | — | — | help for login |
-| `--insecure` | — | — | allow plaintext connections (credential storage is unchanged) |
-| `-p, --password` | string | — | registry password (basic auth) |
-| `--password-stdin` | — | — | read password from stdin (mutually exclusive with --password) |
-| `--token` | string | — | bearer token |
-| `-u, --username` | string | — | registry username (basic auth) |
+| `-u, --username` | string | — | username for basic auth; pair with `--password` |
+| `-p, --password` | string | — | password for basic auth |
+| `--password-stdin` | — | — | read the password from stdin instead of `--password` (the two are mutually exclusive) — keeps it out of shell history and process listings |
+| `--token` | string | — | bearer token, sent as `Authorization: Bearer <token>` |
+| `--api-key` | string | — | API key credential |
+| `--insecure` | — | — | record that this host may be reached over an untrusted transport (skip TLS verification / allow plain HTTP) |
 
-## Persistent flags inherited from `keramos`
+Relevant global flags:
 
 | Flag | Type | Description |
 |---|---|---|
+| `--allow-plaintext-auth` | — | permit sending credentials over plaintext HTTP; otherwise keramos refuses |
 | `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
 
-## Examples
+## Worked example
 
-Log in to an HTTP repo:
+Log in with basic auth, then publish — the upload authenticates with no extra
+flags:
 
 ```sh
-keramos login charts.example.com
+keramos login registry.example.com -u alice -p s3cret
 ```
 
-Log in non-interactively for CI (basic auth):
-
-```sh
-keramos login charts.example.com --username ci --password "$REPO_TOKEN"
+```
+Login succeeded for registry.example.com
 ```
 
-Log in with a bearer token:
-
 ```sh
-keramos login charts.example.com --token "$BEARER_TOKEN"
+keramos publish ./my-app-1.0.0.keramos.tgz --repo https://registry.example.com
 ```
 
-Log in with an API key:
-
-```sh
-keramos login charts.example.com --api-key "$API_KEY"
+```
+Published my-app@1.0.0 to https://registry.example.com
 ```
 
-Read password from stdin (avoids exposing it in process listings):
+Keep the password off the command line by piping it in:
 
 ```sh
-echo "$REPO_TOKEN" | keramos login charts.example.com -u ci --password-stdin
+echo "$REGISTRY_PASSWORD" | keramos login registry.example.com -u alice --password-stdin
 ```
 
 ## See also
 
-- [`logout`](logout.md)
+- [`logout`](logout.md) — remove the stored credential
+- [`publish`](publish.md) — upload an archive to a registry
+- [`pull`](pull.md) — download a chart from a repository
+- [`install`](install.md)
 - [`registry`](registry.md)
-- [Repositories guide](../guides/repositories.md)

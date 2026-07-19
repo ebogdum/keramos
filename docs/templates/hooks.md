@@ -1,34 +1,91 @@
 # Hooks in templates
 
-A hook is a Job- or Pod-shaped manifest that keramos runs at a specific lifecycle point. Hooks live under `hooks/` (or `tests/`) in a package; the YAML files use the same template engine as `templates/` — every `${...}` expression and every YAML control-flow directive works. The difference from a regular template is that the manifest carries `$`-prefixed directives at the top level that keramos strips before applying.
+A hook is a Job- or Pod-shaped manifest that keramos runs at a specific lifecycle
+point. Hooks live in a package's `hooks/` directory and are rendered by the same
+engine as `templates/` — every `${...}` expression and control-flow directive
+works. What makes a file a hook is its location and its lifecycle phase, plus
+optional `$`-prefixed directives that keramos strips before applying.
 
-For the broader picture (when each event fires, weight ordering, delete policies), see the [Hooks guide](../guides/hooks.md).
+For when each event fires and how ordering and delete policies play out at
+runtime, see the [Hooks guide](../guides/hooks.md).
 
-## Top-level directives
+## The phase comes from the filename
 
-| Directive | Type | Required | Description |
+Name a hook file after its lifecycle event and keramos picks the phase up from the
+name — no directive required:
+
+```
+hooks/pre-install.yaml
+hooks/post-upgrade.yaml
+hooks/pre-install-10.yaml   # a numeric suffix is allowed
+```
+
+The valid phases are:
+
+| Phase | Fires |
+|---|---|
+| `pre-install` / `post-install` | around install |
+| `pre-upgrade` / `post-upgrade` | around upgrade |
+| `pre-delete` / `post-delete` | around uninstall |
+| `pre-rollback` / `post-rollback` | around rollback |
+
+Each file targets **one** phase. To run the same work before install *and*
+before upgrade, ship two files (or share the body through an `$include`
+partial).
+
+## The `$hook` directive
+
+Add a `$hook` directive only when you need to set weight, delete policy, or
+timeout, or when the filename doesn't convey the phase. Two forms:
+
+**Map form** — everything in one place:
+
+```yaml
+$hook:
+  phase: pre-install
+  weight: 5
+  deletePolicy: hook-succeeded
+  timeout: 5m
+```
+
+**String form** with flat siblings:
+
+```yaml
+$hook: pre-install
+$hookWeight: 5
+$hookDeletePolicy: hook-succeeded
+$hookTimeout: 5m
+```
+
+| Field | Type | Default | Meaning |
 |---|---|---|---|
-| `$hook` | string (comma list) | yes | Events to participate in. |
-| `$weight` | integer | no | Order within an event. Default `0`. Lower runs first. |
-| `$delete-policy` | string (comma list) | no | When to delete the hook resource. Default `before-hook-creation`. |
-| `$timeout` | duration string | no | Per-hook timeout. Default = `--timeout`. |
-| `$preserve-on-uninstall` | bool | no | Keep the hook after release uninstall. Defaults to `true` for tests. |
+| `phase` | string | filename | one lifecycle event |
+| `weight` | int | `0` | order within a phase; lower runs first |
+| `deletePolicy` | string | none | when to delete the hook resource |
+| `timeout` | duration | `5m` | how long to wait for the hook |
 
-Directives sit at the top of the YAML document; they are stripped before the manifest is sent to the cluster.
+`deletePolicy` takes **one** value (not a list):
 
-## Minimal hook
+- `before-hook-creation` — delete a prior instance before creating this one.
+- `hook-succeeded` — delete after the hook succeeds.
+- `hook-failed` — delete after the hook fails.
 
-**Input — `hooks/post-install.yaml`:**
+With no policy set, keramos keeps the hook resource. Directives are stripped before
+the manifest is applied.
+
+## A migration hook
+
+**`hooks/post-install.yaml`:**
 
 ```yaml
 $hook: post-install
-$weight: 5
-$delete-policy: hook-succeeded
+$hookWeight: 5
+$hookDeletePolicy: hook-succeeded
 
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ${release.name}-migrate
+  name: ${release.name}-migrate-${release.revision}
 spec:
   template:
     spec:
@@ -36,36 +93,38 @@ spec:
       containers:
         - name: migrate
           image: ${values.image.repository}:${values.image.tag}
-          command: ["/migrate.sh"]
+          command: ["/app/migrate", "--idempotent"]
 ```
 
-**What keramos does at install time:**
-
-1. Render `templates/` and apply.
-2. After the manifest is Ready, render `hooks/post-install.yaml`.
-3. Strip `$hook`, `$weight`, `$delete-policy`.
-4. Apply the resulting `Job`.
-5. Wait for the Job to complete (or hit `$timeout`).
-6. On success: per `hook-succeeded`, delete the Job.
-
-## Multiple events on one hook
+**Rendered body** (`--release-name hello`, `image: {repository: myapp, tag: 1.4.2}`):
 
 ```yaml
-$hook: pre-install,pre-upgrade
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hello-migrate-1
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: myapp:1.4.2
+          command: ["/app/migrate", "--idempotent"]
 ```
 
-Same hook fires before install AND before upgrade. The body is identical. Useful for "always-run-before-mutation" hooks.
+At install time keramos renders the file, strips the directives, applies the Job,
+waits for it to complete (or hit `timeout`), then deletes it per
+`hook-succeeded`.
 
-## Multi-document files
+## Multi-document hook files
 
-A hook file can have multiple YAML documents. The first document carries the directives; subsequent docs share them.
-
-**`hooks/migrate.yaml`:**
+A hook file can hold several YAML documents. Put the `$hook` directive on one
+document; all documents in the file share the phase and run together.
 
 ```yaml
 $hook: pre-install
-$weight: 5
-$delete-policy: hook-succeeded
+$hookDeletePolicy: hook-succeeded
 
 apiVersion: v1
 kind: ConfigMap
@@ -88,27 +147,45 @@ spec:
         - name: migrate
           image: postgres:16
           command: [/scripts/migrate.sh]
-          volumeMounts:
-            - name: scripts
-              mountPath: /scripts
-      volumes:
-        - name: scripts
-          configMap:
-            name: ${release.name}-migrate-script
 ```
 
-Both the ConfigMap and the Job are treated as part of the same hook; the ConfigMap is applied first (because keramos's resource ordering puts it before workloads), the Job runs against it, then both are deleted on success.
+## Rendering inside hooks
 
-## Test hooks
-
-Test hooks fire only when the operator runs `keramos test <release>` — not during install or upgrade. The convention is `tests/<name>.yaml`, which is shorthand for `hooks/<name>.yaml` with `$hook: test`.
-
-**Input — `tests/connection.yaml`:**
+Hooks use the full engine — `${...}`, `$if`, `$each`, `$switch`, and `$include`
+all behave as in `templates/`:
 
 ```yaml
-$hook: test
-$delete-policy: hook-succeeded
+$hook: pre-install
+$hookWeight: 1
+$hookDeletePolicy: hook-succeeded
 
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${release.name}-precheck
+  labels:
+    $include: common.labels
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        $each: ${values.precheck.containers}
+        $yield:
+          name: ${$item.name}
+          image: ${$item.image}
+```
+
+## Tests
+
+Tests are a separate mechanism from hooks. Test manifests live in the `tests/`
+directory, are rendered and stored when you install or upgrade, and run only
+when you invoke `keramos test <release>` — never during install or upgrade. A test
+is a plain Pod or Job manifest; no `$hook` directive is involved.
+
+**`tests/connection.yaml`:**
+
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -121,171 +198,40 @@ spec:
       command:
         - sh
         - -c
-        - |
-          curl -fsS http://${release.name}.${release.namespace}.svc.cluster.local/health
+        - curl -fsS http://${release.name}.${release.namespace}.svc.cluster.local/health
 ```
 
-**Operator runs:**
+`keramos test <release>` applies each stored test, waits for its Pod/Job to finish,
+and reports pass or fail from the exit status. Test resources are deleted after
+each run. `keramos test` exits non-zero if any test fails.
 
 ```sh
 keramos test my-app
-# → renders hooks/*.yaml + tests/*.yaml with $hook: test
-# → applies each in weight order
-# → waits for Pod completion
-# → succeed/fail based on container exit code
+keramos test my-app --logs              # print pod logs
+keramos test my-app --filter connection # run tests whose name contains "connection"
+keramos test my-app --parallel 4        # run up to 4 at once
+keramos test my-app -o junit            # human | junit | json
 ```
 
-A non-zero exit from the test container is a test failure. `keramos test` exits non-zero if any test fails.
+## Rollback re-runs a revision's hooks
 
-## Per-revision hooks for rollback
-
-When a rollback re-applies an old revision's manifest, it also re-runs that revision's `pre-rollback` and `post-rollback` hooks — using the hook templates as they were when that revision was installed, not the current ones.
-
-Keramos persists the rendered hook manifests inside each revision's release record:
-
-```
-keramos.v1.<release>.v<rev> Secret
-├── manifest          ← gzipped + base64 rendered manifest
-├── values            ← merged values used
-├── hookTemplates     ← per-revision rendered hook YAMLs (filename → body)
-└── hooks             ← previous run's hook results
-```
-
-This persistence is automatic — package authors don't write any extra YAML — but it shapes how hooks should be designed: **idempotent** (rolling back to v3 will re-run v3's hooks), **self-describing** (hooks should not assume v4's CRDs are installed), and **scoped to their revision** (no global state across revisions).
-
-## Rendering inside hooks
-
-Hook files are rendered by the same engine as `templates/`. So:
-
-```yaml
-$hook: pre-install
-$weight: 1
-$delete-policy: hook-succeeded
-$timeout: 5m
-
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: ${release.name}-${release.revision}-precheck
-  labels:
-    $include: common.labels         # YAML-level partial
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        $each: ${values.precheck.containers}
-        $yield:
-          name: ${$item.name}
-          image: ${$item.image}
-          command: ${$item.command}
-```
-
-`${...}` expressions, `$if`, `$each`, `$switch`, `$include` — all of them work the same way as in regular templates.
-
-## Idioms
-
-### Single-shot DB migration with idempotent script
-
-```yaml
-$hook: post-install,post-upgrade
-$weight: 5
-$delete-policy: hook-succeeded,before-hook-creation
-$timeout: 30m
-
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: ${release.name}-migrate-${release.revision}
-spec:
-  backoffLimit: 0
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: migrate
-          image: ${values.image.repository}:${values.image.tag}
-          command: ["/app/migrate", "--idempotent"]
-          envFrom:
-            - secretRef:
-                name: ${values.database.existingSecret}
-```
-
-The `${release.revision}` in the Job name keeps every revision's migration as its own discoverable artifact (it's deleted by `hook-succeeded`, but if it fails it stays for inspection with the revision number visible).
-
-### Wait-for-prerequisite hook
-
-```yaml
-$hook: pre-install
-$weight: 1
-$delete-policy: before-hook-creation,hook-succeeded
-$timeout: 2m
-
-apiVersion: batch/v1
-kind: Job
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: wait
-          image: bitnami/kubectl:1.28
-          command:
-            - sh
-            - -c
-            - |
-              for i in $(seq 60); do
-                kubectl -n cert-manager get deployment cert-manager -o jsonpath='{.status.readyReplicas}' | grep -q '^[1-9]' && exit 0
-                sleep 2
-              done
-              exit 1
-```
-
-### Backup-before-uninstall (preserved)
-
-```yaml
-$hook: pre-delete
-$weight: 1
-$delete-policy: never               # preserve evidence
-$timeout: 30m
-
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: ${release.name}-backup-${release.revision}
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: backup
-          image: postgres:16
-          command:
-            - sh
-            - -c
-            - |
-              pg_dump $DATABASE_URL > /backup/${release.name}-${HOSTNAME}.sql
-          envFrom:
-            - secretRef:
-                name: ${values.database.existingSecret}
-          volumeMounts:
-            - name: backup
-              mountPath: /backup
-      volumes:
-        - name: backup
-          persistentVolumeClaim:
-            claimName: ${release.name}-backup
-```
-
-`$delete-policy: never` keeps the Job (and the backup PVC) after uninstall — the backup outlives the release.
+Keramos stores each revision's rendered hooks in that revision's release record.
+Rolling back re-applies the old revision *and* re-runs its rollback hooks as
+they were when that revision was installed. Design hooks to be **idempotent**
+and **self-contained** — a rollback to revision 3 replays revision 3's hooks, so
+they must not assume state that only a later revision created.
 
 ## Inspecting hooks
 
 ```sh
-keramos get hooks <release>                  # rendered hook manifests + last results
+keramos get hooks <release>            # rendered hook manifests + last results
 keramos get hooks <release> --revision 3
-keramos history <release>                    # hook outcomes per revision
-keramos status <release>                     # current hook section
+keramos history <release>              # per-revision hook outcomes
+keramos status <release>              # current hook section
 ```
 
-`keramos test --keep <release>` overrides `hook-succeeded` to leave the test artifacts in the cluster for debugging.
+## See also
+
+- [Hooks guide](../guides/hooks.md) — event ordering, delete policies at runtime
+- [Control flow](control-flow.md) — the directives hook bodies use
+- [Expressions](expressions.md) — `${...}` inside hook manifests

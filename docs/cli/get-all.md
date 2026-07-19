@@ -1,77 +1,98 @@
 # keramos get all
 
-## Synopsis
-
-`keramos get all` prints the entire stored release record for a release: metadata (name, namespace, revision, status, package, timestamps, labels), the merged values used at install time, the rendered Kubernetes manifest, the rendered hook manifests with their last-run results, and the rendered notes output. The output is one self-contained document, which is convenient for archiving, triage, or feeding into another process via `--template`.
+`keramos get all` prints the entire stored release record in one document —
+metadata, values, manifest, hooks, and notes together.
 
 ## When to use it
 
-Use when you're triaging a problematic release and want every relevant artefact in one shot instead of running `get manifest`, `get values`, `get hooks`, and `get notes` separately. Also handy for support-bundle generation: pipe the YAML to a file and attach it to an incident ticket.
+- You are triaging a release and want every artefact in one shot instead of
+  running the individual `get` subcommands.
+- You want to render one field out of the record with `--template`.
 
-## What happens when you run it
+## What happens
 
-1. Connects to the cluster using the active kubeconfig.
-2. Reads the release-storage Secret (or ConfigMap) for `<release-name>` in the active namespace at the requested revision (defaults to current).
-3. Decodes the gzipped + base64-encoded payload in-memory.
-4. Renders the resulting struct as YAML, JSON, or via a Go `text/template`.
+It loads the stored release record for `<release>` (latest, or `--revision`) and
+prints a single document combining its metadata (`name`, `namespace`,
+`revision`, `status`, `package`, `info`, `labels`), `values`, `manifest`,
+`hooks`, and `notes`. With `--template`, it runs a Go `text/template` against
+that record instead of printing the whole thing; the record's keys are exposed
+both lower-cased (`.package`) and capitalised (`.Package`) so template snippets
+work either way.
+
+## Flags
+
+| Flag | Cause | Effect |
+|---|---|---|
+| `--revision <n>` | you name a stored revision | reads that revision instead of the latest |
+| `-o, --output <fmt>` | you pass `json` or `yaml` (default `yaml`) | prints the record in that format |
+| `--template <tmpl>` | you pass a Go text/template | renders the template against the record and overrides `--output` |
+
+Inherits the global flags (`-n/--namespace`, `--kube-context`, `--kubeconfig`,
+`--debug`).
 
 ## Usage
 
 ```
-keramos get all <release-name> [flags]
+keramos get all <release> [flags]
 ```
 
-## Flags
+## Worked example
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for all |
-| `-o, --output` | string | yaml | output format: json, yaml |
-| `--revision` | int | 0 | get full record from a specific revision (0 = current) |
-| `--template` | string | "" | Go text/template applied to the release record (overrides --output) |
+Stored record for `hello` (revision 4):
 
-## Persistent flags inherited from `keramos`
+```yaml
+name: hello
+namespace: prod
+revision: 4
+status: deployed
+package:
+  name: hello
+  version: 1.5.0
+values:
+  replicaCount: 3
+manifest: |
+  apiVersion: apps/v1
+  kind: Deployment
+  # ...
+hooks: []
+notes: "Hello is deployed."
+```
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Get the full record for the current revision as YAML:
+Full record as YAML:
 
 ```sh
 keramos get all hello -n prod
 ```
 
-Get the record for revision 3 specifically (what was installed two upgrades ago):
-
-```sh
-keramos get all hello --revision 3 -n prod
+```yaml
+hooks: []
+manifest: |
+  apiVersion: apps/v1
+  kind: Deployment
+  # ...
+name: hello
+namespace: prod
+notes: Hello is deployed.
+package:
+  name: hello
+  version: 1.5.0
+revision: 4
+status: deployed
+values:
+  replicaCount: 3
 ```
 
-Emit JSON for piping into `jq`:
-
-```sh
-keramos get all hello -n prod -o json | jq '.values'
-```
-
-Format the output with a Go text/template — here, just the package name and revision:
+Pull one field out with a template:
 
 ```sh
 keramos get all hello -n prod --template '{{ .package.name }}:{{ .revision }}'
 ```
 
+```
+hello:4
+```
+
 ## See also
 
-- [`get`](get.md)
-- [`get manifest`](get-manifest.md)
-- [`get values`](get-values.md)
-- [`get hooks`](get-hooks.md)
-- [`get metadata`](get-metadata.md)
-- [`get notes`](get-notes.md)
-- [`history`](history.md)
-- [`audit`](audit.md)
+- [`get`](get.md) — the parent command
+- [`get manifest`](get-manifest.md) · [`get values`](get-values.md) · [`get hooks`](get-hooks.md) · [`get metadata`](get-metadata.md) · [`get notes`](get-notes.md) — the individual slices

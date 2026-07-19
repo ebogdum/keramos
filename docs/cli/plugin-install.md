@@ -2,19 +2,34 @@
 
 ## Synopsis
 
-`keramos plugin install` adds a plugin to the local keramos installation. The source can be a git URL (cloned and built in place) or a local directory path. Plugins extend keramos with extra subcommands; once installed, they appear under `keramos <plugin-name>` and `keramos --help` lists them alongside built-in commands.
+`keramos plugin install` adds a plugin so its command becomes available as
+`keramos <plugin-name>`. The source is either a git URL (cloned for you) or a path
+to a local directory (copied in). keramos reads the plugin's `plugin.yaml`, checks
+it, and stores it under `~/.config/keramos/plugins/`.
 
 ## When to use it
 
-Use when you need a keramos subcommand that the core binary does not provide — typically organisation-specific helpers like backup, custom auth flows, or workflow shortcuts. For curated, signed plugins, prefer the `keramos marketplace` flow which pre-verifies provenance before install.
+Use it when you want a keramos command the core binary doesn't ship — an
+organisation helper, a custom auth flow, a workflow shortcut. For curated,
+signed plugins, browse [`keramos marketplace search`](marketplace-search.md) and
+[`verify`](marketplace-verify.md) the archive first.
 
-## What happens when you run it
+## What happens
 
-1. Resolves the source: clones a git URL into the plugin directory, or symlinks/copies a local path.
-2. Reads the plugin's `plugin.yaml` to discover its name, command path, and any post-install hook.
-3. Materialises the plugin under `~/.config/keramos/plugins/<name>/`.
-4. Runs the plugin's install hook if declared.
-5. Subsequent invocations of `keramos <name>` resolve to the plugin.
+1. keramos decides whether `<source>` is a git source. A source ending in `.git`,
+   or starting with `git@`, `git://`, `ssh://`, or `file://`, is treated as git.
+2. For a git source, keramos runs `git clone --depth 1` into
+   `~/.config/keramos/plugins/<name>`, where `<name>` is the last path segment of
+   the URL without `.git`. For a local directory, keramos copies it to
+   `~/.config/keramos/plugins/<name>`, where `<name>` is the directory's name.
+3. keramos reads `plugin.yaml` for the plugin's name, version, description, and the
+   `command` to run. The `command` must be a bare filename in the plugin
+   directory (no slashes).
+4. keramos runs the plugin's install hook if it declares one.
+5. From now on, `keramos <name>` runs the plugin.
+
+If a plugin with that name is already installed, keramos stops and leaves the
+existing one untouched — remove it first to reinstall.
 
 ## Usage
 
@@ -24,44 +39,50 @@ keramos plugin install <source> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for install |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Install from a git URL:
+Install a plugin from a local directory, then confirm it registered:
 
 ```sh
-keramos plugin install https://github.com/example/keramos-backup-plugin.git
+keramos plugin install ./hello
 ```
 
-Install from a local directory (great while developing the plugin):
-
-```sh
-keramos plugin install ./my-plugin
+```
+Installed plugin: hello v1.2.0
 ```
 
-Install a marketplace plugin after verifying it:
+```sh
+keramos plugin list
+```
+
+```
+NAME   VERSION  DESCRIPTION
+hello  1.2.0    Print a friendly greeting
+```
 
 ```sh
-keramos marketplace verify --archive ./backup-plugin.tgz --name backup
-keramos plugin install ./backup-plugin
+keramos hello world
+```
+
+```
+hello from the plugin: world
+```
+
+Install from a git URL instead:
+
+```sh
+keramos plugin install https://github.com/acme/keramos-backup.git
+```
+
+```
+Installed plugin: backup v0.4.0
 ```
 
 ## See also
 
-- [`plugin`](plugin.md)
 - [`plugin list`](plugin-list.md)
 - [`plugin update`](plugin-update.md)
 - [`plugin remove`](plugin-remove.md)
-- [`marketplace`](marketplace.md) — discover and verify signed plugins
+- [`marketplace search`](marketplace-search.md) — discover signed plugins

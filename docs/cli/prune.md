@@ -1,12 +1,31 @@
 # keramos prune
 
-## Synopsis
-
-`keramos prune` deletes superseded revision records, keeping only the most recent N. The current `deployed` revision is always preserved regardless of N. Pruning frees etcd space; it does not affect cluster resources, only the historical record stored in release Secrets.
+`keramos prune` deletes old superseded revisions from a release's history, keeping
+only the most recent N so stored state does not grow without bound.
 
 ## When to use it
 
-Use periodically on long-lived releases that have accumulated dozens or hundreds of revisions. The default `--keep` retains 10. Set higher for releases under heavy CD churn where you need a longer rewind window.
+- A long-lived release under heavy CD churn has piled up dozens of revisions
+  and you want to reclaim stored history.
+- You want to trim every release in a namespace to a fixed rewind window in
+  one command.
+- Run it with `--dry-run` first to see exactly which revisions would go.
+
+## What happens
+
+1. Requires `--keep` to be at least 1; otherwise it errors.
+2. Builds the list of releases to process: the one named by `--release`, or
+   every release in the namespace when `--release` is empty.
+3. For each release, sorts revisions newest-first and keeps the most recent
+   `--keep`. The currently deployed revision is always kept, even if it falls
+   outside that window.
+4. Deletes every remaining older revision record. With `--dry-run` it prints
+   what it would delete and removes nothing.
+5. Prints each pruned revision and a final total.
+
+This trims stored revision history only; live cluster resources are never
+touched. Mutating unless `--dry-run` is set. Requires a reachable cluster to
+read and delete the stored state.
 
 ## Usage
 
@@ -18,10 +37,9 @@ keramos prune [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--dry-run` | — | — | list revisions that would be deleted without deleting them |
-| `-h, --help` | — | — | help for prune |
-| `--keep` | int | 10 | number of recent revisions to retain per release |
-| `--release` | string | — | prune a single release; empty means every release in the namespace |
+| `--keep` | int | 10 | number of most-recent revisions to retain per release; must be at least 1 |
+| `--release` | string | — | prune only this release; empty prunes every release in the namespace |
+| `--dry-run` | — | false | list the revisions that would be deleted without deleting them |
 
 ## Persistent flags inherited from `keramos`
 
@@ -32,26 +50,64 @@ keramos prune [flags]
 | `--kubeconfig` | string | path to kubeconfig file |
 | `-n, --namespace` | string | Kubernetes namespace |
 
-## Examples
+## Worked example — trim a release with a long history
 
-Keep only the 10 most recent revisions of a single release:
-
-```sh
-keramos prune --release my-app --keep 10 -n prod
-```
-
-Dry-run first to see what would be removed:
+**INPUT — a release with many revisions,** the newest deployed:
 
 ```sh
-keramos prune --release my-app --keep 10 --dry-run -n prod
+keramos history mychart -n apps
+# REVISION  STATUS       ...
+# 15        deployed
+# 14        superseded
+# 13        superseded
+# ...
+# 1         superseded
 ```
 
-Prune every release in the namespace to 5 revisions each:
+**Preview a prune down to the last 3, without deleting anything:**
 
 ```sh
-keramos prune --keep 5 -n prod
+keramos prune --release mychart --keep 3 --dry-run -n apps
 ```
+
+**OUTPUT (dry run):**
+
+```
+would prune mychart revision 12 (status=superseded)
+would prune mychart revision 11 (status=superseded)
+...
+would prune mychart revision 1 (status=superseded)
+12 revision(s) pruned
+```
+
+**Run it for real:**
+
+```sh
+keramos prune --release mychart --keep 3 -n apps
+```
+
+**OUTPUT:**
+
+```
+pruned mychart revision 12
+pruned mychart revision 11
+...
+pruned mychart revision 1
+12 revision(s) pruned
+```
+
+**Tracing the output:**
+
+| Output | Cause |
+|---|---|
+| revisions 15, 14, 13 not listed | `--keep 3` retains the three newest |
+| revision 15 kept | it is the deployed revision — always retained |
+| `pruned … revision 12` down to `1` | older superseded revisions beyond the keep window |
+| `12 revision(s) pruned` | 15 revisions minus the 3 kept |
+| `would prune …` (dry run) | `--dry-run` reported the same set but deleted nothing |
 
 ## See also
 
-- [`history`](history.md)
+- [`history`](history.md) — list the revisions prune trims
+- [`uninstall`](uninstall.md) — remove a release and its resources entirely
+- [`rollback`](rollback.md) — revert to a retained revision

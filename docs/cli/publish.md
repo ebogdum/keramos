@@ -1,19 +1,27 @@
 # keramos publish
 
-## Synopsis
-
-`keramos publish` uploads a packaged `.keramos.tgz` archive to a registry. The target is selected by flag — `--repo <url>` for an HTTP API registry, `--oci <ref>` for an OCI distribution-spec registry. For OCI-specific workflows with TLS and plain-HTTP options, prefer `keramos registry push`; `keramos publish` is the multi-target convenience wrapper.
+Upload a packaged `.keramos.tgz` archive to a registry.
 
 ## When to use it
 
-Use as the publication step in CD pipelines. After `keramos package`, run `keramos publish` to push the archive to the destination.
+- As the last step of a release, once `keramos package` has produced an archive.
+- To push to an HTTP API registry (`--repo`) or an OCI registry (`--oci`).
+- In CD: package once, then publish that same file to one or both targets.
 
-## What happens when you run it
+## What happens
 
-1. Reads the archive at `<archive.keramos.tgz>` and extracts its `keramos.yaml` for name and version.
-2. Resolves credentials for the chosen target (HTTP repo creds via `keramos repo add` / `keramos login`; OCI creds via `keramos registry login` or `~/.docker/config.json`).
-3. Uploads the archive — to `<repo>/api/charts` for HTTP repos, or as an OCI artifact tagged with the package version for OCI.
-4. Reports success.
+1. keramos checks that `<archive.keramos.tgz>` exists and ends in `.keramos.tgz`, then
+   reads the `keramos.yaml` inside it to recover the package name and version.
+2. You choose exactly one target: `--repo <url>` or `--oci <ref>`. If you give
+   neither (or both), keramos stops with an error.
+3. For `--repo`, keramos POSTs the archive as a multipart upload to
+   `<url>/v1/packages`, attaching any credential you stored with
+   [`keramos login`](login.md) for that host.
+4. For `--oci`, keramos pushes the archive as an OCI artifact to the reference.
+5. On success it prints `Published <name>@<version> to <target>`.
+
+The upload has a 5-minute timeout. A non-2xx HTTP response fails the command
+and prints the registry's status code and message.
 
 ## Usage
 
@@ -25,44 +33,51 @@ keramos publish <archive.keramos.tgz> [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | bool | false | help for publish |
-| `--oci` | string | "" | OCI registry reference |
-| `--repo` | string | "" | HTTP API registry URL |
+| `--repo` | string | — | HTTP API registry URL; the archive is uploaded to `<url>/v1/packages` |
+| `--oci` | string | — | OCI registry reference to push the archive to |
 
-## Persistent flags inherited from `keramos`
+Relevant global flags:
 
 | Flag | Type | Description |
 |---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| `--allow-plaintext-auth` | — | permit sending credentials over plaintext HTTP |
+| `--oci-plain-http` | — | use plain HTTP for OCI registries |
+| `--oci-insecure-skip-tls-verify` | — | skip TLS verification for OCI registries |
+| `--debug` | — | enable debug output |
 
-## Examples
+## Worked example
 
-Publish to an HTTP API registry:
+Build an archive, then publish it to an HTTP registry:
 
 ```sh
-keramos publish ./build/my-app-1.0.0.keramos.tgz --repo https://charts.example.com
+keramos package ./my-app -d ./build
 ```
 
-Publish to an OCI registry:
+```
+Successfully packaged to: ./build/my-app-1.0.0.keramos.tgz
+```
+
+```sh
+keramos publish ./build/my-app-1.0.0.keramos.tgz --repo https://registry.example.com
+```
+
+```
+Published my-app@1.0.0 to https://registry.example.com
+```
+
+Push the same archive to an OCI registry instead:
 
 ```sh
 keramos publish ./build/my-app-1.0.0.keramos.tgz --oci oci://ghcr.io/example/charts/my-app
 ```
 
-Publish to both targets in a CD job:
-
-```sh
-keramos publish ./build/my-app-1.0.0.keramos.tgz --repo https://charts.example.com
-keramos publish ./build/my-app-1.0.0.keramos.tgz --oci  oci://ghcr.io/example/charts/my-app
+```
+Published my-app@1.0.0 to OCI registry oci://ghcr.io/example/charts/my-app
 ```
 
 ## See also
 
-- [`package`](package.md)
-- [`registry push`](registry-push.md) — OCI with extra flags
-- [`repo`](repo.md)
-- [Repositories guide](../guides/repositories.md)
-- [OCI guide](../guides/oci.md)
+- [`package`](package.md) — build the archive to publish
+- [`login`](login.md) — store the credential the upload uses
+- [`pull`](pull.md) — download a published package
+- [`registry`](registry.md)

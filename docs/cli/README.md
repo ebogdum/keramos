@@ -8,10 +8,13 @@ These apply to every command and can also be set as defaults via environment var
 
 | Flag | Env | Description |
 |---|---|---|
-| `-n, --namespace <ns>` | — | Kubernetes namespace for the operation. |
+| `-n, --namespace <ns>` | `KERAMOS_NAMESPACE` | Kubernetes namespace for the operation. |
 | `--kubeconfig <path>` | `KUBECONFIG` | Path to kubeconfig file. |
 | `--kube-context <name>` | — | Active kubeconfig context. |
 | `--debug` | `KERAMOS_DEBUG` | Enable debug logging. |
+| `--allow-plaintext-auth` | `KERAMOS_ALLOW_PLAINTEXT_AUTH` | Send registry credentials over plaintext HTTP. |
+| `--oci-plain-http` | `KERAMOS_OCI_PLAIN_HTTP` | Use plain HTTP for OCI registries instead of HTTPS. |
+| `--oci-insecure-skip-tls-verify` | `KERAMOS_OCI_INSECURE_SKIP_TLS` | Skip TLS verification for OCI registries. |
 
 ## Environment variables
 
@@ -23,6 +26,7 @@ These apply to every command and can also be set as defaults via environment var
 | `KERAMOS_DEBUG` | Enable debug logging when truthy. |
 | `KERAMOS_OCI_PLAIN_HTTP` | Use HTTP for OCI instead of HTTPS. |
 | `KERAMOS_OCI_INSECURE_SKIP_TLS` | Skip TLS verification for OCI. |
+| `KERAMOS_ALLOW_PLAINTEXT_AUTH` | Allow sending registry credentials over plaintext HTTP. |
 | `KERAMOS_DRIVER` | Release storage driver (`secret`, `configmap`, `memory`, `sql`). Default `secret`. |
 | `KERAMOS_DRIVER_SQL_DSN` | SQL DSN when driver is `sql`. |
 | `KERAMOS_NAMESPACE` (or `HELM_NAMESPACE`) | Default namespace; legacy aliases recognised. |
@@ -53,7 +57,7 @@ Keramos prints both the textual error and the numeric code to stderr; scripts ca
 | [`upgrade`](upgrade.md) | Upgrade an existing release to a new revision. |
 | [`rollback`](rollback.md) | Roll back a release to a previous revision. |
 | [`uninstall`](uninstall.md) | Uninstall a release. |
-| [`status`](status.md) | Show current release status and resource readiness. |
+| [`status`](status.md) | Show a release's current status and revision. |
 | [`list`](list.md) | List releases. |
 | [`history`](history.md) | Show release history. |
 | [`get`](get.md) | Get release details (manifest, values, hooks, notes). |

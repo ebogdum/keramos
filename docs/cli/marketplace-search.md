@@ -2,18 +2,25 @@
 
 ## Synopsis
 
-`keramos marketplace search` lists plugins published to the keramos plugin marketplace. With no keyword, it prints every plugin in the index; with a keyword, it filters by substring match against name, description, and tags. The default index is `https://plugins.keramos.dev/index.json`; use `--index` to point at a self-hosted or alternate marketplace.
+`keramos marketplace search` lists the plugins in a marketplace index. With no
+keyword it prints every plugin; with a keyword it prints only those whose name or
+description contains that text.
 
 ## When to use it
 
-Use to discover plugins before installing them. The marketplace is a curated, signed index — the entries here have been verified by the marketplace operator. For ad-hoc plugins, install directly with `keramos plugin install` against a URL or path.
+Use it to discover plugins before installing them, and to read off a plugin's
+name and who signed it so you can verify and install it.
 
-## What happens when you run it
+## What happens
 
-1. Fetches the JSON index at `--index` over HTTPS.
-2. Filters entries by the optional keyword.
-3. Prints a table of name, version, description, and signing metadata to stdout.
-4. No cluster contact.
+1. keramos fetches the JSON index from `--index` (default
+   `https://plugins.keramos.dev/index.json`) over HTTP(S).
+2. If you gave a keyword, keramos keeps only entries whose name or description
+   contains it (case-sensitive substring match).
+3. keramos prints one line per matching plugin: name, version, the signer, and the
+   description.
+
+No cluster is contacted, and nothing is downloaded or installed.
 
 ## Usage
 
@@ -23,35 +30,26 @@ keramos marketplace search [keyword] [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for search |
-| `--index` | string | https://plugins.keramos.dev/index.json | marketplace index URL |
+| Flag | Cause → effect |
+|---|---|
+| `--index <url>` | Fetch the plugin list from this index instead of the default `https://plugins.keramos.dev/index.json`. |
 
-## Persistent flags inherited from `keramos`
+Also inherits the global flags.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
-
-Browse the entire default marketplace:
-
-```sh
-keramos marketplace search
-```
-
-Find backup-related plugins:
+Search the default marketplace for backup-related plugins:
 
 ```sh
 keramos marketplace search backup
 ```
 
-Use a self-hosted marketplace index:
+```
+backup-restore                 1.4.0      signedBy=keramos-core — Snapshot and restore release state
+s3-backup                      0.9.2      signedBy=acme-ops — Push release snapshots to an S3 bucket
+```
+
+List everything in a private marketplace:
 
 ```sh
 keramos marketplace search --index https://plugins.example.internal/index.json
@@ -59,7 +57,5 @@ keramos marketplace search --index https://plugins.example.internal/index.json
 
 ## See also
 
-- [`marketplace`](marketplace.md)
-- [`marketplace verify`](marketplace-verify.md)
-- [`plugin`](plugin.md) — install plugins from arbitrary sources
+- [`marketplace verify`](marketplace-verify.md) — check an archive before installing
 - [`plugin install`](plugin-install.md)

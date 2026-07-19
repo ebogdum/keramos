@@ -1,12 +1,17 @@
 # Quickstart
 
-This guide takes you from zero to a deployed, upgraded, and rolled-back release in about ten minutes. It assumes you already have a working `kubectl` against some Kubernetes cluster — anything from `kind`, `k3d`, `k3s` and `minikube` to a managed service will work.
+By the end of this guide you will have scaffolded a package, installed it as a
+release, upgraded it, previewed and reverted changes, inspected drift, and
+uninstalled it — all with the real commands and their real output. It takes
+about ten minutes and assumes a working `kubectl` against any cluster (`kind`,
+`k3d`, `k3s`, `minikube`, or a managed service).
 
 ## Prerequisites
 
 - A Kubernetes cluster reachable through your current `kubectl` context.
-- The `keramos` binary on your `$PATH`. See [Installing Keramos](../../README.md#installing-keramos) if not yet installed.
-- Permission to create namespaces, Deployments, Services, ConfigMaps, and Secrets in the target cluster.
+- The `keramos` binary on your `$PATH`. See
+  [Quick install](../../README.md#quick-install) if you do not have it yet.
+- Permission to create namespaces, Deployments, and Services in the cluster.
 
 Sanity check:
 
@@ -26,17 +31,35 @@ cd hello
 
 ```
 hello/
-├── README.md
+├── .keramosignore
 ├── keramos.yaml
 ├── values.yaml
 └── templates/
     ├── _helpers.yaml
-    ├── configmap.yaml
     ├── deployment.yaml
+    ├── notes.yaml
     └── service.yaml
 ```
 
-The scaffolded package is a small "hello-world" web server. Open the files and look around — `keramos.yaml` declares the package; `values.yaml` is the configurable surface; `templates/` is where YAML manifests with `${...}` expressions live. The `_helpers.yaml` file (note the leading underscore) is a *partial*: included from other templates, never rendered as a standalone manifest.
+The scaffold is a minimal nginx Deployment plus a Service. `keramos.yaml` declares
+the package; `values.yaml` is the configurable surface; `templates/` holds the
+manifests, written with `${...}` expressions. `_helpers.yaml` (leading
+underscore) is a *partial* — a bag of reusable snippets, never emitted as a
+standalone manifest. `templates/notes.yaml` is a document with a single
+`message:` key; keramos treats any such document as the release notes rather than a
+manifest.
+
+The default `values.yaml`:
+
+```yaml
+name: hello
+replicaCount: 1
+image:
+  repository: nginx
+  tag: latest
+service:
+  port: 80
+```
 
 ## 2. Lint it
 
@@ -44,7 +67,14 @@ The scaffolded package is a small "hello-world" web server. Open the files and l
 keramos lint .
 ```
 
-Lint runs YAML parsing, schema validation (if `values.schema.json` is present), template rendering, and a static set of best-practice checks (e.g. resources without limits, hostPort usage, image tags pinned to `latest`). A clean lint exits 0.
+```
+lint passed
+```
+
+`keramos lint` checks that `keramos.yaml` and `values.yaml` parse, that
+`values.schema.json` (if present) is valid JSON, and that every template
+renders. It does **not** validate values against the schema — that happens at
+render time (step 3). See [`keramos lint`](../cli/lint.md).
 
 ## 3. Render templates locally
 
@@ -52,19 +82,60 @@ Lint runs YAML parsing, schema validation (if `values.schema.json` is present), 
 keramos template .
 ```
 
-This renders every template against the package's `values.yaml`, with the release name `hello`, and prints the resulting Kubernetes manifests to stdout. **Nothing has touched the cluster yet.** Use `keramos template` whenever you want to inspect what keramos would apply.
-
-To override a value:
-
-```sh
-keramos template . --set replicas=3
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello
+  name: hello
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello
+  template:
+    metadata:
+      labels:
+        app: hello
+    spec:
+      containers:
+        - image: nginx:latest
+          name: hello
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello
+  name: hello
+spec:
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 80
+  selector:
+    app: hello
+  type: ClusterIP
 ```
 
-Or with a values file:
+`keramos template` renders every template against `values.yaml` and prints the
+manifests to stdout. **Nothing has touched the cluster.** Override a value with
+`--set`:
+
+```sh
+keramos template . --set replicaCount=3
+```
+
+or with a values file:
 
 ```sh
 keramos template . -f overrides.yaml
 ```
+
+See [`keramos template`](../cli/template.md).
 
 ## 4. Install
 
@@ -72,123 +143,257 @@ keramos template . -f overrides.yaml
 keramos install hello . -n keramos-quickstart --create-namespace
 ```
 
-What happens:
+```
+NOTES:
+hello has been installed successfully.
+Namespace: keramos-quickstart
+Run "kubectl get deployments" to verify.
+```
 
-1. The package is rendered the same way `keramos template` rendered it.
-2. Keramos stamps `managedBy=keramos` on every resource and on the namespace it creates.
-3. Pre-install hooks (if any) run.
-4. Server-side apply pushes the rendered manifest into the cluster.
-5. Post-install hooks run.
-6. The release record is stored as a labelled Secret in the install namespace.
-7. Keramos waits for the rendered resources to become Ready (Deployment available, Pod Ready, etc.) and prints a summary.
-
-Check what landed:
+Keramos renders the package, stamps `managedBy=keramos` on every resource,
+server-side-applies the manifest, waits for the resources to become ready, and
+stores the release record as a labelled Secret in the namespace. Check what
+landed:
 
 ```sh
-kubectl -n keramos-quickstart get deploy,svc,cm
 kubectl -n keramos-quickstart get all -l managedBy=keramos
 ```
+
+```
+NAME                        READY   STATUS    RESTARTS   AGE
+pod/hello-bc94584c5-lfgvr   1/1     Running   0          24s
+
+NAME            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+service/hello   ClusterIP   10.43.65.214   <none>        80/TCP    24s
+
+NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/hello   1/1     1            1           25s
+```
+
+See [`keramos install`](../cli/install.md).
 
 ## 5. List, status, manifest
 
 ```sh
-keramos list                          # releases in the current namespace
-keramos list -A                       # every release everywhere
-keramos status hello -n keramos-quickstart
-keramos get manifest hello -n keramos-quickstart
-keramos get values hello -n keramos-quickstart
+keramos list -n keramos-quickstart
 ```
 
-`keramos status` shows the current revision, package, and per-resource readiness. `keramos get manifest` prints the exact YAML keramos stored for this revision (gzipped + base64 inside the release Secret; keramos decompresses it on the fly).
+```
+NAME     NAMESPACE          REVISION    STATUS      PACKAGE    VERSION    UPDATED
+hello    keramos-quickstart    1           deployed    hello      0.1.0      2026-07-18 22:06:02
+```
+
+```sh
+keramos status hello -n keramos-quickstart
+```
+
+```
+NAME:       hello
+NAMESPACE:  keramos-quickstart
+STATUS:     deployed
+REVISION:   1
+PACKAGE:    hello-0.1.0
+UPDATED:    2026-07-18 22:06:02
+
+NOTES:
+hello has been installed successfully.
+...
+```
+
+`keramos get manifest hello -n keramos-quickstart` prints the exact YAML keramos stored
+for the revision; `keramos get values hello -n keramos-quickstart` prints the merged
+values it used. Use `keramos list -A` to see releases across all namespaces. See
+[`keramos list`](../cli/list.md), [`keramos status`](../cli/status.md), and
+[`keramos get`](../cli/get.md).
 
 ## 6. Upgrade
 
-Edit `values.yaml` (e.g. bump replicas) or any template, then:
+Edit `values.yaml` or a template, then re-apply. Here, bump the replica count:
 
 ```sh
-keramos upgrade hello . -n keramos-quickstart
+keramos upgrade hello . -n keramos-quickstart --set replicaCount=3
 ```
 
-Each upgrade increments the release's revision counter and stores the new manifest. The cluster sees server-side apply with the new fields. Hooks tagged `pre-upgrade` and `post-upgrade` run before and after the apply.
-
-## 7. Diff before applying
-
-`keramos diff` shows what would change without applying. It always uses server-side dry-run, so the cluster's defaulters and webhooks contribute to the comparison — you see the diff the cluster would actually compute.
-
-```sh
-keramos diff hello . -n keramos-quickstart
-```
-
-## 8. Plan and apply
-
-For change-management workflows, separate "what keramos would do" from "do it":
-
-```sh
-keramos plan hello . -n keramos-quickstart -o hello.plan
-# review the plan...
-keramos apply hello.plan
-```
-
-`keramos plan` produces a self-contained plan file (rendered manifest + parameters + hash). `keramos apply` consumes one and executes the upgrade exactly as planned. The plan binds to the release name and namespace so you cannot accidentally apply it elsewhere.
-
-## 9. History and rollback
+Each upgrade increments the revision counter, stores the new manifest, and
+server-side-applies it. `keramos history` now shows two revisions:
 
 ```sh
 keramos history hello -n keramos-quickstart
 ```
 
-prints every revision with its timestamp, status, and audit data (who installed it, with what flags). To roll back:
+```
+REVISION    STATUS        PACKAGE        UPDATED                DESCRIPTION
+1           superseded    hello-0.1.0    2026-07-18 22:06:02
+2           deployed      hello-0.1.0    2026-07-18 22:07:32
+```
+
+See [`keramos upgrade`](../cli/upgrade.md) and [`keramos history`](../cli/history.md).
+
+## 7. Preview changes before applying
+
+`keramos diff` compares local inputs only — it never reads the cluster. Render the
+package two ways and diff them:
+
+```sh
+keramos diff . --to-set replicaCount=5
+```
+
+```
+diff: from → to
+
+~ update  Deployment/hello
+      ~ spec.replicas
+          - 1
+          + 5
+
+Summary: 0 added, 1 changed, 0 removed.
+```
+
+To compare the package against what keramos last recorded for the release, use
+`keramos plan` instead:
+
+```sh
+keramos plan . -r hello -n keramos-quickstart --action upgrade
+```
+
+```
+keramos plan: update  hello / keramos-quickstart  (package .)
+
+~ update  Deployment/hello
+      from: deployment.yaml
+      ~ spec.replicas
+          - 3   (state)
+          + 1   ← package-default (values.yaml)
+
+Plan: 0 to add, 1 to change, 0 to destroy.
+```
+
+See [`keramos diff`](../cli/diff.md) and [`keramos plan`](../cli/plan.md).
+
+## 8. Plan and apply
+
+For change-management workflows, separate "what keramos would do" from "do it".
+`keramos plan --out` writes a self-contained JSON artifact (rendered manifest plus
+a sha256 integrity digest, bound to the release name and namespace):
+
+```sh
+keramos plan . -r hello -n keramos-quickstart --action upgrade --set replicaCount=5 --out plan.json
+```
+
+```
+plan written to plan.json
+```
+
+```sh
+keramos apply --plan plan.json -n keramos-quickstart
+```
+
+```
+applied upgrade for hello revision 3
+```
+
+`keramos apply` executes exactly what the plan captured. See
+[`keramos apply`](../cli/apply.md).
+
+## 9. Roll back
 
 ```sh
 keramos rollback hello 1 -n keramos-quickstart
 ```
 
-Keramos re-applies revision 1's stored manifest and re-runs revision 1's `pre-rollback` and `post-rollback` hooks (which are persisted alongside the manifest, so a rollback to an old revision uses the hooks that revision originally shipped, not the current ones).
-
-## 10. Drift detection
-
-After an install, the cluster might be edited out-of-band — somebody runs `kubectl edit deploy hello`, or another operator picks up a field. `keramos drift` compares the live state against the release's stored manifest:
-
-```sh
-keramos drift hello -n keramos-quickstart
-```
-
-Drift output is per-resource, per-field. To re-converge to the stored manifest:
-
-```sh
-keramos reconcile hello -n keramos-quickstart
-```
-
-This re-applies the stored manifest, taking ownership of any drifted fields.
-
-## 11. Audit
+Keramos re-applies revision 1's stored manifest and records a new revision. The
+audit trail records every action:
 
 ```sh
 keramos audit hello -n keramos-quickstart
 ```
 
-prints the full audit trail: every revision, the action (`install`, `upgrade`, `rollback`, `uninstall`), who initiated it, the kubeconfig context, the keramos version, the flags as passed, and any value files supplied. This is signed metadata stored in the release record.
+```
+REVISION    ACTION     USER      STATUS        TIMESTAMP
+1           install    ada    superseded    2026-07-18 22:06:02
+2           upgrade    ada    deployed      2026-07-18 22:07:32
+```
 
-## 12. Uninstall
+See [`keramos rollback`](../cli/rollback.md) and [`keramos audit`](../cli/audit.md).
+
+## 10. Detect and reconcile drift
+
+`keramos drift` compares three views — the package as it renders now, the recorded
+state, and the live cluster. It locates each live object by name **and
+namespace**, so the resource templates must carry their namespace. Add one line
+under `metadata` in `templates/deployment.yaml` and `templates/service.yaml`:
+
+```yaml
+metadata:
+  name: "${values.name}"
+  namespace: ${release.namespace}
+```
+
+Apply the edit, then change the cluster out of band and compare:
+
+```sh
+keramos upgrade hello . -n keramos-quickstart
+kubectl -n keramos-quickstart scale deploy hello --replicas=7
+keramos drift . -r hello -n keramos-quickstart
+```
+
+```
+drift: package ↔ state ↔ running   (release hello)
+
+~ differs                Deployment/hello  (namespace keramos-quickstart)
+      spec.replicas  ⚠ cluster drift
+          package: 1
+          state:   1
+          running: 7
+
+1 cluster-drift, 0 pending-apply, 0 orphan, 0 missing, 0 to-create.
+```
+
+Push the recorded state back onto the cluster:
+
+```sh
+keramos reconcile hello -n keramos-quickstart
+```
+
+```
+Reconciled 2 resource(s):
+  - Deployment/hello
+  - Service/hello
+```
+
+See [`keramos drift`](../cli/drift.md) and [`keramos reconcile`](../cli/reconcile.md).
+
+## 11. Uninstall
 
 ```sh
 keramos uninstall hello -n keramos-quickstart
 ```
 
-Pre-delete hooks run, the manifest's resources are deleted, post-delete hooks run, and the release record is removed. Pass `--keep-history` to keep the release record for forensic purposes; `keramos list --filter status=uninstalled` shows kept-history releases.
+Keramos deletes the release's resources. History is **kept** by default (so
+`keramos audit` and `keramos rollback` still work); pass `--purge` to delete the
+release record too. List kept-history releases with:
 
-To clean up the namespace too:
+```sh
+keramos list --uninstalled -n keramos-quickstart
+```
+
+Remove the namespace when you are done:
 
 ```sh
 kubectl delete ns keramos-quickstart
 ```
 
-## Where next
+See [`keramos uninstall`](../cli/uninstall.md).
 
-- [Package anatomy](packages.md) — every file in a package, in detail.
-- [Values](values.md) — how `values.yaml`, layers, environments, and CLI flags merge.
+## Next steps
+
+- [Package anatomy](packages.md) — every file in a package.
+- [Values](values.md) — how `values.yaml`, layers, environments, profiles, and
+  CLI flags merge.
 - [Layers](layers.md) — composing a package from reusable building blocks.
-- [Hooks](hooks.md) — Job-based lifecycle hooks.
-- [Workspaces](workspaces.md) — orchestrating many packages with one command.
-- [Template expressions](../templates/expressions.md) — the `${...}` syntax.
-- [Template functions](../templates/functions.md) — every built-in, with input/output examples.
+- [Schema validation](schema-validation.md) — `values.schema.json` patterns.
+- [Hooks](hooks.md) — lifecycle Jobs and Pods.
+- [Workspaces](workspaces.md) — orchestrating many packages at once.
+- [Template expressions](../templates/expressions.md) and
+  [function reference](../templates/functions.md) — the `${...}` language.
+- [CLI reference](../cli/README.md) — every command and flag.

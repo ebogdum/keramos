@@ -2,18 +2,27 @@
 
 ## Synopsis
 
-`keramos keyring remove` (alias `keramos keyring rm`) deletes a key from keramos's keyring directory. After removal, packages signed by that key fail verification with `--verify`. The argument is either a key fingerprint (use `keyring list` to find it) or the filename of the key as it sits in `~/.config/keramos/keyring/`.
+`keramos keyring remove` (alias `keramos keyring rm`) deletes a key from
+`~/.config/keramos/keyring/`, revoking trust in its signer. After removal,
+packages signed by that key fail `--verify`. You identify the key by its full
+fingerprint or by its file name.
 
 ## When to use it
 
-Use to revoke trust in a signer — typically after a key compromise, an offboarding, or a key rotation where you've already added the new key. The action is local to this machine; it does not invalidate the key globally or notify any keyserver.
+- To revoke a signer after a key compromise, an offboarding, or a rotation
+  where you have already added the replacement key.
 
-## What happens when you run it
+The removal is local to this machine. It does not invalidate the key globally
+or notify any keyserver.
 
-1. Resolves the argument to a file under `~/.config/keramos/keyring/` — either matching a fingerprint within an installed key, or the filename directly.
-2. Deletes the file.
-3. Prints the removed key's fingerprint and user-id.
-4. No cluster contact, no network.
+## What happens
+
+1. Reads `~/.config/keramos/keyring/`.
+2. Matches your argument against each installed key — its file name, or its
+   full fingerprint (both case-insensitive). Partial fingerprints do not match.
+3. Deletes the matching file and prints `Removed key <filename>` (matched by
+   name) or `Removed key <filename> (<fingerprint>)` (matched by fingerprint).
+4. If nothing matches, errors with `no key matching "<arg>" in keyring`.
 
 ## Usage
 
@@ -23,48 +32,49 @@ keramos keyring remove <fingerprint-or-filename> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for remove |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Remove by fingerprint (long-form):
+**INPUT — a keyring holding one key** (from an earlier `keyring add`):
 
 ```sh
-keramos keyring remove 0xABCDEF1234567890ABCDEF1234567890ABCDEF12
+keramos keyring list
 ```
 
-Remove by short fingerprint suffix:
+```
+FINGERPRINT                                  FILE
+3AA5C34371567BD2                             jane.pub
+```
+
+**Remove it by file name:**
 
 ```sh
-keramos keyring remove ABCDEF12
+keramos keyring remove jane.pub
 ```
 
-Remove by filename:
+**OUTPUT — keramos confirms the deletion:**
+
+```
+Removed key jane.pub
+```
+
+The full fingerprint works too, and reports it back:
 
 ```sh
-keramos keyring remove jane@example.com.asc
+keramos keyring remove 3AA5C34371567BD2
 ```
 
-Use the short alias:
-
-```sh
-keramos keyring rm jane@example.com.asc
 ```
+Removed key jane.pub (3AA5C34371567BD2)
+```
+
+Either way the key is gone — `keramos keyring list` now prints `No keys
+installed.`, and packages signed by it no longer pass `--verify`.
 
 ## See also
 
-- [`keyring`](keyring.md)
-- [`keyring add`](keyring-add.md)
-- [`keyring list`](keyring-list.md)
-- [Signing guide](../guides/signing.md)
+- [`keyring`](keyring.md) — the parent command
+- [`keyring add`](keyring-add.md) — install a key
+- [`keyring list`](keyring-list.md) — find the fingerprint or file name
+- [`package verify`](package-verify.md) — verify a package against the keyring

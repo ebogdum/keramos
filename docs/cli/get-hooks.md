@@ -1,66 +1,81 @@
 # keramos get hooks
 
-## Synopsis
-
-`keramos get hooks` shows the hook manifests rendered for a release together with the outcome of each hook's last execution (succeeded / failed, with timestamps). Hooks are the lifecycle Jobs and Pods declared under `hooks/` in the package — pre/post-install, pre/post-upgrade, pre/post-rollback, pre/post-delete, and test. Keramos stores the rendered hook YAML alongside the manifest in the release record so that rolling back to an older revision re-runs that revision's hooks.
+`keramos get hooks` lists the hooks recorded for a release together with each
+hook's last-run result.
 
 ## When to use it
 
-Use to confirm what hooks ran (or failed to run) on the last install/upgrade, to inspect the exact YAML keramos rendered for a hook (which may differ from the on-disk source if values changed), or to debug a failing hook by extracting it for `kubectl apply` reproduction.
+- You want to confirm which hooks ran, and whether they succeeded, on the last
+  install or upgrade.
+- You want the rendered hook manifests as structured output with `-o yaml`/`json`.
 
-## What happens when you run it
+## What happens
 
-1. Reads the release-storage Secret for `<release-name>` at the requested revision (default: current).
-2. Extracts the `hookTemplates` (rendered YAML, filename → body) and `hooks` (last-run results) sections.
-3. Prints them in the requested output format.
+It loads the stored release record for `<release>` (latest, or `--revision`) and
+prints its hook results. If a revision executed no hooks but stored rendered
+hook templates (for example a package run with `--no-hooks`), those templates
+are listed as `rendered (not yet executed in this revision)` so they stay
+visible. If the release has neither, it prints `No hooks found for this
+release.`
+
+## Flags
+
+| Flag | Cause | Effect |
+|---|---|---|
+| `--revision <n>` | you name a stored revision | reads that revision instead of the latest |
+| `-o, --output <fmt>` | you pass `table`, `json`, or `yaml` (default `table`) | prints the hooks in that format |
+
+Inherits the global flags (`-n/--namespace`, `--kube-context`, `--kubeconfig`,
+`--debug`).
 
 ## Usage
 
 ```
-keramos get hooks <release-name> [flags]
+keramos get hooks <release> [flags]
 ```
 
-## Flags
+## Worked example
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for hooks |
-| `-o, --output` | string | table | output format: table, json, yaml |
-| `--revision` | int | 0 | get hooks from a specific revision (0 = current) |
+Stored record for `hello`, its `hooks` results:
 
-## Persistent flags inherited from `keramos`
+```yaml
+# what keramos recorded after the last upgrade
+- name: pre-upgrade-backup
+  kind: Job
+  status: Succeeded
+- name: post-upgrade-verify
+  kind: Job
+  status: Failed
+```
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Default tabular view of every hook and its last-run outcome:
+Default table view:
 
 ```sh
 keramos get hooks hello -n prod
 ```
 
-Print the rendered hook YAML for revision 3 (e.g. to compare against the current revision's hooks):
-
-```sh
-keramos get hooks hello --revision 3 -n prod -o yaml
+```
+NAME                  KIND  STATUS
+pre-upgrade-backup    Job   Succeeded
+post-upgrade-verify   Job   Failed
 ```
 
-Pull hook results as JSON for ingestion by another tool:
+As JSON, filtered to the failed hook:
 
 ```sh
-keramos get hooks hello -n prod -o json | jq '.[] | select(.status == "failed")'
+keramos get hooks hello -n prod -o json | jq '.[] | select(.status == "Failed")'
+```
+
+```json
+{
+  "name": "post-upgrade-verify",
+  "kind": "Job",
+  "status": "Failed"
+}
 ```
 
 ## See also
 
-- [`get`](get.md)
-- [`get all`](get-all.md)
-- [`history`](history.md)
-- [Hooks guide](../guides/hooks.md)
-- [Hooks in templates](../templates/hooks.md)
+- [`get`](get.md) — the parent command
+- [`get all`](get-all.md) — hooks plus the rest of the record
+- [`history`](history.md) — the revisions whose hooks you can inspect

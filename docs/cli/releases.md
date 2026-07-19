@@ -2,63 +2,96 @@
 
 ## Synopsis
 
-`keramos releases` orchestrates multiple separate releases declared in `keramos-releases.yaml`. Subcommands install, upgrade, uninstall, plan, and report status across the whole graph using a topological order.
+`keramos releases` installs, upgrades, and uninstalls a whole set of related
+releases with one command, in dependency order. You list the releases — and
+which one depends on which — in a `keramos-releases.yaml` file, and keramos works out
+the order for you, so a database release comes up before the API release that
+needs it, and comes down last.
 
-## When to use it
+Five subcommands drive one spec file:
 
-Use when you have a fleet of releases sourced from different places (local paths, OCI, HTTPS, git) with explicit dependency ordering between them. For releases that live in one repository, prefer `keramos workspace`; for one-shot orchestration of disparate releases, this is the right tool.
+```
+plan       show the order the releases will be applied in (no cluster needed)
+install    install every release, in order
+upgrade    upgrade every release (installing any that are missing)
+uninstall  uninstall every release, in reverse order
+status     show the current revision and status of every release
+```
+
+Every subcommand reads the same file (`--file`, default `keramos-releases.yaml`).
+
+## How it relates to `keramos workspace`
+
+Both commands read one YAML file that lists packages with `dependsOn` and act
+on them in dependency (topological) order. They differ in how much
+orchestration they give you — pick by what you need:
+
+| | `keramos releases` | `keramos workspace` |
+|---|---|---|
+| Spec file | `keramos-releases.yaml` | `keramos-workspace.yaml` |
+| Ordering | topological, **sequential** | topological, **parallel** within a level (`--parallel`) |
+| Wait for pods to be ready | no | optional (`--health-gate` between levels) |
+| Roll back the whole set on failure | no (each release is atomic on its own) | optional (`--atomic-workspace`) |
+| Keep going past a failure | no (install/upgrade stop) | optional (`--continue-on-error`) |
+| Dry run / whole-set diff | no | yes (`--dry-run`, `keramos workspace diff`) |
+
+Use `keramos releases` for a simple, ordered bundle. Reach for
+[`keramos workspace`](workspace.md) when you need parallel rollout, health gating
+between tiers, cross-member rollback, or a dry-run of the whole set.
+
+## Subcommands
+
+| Command | What it does |
+|---|---|
+| [`plan`](releases-plan.md) | print the order the releases will be applied in |
+| [`install`](releases-install.md) | install every release in dependency order |
+| [`upgrade`](releases-upgrade.md) | upgrade every release, installing any that are missing |
+| [`uninstall`](releases-uninstall.md) | uninstall every release in reverse order |
+| [`status`](releases-status.md) | show each release's current revision and status |
 
 ## Usage
 
 ```
-keramos releases [command]
+keramos releases <command> [flags]
 ```
 
-## Subcommands
+The set is described by `keramos-releases.yaml` in the current directory (or the
+path you pass to `--file`):
 
-- [`keramos releases install`](releases-install.md) — install every release in topological order
-- [`keramos releases upgrade`](releases-upgrade.md) — upgrade every release; install if missing
-- [`keramos releases uninstall`](releases-uninstall.md) — uninstall every release in reverse topological order
-- [`keramos releases plan`](releases-plan.md) — print the topological order without applying
-- [`keramos releases status`](releases-status.md) — show current revision and status of every declared release
+```yaml
+releases:
+  - name: postgres          # release name keramos records it under
+    package: ./charts/postgres
+    namespace: data         # falls back to -n / --namespace if omitted
 
-## Flags
+  - name: api
+    package: ./charts/api
+    namespace: apps
+    profile: prod           # profile to render with
+    values:                 # values files, applied in order
+      - prod.yaml
+    set:                    # inline overrides, key=value
+      - replicas=3
+    dependsOn:              # api is applied after these
+      - postgres
+```
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | — | — | help for releases |
+Each `dependsOn` name must match another `name:` entry in the file; an unknown
+name or a dependency cycle is reported as an error and nothing is applied.
+Releases that do not depend on each other are ordered by name.
 
-## Persistent flags inherited from `keramos`
-
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Plan an install of every release in `keramos-releases.yaml`:
+Preview the order, apply the set, then check where it stands:
 
 ```sh
 keramos releases plan
-```
-
-Install every release in topological order:
-
-```sh
 keramos releases install
-```
-
-Use a custom-named manifest:
-
-```sh
-keramos releases install --file ./platform.releases.yaml
+keramos releases status
 ```
 
 ## See also
 
-- [`keramos-releases.yaml` reference](../reference/keramos-releases-yaml.md)
-- [Cross-release dependencies guide](../guides/releases.md)
-- [`workspace`](workspace.md)
+- [`workspace`](workspace.md) — richer multi-package orchestration (parallel
+  rollout, health gates, rollback)
+- [`install`](install.md) — install a single release
+- [`upgrade`](upgrade.md) — upgrade a single release
+- [`list`](list.md) — list every release in the cluster

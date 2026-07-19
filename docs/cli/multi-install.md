@@ -1,12 +1,35 @@
 # keramos multi-install
 
-## Synopsis
-
-`keramos multi-install` performs a single install/upgrade against multiple Kubernetes clusters in one invocation. Cluster references come from a manifest file or a kubeconfig list; each install runs in parallel and the result is reported per-cluster.
+Install one package as the same release into several clusters in a single
+invocation.
 
 ## When to use it
 
-Use when the same release must be deployed to many clusters with the same parameters (per-environment platform releases, regionally-distributed apps). The list of target clusters is supplied as kubeconfig context names via `--to ctx1,ctx2,ctx3`.
+- Rolling the same release out to many clusters with identical parameters —
+  per-region copies of a platform service, or a fleet of edge clusters.
+- Fan-out installs from CI where you want one command, one result table, and an
+  optional all-or-nothing guarantee across clusters.
+
+Each target is a kubeconfig context named in `--to`. For a single cluster use
+[`keramos install`](install.md); to drive many releases across contexts from a
+workspace file, see [`keramos workspace`](workspace.md).
+
+## What happens
+
+1. Reads the target contexts from `--to` (comma-separated). At least one is
+   required.
+2. Installs `<release-name>` from `<package-path>` into each context in
+   parallel, up to `--parallel` at a time, applying the same values, `--set`
+   overrides, `--profile`, and `--env` to every target. All installs use the
+   namespace from `-n/--namespace`.
+3. Waits for each cluster's resources to become ready (up to `--timeout`) unless
+   `--no-wait` is set.
+4. Prints one result row per context. With `--atomic-cross-cluster`, if any
+   context fails, the successful installs are rolled back and the command exits
+   non-zero; without it, each install stands on its own (eventual consistency).
+
+This mutates every target cluster and requires all named contexts to be
+reachable.
 
 ## Usage
 
@@ -18,19 +41,18 @@ keramos multi-install <release-name> <package-path> [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--atomic-cross-cluster` | — | — | if any cluster fails, roll back the rest |
-| `--env` | string | — | environment name declared in keramos.yaml environments: |
-| `-h, --help` | — | — | help for multi-install |
-| `--no-wait` | — | — | do not wait for resources to be ready in any cluster |
-| `--parallel` | int | 4 | concurrent installs across clusters |
+| `--to` | strings | — | kubeconfig contexts to install into (comma-separated); required |
+| `--atomic-cross-cluster` | — | false | if any context fails, roll back the successful ones and fail |
+| `--parallel` | int | 4 | number of contexts to install into concurrently |
+| `--timeout` | duration | 5m0s | per-cluster wait for resources to become ready |
+| `--no-wait` | — | false | do not wait for resources to be ready in any cluster |
 | `--profile` | string | — | profile to apply |
-| `--set` | stringArray | — | --set overrides |
-| `--set-file` | stringArray | — | --set key=path; value read from path (repeatable) |
-| `--set-json` | stringArray | — | --set key=<json> (repeatable) |
-| `--set-string` | stringArray | — | --set forcing string interpretation (repeatable) |
-| `--timeout` | duration | 5m0s | per-cluster wait timeout |
-| `--to` | strings | — | kubeconfig contexts (comma-separated) |
-| `-f, --values` | stringArray | — | values file overrides |
+| `--env` | string | — | environment name declared in `keramos.yaml`'s `environments:` section |
+| `-f, --values` | stringArray | — | values file override (repeatable) |
+| `--set` | stringArray | — | key=value override (repeatable) |
+| `--set-string` | stringArray | — | key=value forced as string (repeatable) |
+| `--set-file` | stringArray | — | key=path; value read from path (repeatable) |
+| `--set-json` | stringArray | — | key=<json>; value parsed as JSON (repeatable) |
 
 ## Persistent flags inherited from `keramos`
 
@@ -41,27 +63,47 @@ keramos multi-install <release-name> <package-path> [flags]
 | `--kubeconfig` | string | path to kubeconfig file |
 | `-n, --namespace` | string | Kubernetes namespace |
 
-## Examples
+## Worked example
 
-Install the same release into three clusters (comma-separated kubeconfig contexts):
-
-```sh
-keramos multi-install my-app ./my-app --to ctx-eu,ctx-us,ctx-ap -n prod
-```
-
-Atomic across-cluster mode — roll back every cluster if any one install fails:
+**INPUT — install `web` into three regional clusters:**
 
 ```sh
-keramos multi-install my-app ./my-app --to ctx-eu,ctx-us --atomic-cross-cluster -n prod
+keramos multi-install web ./web \
+  --to ctx-eu,ctx-us,ctx-ap \
+  -n prod --set image.tag=1.5.0
 ```
 
-Higher concurrency for many clusters:
+**OUTPUT — one row per target context:**
+
+```
+CONTEXT   STATUS   DETAIL
+ctx-eu    ok       revision 1, status deployed
+ctx-us    ok       revision 1, status deployed
+ctx-ap    ok       revision 1, status deployed
+```
+
+**With `--atomic-cross-cluster`, one bad cluster rolls back the rest:**
 
 ```sh
-keramos multi-install my-app ./my-app --to ctx-1,ctx-2,ctx-3,ctx-4,ctx-5,ctx-6,ctx-7,ctx-8 --parallel 8 -n prod
+keramos multi-install web ./web \
+  --to ctx-eu,ctx-us,ctx-ap \
+  -n prod --atomic-cross-cluster
 ```
+
+```
+CONTEXT   STATUS   DETAIL
+ctx-eu    ok       revision 1, status deployed
+ctx-us    ok       revision 1, status deployed
+ctx-ap    FAIL     wait timed out after 5m0s
+
+Atomic cross-cluster install failed — rolling back successful installs.
+```
+
+The command exits non-zero, and `ctx-eu` and `ctx-us` are uninstalled so no
+cluster is left in a partial state.
 
 ## See also
 
-- [`install`](install.md)
-- [`upgrade`](upgrade.md)
+- [`install`](install.md) — install one release into a single cluster
+- [`workspace`](workspace.md) — drive many releases across contexts from a workspace file
+- [`upgrade`](upgrade.md) — upgrade an existing release

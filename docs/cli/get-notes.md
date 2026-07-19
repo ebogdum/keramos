@@ -1,64 +1,70 @@
 # keramos get notes
 
-## Synopsis
-
-`keramos get notes` prints the rendered notes that keramos stored at install / upgrade time. Notes come from a package's `notes.yaml` (templated like everything else), and typically include access URLs, follow-up commands, credentials lookup recipes, and any other post-install instructions the package author wants the operator to see. They were displayed once at install time; this command re-prints them on demand.
+`keramos get notes` prints the rendered NOTES text that keramos stored for a release
+at install or upgrade time.
 
 ## When to use it
 
-Use to re-display the post-install message after the original install output has scrolled off the terminal, to look up an access URL months later, or to fetch the notes for a historical revision (`--revision`) when investigating "what did this used to say?".
+- You want to re-read the post-install message after it scrolled off screen.
+- You want an older revision's notes with `--revision`.
 
-## What happens when you run it
+## What happens
 
-1. Reads the release-storage Secret for `<release-name>` at the requested revision.
-2. Extracts the `notes` field — the template body resolved against the merged values at install time.
-3. Prints it: `raw` is the human-readable string; `yaml` / `json` wraps it in a structured envelope.
+It loads the stored release record for `<release>` (latest, or `--revision`) and
+prints the record's `notes` field — the NOTES template resolved against the
+merged values at install time. If the release stored no notes, it prints `No
+notes available for this release.` instead.
+
+## Flags
+
+| Flag | Cause | Effect |
+|---|---|---|
+| `--revision <n>` | you name a stored revision | prints that revision's notes instead of the latest |
+| `-o, --output <fmt>` | you pass `raw`, `json`, or `yaml` | accepted for parity with sibling commands, but ignored — notes are always printed raw |
+
+Inherits the global flags (`-n/--namespace`, `--kube-context`, `--kubeconfig`,
+`--debug`).
 
 ## Usage
 
 ```
-keramos get notes <release-name> [flags]
+keramos get notes <release> [flags]
 ```
 
-## Flags
+## Worked example
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for notes |
-| `-o, --output` | string | raw | output format: raw, json, yaml |
-| `--revision` | int | 0 | get notes from a specific revision (0 = current) |
+Stored record for `hello`, its `notes` field:
 
-## Persistent flags inherited from `keramos`
+```
+# what keramos recorded at install
+Hello is deployed.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+Reach it at:  http://hello.prod.svc.cluster.local:8080
+Tail logs:    kubectl logs -n prod deploy/hello -f
+```
 
-## Examples
-
-Re-display notes for the current revision:
+Run it:
 
 ```sh
 keramos get notes hello -n prod
 ```
 
-The notes shown at revision 2 (e.g. before today's upgrade rewrote them):
+Output — the stored notes, printed as-is:
 
-```sh
-keramos get notes hello --revision 2 -n prod
+```
+Hello is deployed.
+
+Reach it at:  http://hello.prod.svc.cluster.local:8080
+Tail logs:    kubectl logs -n prod deploy/hello -f
 ```
 
-JSON envelope, useful when piping into a tool that expects structured output:
+A release with no notes prints:
 
-```sh
-keramos get notes hello -n prod -o json
+```
+No notes available for this release.
 ```
 
 ## See also
 
-- [`get`](get.md)
-- [`get all`](get-all.md)
-- [Package anatomy: notes.yaml](../guides/packages.md)
+- [`get`](get.md) — the parent command
+- [`get all`](get-all.md) — notes plus the rest of the record

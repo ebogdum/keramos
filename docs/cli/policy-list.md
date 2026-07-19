@@ -2,18 +2,21 @@
 
 ## Synopsis
 
-`keramos policy list` enumerates every policy rule declared under `<package-path>/policies/` without evaluating them. The output names each rule, its file of origin (`*.yaml`), and a brief description so you can see at a glance what gates a package ships with.
+`keramos policy list` prints the policy rules a package declares under
+`<package-path>/policies/`, one per line, with each rule's severity. It does
+not evaluate anything or read a manifest.
 
 ## When to use it
 
-Use to audit a package's policy surface — particularly when adopting an upstream package, you may want to know what rules it self-imposes before consuming it. For actually running the policies against a manifest, use `keramos policy check`.
+- To audit what guardrails a package self-imposes before you consume it —
+  especially an upstream package you did not write.
+- To confirm which rules `keramos policy check` will run.
 
-## What happens when you run it
+## What happens
 
-1. Loads every `.yaml` policy file under `<package-path>/policies/`.
-2. Parses each for declared rule names and descriptions.
-3. Prints a tabular view to stdout.
-4. No cluster contact, no manifest evaluation.
+1. Loads every rule from `<package-path>/policies/*.yaml`.
+2. Prints each rule as `name [severity]`, in declaration order.
+3. Reads only local files — no manifest, no cluster, no network.
 
 ## Usage
 
@@ -23,42 +26,43 @@ keramos policy list <package-path> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for list |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+**INPUT — two rules** under `mychart/policies/`:
 
-## Examples
-
-List policies declared by a package:
-
-```sh
-keramos policy list ./my-app
+```yaml
+# mychart/policies/images.yaml
+name: no-latest-tag
+severity: deny
+match: { kinds: [Deployment] }
+require: { imageNotTagged: true }
+---
+# mychart/policies/scale.yaml
+name: min-replicas-3
+severity: warn
+match: { kinds: [Deployment] }
+require: { minReplicas: 3 }
 ```
 
-Run from inside the package directory:
+**Run it:**
 
 ```sh
-cd ./my-app && keramos policy list .
+keramos policy list ./mychart
 ```
 
-Combine with `policy check` to confirm what would be evaluated:
+**OUTPUT — each rule and its severity:**
 
-```sh
-keramos policy list  ./my-app
-keramos template     hello ./my-app | keramos policy check ./my-app
 ```
+no-latest-tag [deny]
+min-replicas-3 [warn]
+```
+
+`deny` rules fail `keramos policy check`; `warn` rules only print.
 
 ## See also
 
-- [`policy`](policy.md)
-- [`policy check`](policy-check.md)
-- [Package anatomy: policies](../guides/packages.md)
+- [`policy`](policy.md) — the parent command
+- [`policy check`](policy-check.md) — actually evaluate the rules
+- [`install`](install.md) — apply the package once it passes

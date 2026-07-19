@@ -1,22 +1,30 @@
 # keramos adopt
 
-## Synopsis
-
-`keramos adopt` claims an existing in-cluster resource as part of a keramos-managed release. Keramos stamps the resource with `managedBy=keramos`, generates a release record that references it, and from that point onwards the resource is upgrade-, rollback-, and drift-tracked the same as any other keramos-managed resource.
+`keramos adopt` claims resources that already exist in the cluster and records
+them as revision 1 of a new keramos release, so keramos can manage them from then on.
 
 ## When to use it
 
-Use when migrating an existing manually-applied workload (raw `kubectl apply`, Terraform, hand-written manifests) into keramos's management without recreating it. Adoption is non-destructive — the resource keeps running while ownership changes; the only writes are the new `managedBy=keramos` label and the release-storage Secret.
+- You have live resources created by `kubectl apply`, Terraform, or a
+  hand-written manifest, and you want keramos to track them.
+- You are migrating a running deployment onto keramos without deleting and
+  recreating it.
+- You want `keramos diff`, `keramos drift`, `keramos upgrade`, and `keramos uninstall` to
+  work on resources keramos never installed.
 
-## What happens when you run it
+## What happens
 
-1. Resolves each `<resource-ref>` to a live cluster object. Reference forms:
-   - `apps/v1/Deployment/myns/myapp`
-   - `v1/ConfigMap//cluster-scoped-cm`  (note the empty namespace segment)
-   - `kind=Deployment,name=myapp,ns=myns`
-2. Fetches each object, strips server-side metadata (resourceVersion, managedFields, status).
-3. Composes a manifest, stamps `managedBy=keramos` on each resource, and stores it as revision 1 of the named release.
-4. The cluster resources themselves are not deleted or recreated — only the release record is new.
+1. Parses each `<resource-ref>` into a kind / namespace / name lookup.
+2. Connects to the cluster in the current context.
+3. If `--create-namespace` is set, creates the release namespace when missing.
+4. Fetches each referenced object from the cluster and strips server-managed
+   metadata (`status`, `managedFields`, resource version).
+5. Stores the cleaned resources as **revision 1** of the release, recording
+   any `--description` and `--labels` in the audit trail.
+6. Prints how many resources were adopted.
+
+Mutating: it writes new release state. The adopted resources themselves are
+not changed. Requires a reachable cluster.
 
 ## Usage
 
@@ -24,14 +32,21 @@ Use when migrating an existing manually-applied workload (raw `kubectl apply`, T
 keramos adopt <release-name> <resource-ref>... [flags]
 ```
 
+Each `<resource-ref>` takes one of these forms:
+
+```
+apps/v1/Deployment/myns/myapp        group/version/Kind/namespace/name
+v1/ConfigMap//cluster-scoped-cm      empty namespace for cluster-scoped objects
+kind=Deployment,name=myapp,ns=myns   key=value form
+```
+
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--create-namespace` | — | — | create the release namespace if it does not exist |
-| `--description` | string | — | release description recorded in the audit trail |
-| `-h, --help` | — | — | help for adopt |
-| `--labels` | stringArray | — | label key=value to attach to the release (repeatable) |
+| `--create-namespace` | — | false | create the release namespace first, so adoption does not fail when it is missing |
+| `--description` | string | — | text recorded against revision 1 in the audit trail |
+| `--labels` | stringArray | — | `key=value` label attached to the release; repeat for more |
 
 ## Persistent flags inherited from `keramos`
 
@@ -42,39 +57,48 @@ keramos adopt <release-name> <resource-ref>... [flags]
 | `--kubeconfig` | string | path to kubeconfig file |
 | `-n, --namespace` | string | Kubernetes namespace |
 
-## Examples
+## Worked example — bring an unmanaged Deployment under keramos
 
-Adopt a Deployment by GVK/namespace/name:
-
-```sh
-keramos adopt hello apps/v1/Deployment/prod/myapp -n prod
-```
-
-Adopt a cluster-scoped ConfigMap (note the empty namespace between the slashes):
+**INPUT — a Deployment someone created with raw `kubectl`,** so keramos has no
+record of it:
 
 ```sh
-keramos adopt cluster-config v1/ConfigMap//global-config
+kubectl get deploy legacy-api -n apps
+# NAME         READY   UP-TO-DATE   AVAILABLE
+# legacy-api   3/3     3            3
+
+keramos list -n apps
+# (legacy-api is absent — keramos never installed it)
 ```
 
-Adopt several resources into one release:
+**Adopt it into a release named `legacy-api`:**
 
 ```sh
-keramos adopt hello \
-  apps/v1/Deployment/prod/myapp \
-  v1/Service/prod/myapp \
-  v1/ConfigMap/prod/myapp-config \
-  -n prod
+keramos adopt legacy-api apps/v1/Deployment/apps/legacy-api \
+  -n apps --description "onboarded from kubectl"
 ```
 
-Adopt with a description for the audit trail:
+**OUTPUT:**
 
-```sh
-keramos adopt hello apps/v1/Deployment/prod/myapp -n prod \
-  --description "imported from terraform module v3" \
-  --labels source=terraform
 ```
+Adopted 1 resource(s) as release "legacy-api" (revision 1, namespace apps).
+```
+
+**Tracing the result:**
+
+| Output | Cause |
+|---|---|
+| `Adopted 1 resource(s)` | one resource-ref was fetched and stored |
+| `revision 1` | adoption always creates the release at revision 1 |
+| now listed by `keramos list -n apps` | the release state is recorded, so `keramos diff`, `keramos drift`, and `keramos upgrade` work |
+
+The Deployment keeps running untouched; only keramos's stored state is new. From
+here `keramos drift legacy-api` compares that stored state against the live
+object.
 
 ## See also
 
-- [`install`](install.md)
-- [`drift`](drift.md)
+- [`drift`](drift.md) — compare a release's package, state, and cluster
+- [`diff`](diff.md) — compare packages, manifests, or revisions
+- [`upgrade`](upgrade.md) — roll a new package version onto the release
+- [`uninstall`](uninstall.md) — remove an adopted release

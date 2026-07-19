@@ -1,12 +1,31 @@
 # keramos install
 
-## Synopsis
-
-`keramos install` applies a keramos package to the cluster as a brand-new release. The release name is what keramos (and operators) will use to refer to this deployment forever after — for upgrades, rollbacks, status checks, drift reports, and uninstall. The package directory is rendered against merged values, validated against `values.schema.json` if present, then applied to the cluster with server-side apply. A release record (a labelled Secret in the install namespace) captures the rendered manifest, merged values, audit metadata, and rendered hooks so subsequent `upgrade` and `rollback` operations have everything they need.
+`keramos install` renders a package directory and applies it to the cluster as a
+new named release — revision 1 of that release's history.
 
 ## When to use it
 
-Use this when you are deploying a keramos package for the first time under a given release name. If a release with that name already exists in the namespace, the command refuses; use `keramos upgrade` instead. For an idempotent "install if missing, upgrade if present" workflow, see `keramos upgrade --install` semantics on the upgrade page.
+- To deploy a package for the first time under a name you choose.
+- To stand up a release into a fresh namespace in one step (`--create-namespace`).
+- To render and validate without touching the cluster (`--dry-run client`).
+
+## What happens
+
+1. Resolves the package at `<package-path>`, merges values (package defaults +
+   `--env` + `--profile` + `-f` + `--set*`), and validates them against the
+   package's JSON schema if one is present.
+2. Renders the templates and hooks, then evaluates package policies against the
+   rendered manifest — a deny policy stops the install.
+3. Stores the release as revision 1 in pending state (this writes state).
+4. Runs pre-install hooks, applies CRDs first, then the remaining manifests via
+   server-side apply.
+5. Waits for every resource to become Ready unless `--no-wait` is set, then runs
+   post-install hooks and marks the release deployed.
+6. Installs any required co-deployed packages unless `--skip-requires`.
+
+Requires a reachable cluster except under `--dry-run client`, which renders
+locally and applies nothing. On failure the release rolls back automatically
+unless `--no-atomic` is set.
 
 ## Usage
 
@@ -14,45 +33,47 @@ Use this when you are deploying a keramos package for the first time under a giv
 keramos install <release-name> <package-path> [flags]
 ```
 
+With `--generate-name`, pass only `<package-path>`; the release name is derived
+from the package name plus a random suffix.
+
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--api-versions` | stringArray | — | Kubernetes API version available for capability checks (repeatable) |
-| `--cleanup-on-fail` | — | — | delete partially-applied resources if the install fails |
-| `--create-namespace` | — | — | create the release namespace if missing |
-| `--description` | string | — | release description |
-| `--dry-run` | string | — | dry-run mode: 'client' (local render) or 'server' (API validation) |
-| `--env` | string | — | environment name declared in keramos.yaml environments: (replaces values-{env}.yaml) |
-| `--force` | — | — | delete and recreate resources to force update of immutable fields |
-| `--generate-name` | — | — | generate a release name from the package name |
-| `-h, --help` | — | — | help for install |
-| `--history-max` | int | — | maximum number of revisions to retain in history (0 = unlimited) |
-| `--hook-timeout` | duration | — | cap each hook's per-hook timeout (0 = use the chart-declared value) |
-| `--include-crds` | — | — | include CRDs from crds/ in the rendered manifest |
-| `--keyring` | string | — | path to PGP keyring directory for --verify (default: ~/.config/keramos/keyring) |
-| `--kube-version` | string | — | override Kubernetes version reported in capabilities |
-| `--labels` | stringArray | — | label key=value to attach to the release (repeatable) |
-| `--no-atomic` | — | — | don't roll back on failure |
+| `-f, --values` | stringArray | — | values file override; repeatable, later files win |
+| `--set` | stringArray | — | `key=value` override (repeatable) |
+| `--set-string` | stringArray | — | `key=value` forced to string (repeatable) |
+| `--set-file` | stringArray | — | `key=path`; value is read from the file (repeatable) |
+| `--set-json` | stringArray | — | `key=<json>`; value parsed as a JSON literal (repeatable) |
+| `--profile` | string | — | profile to apply on top of defaults |
+| `--env` | string | — | environment from `keramos.yaml`'s `environments:` (replaces `values-{env}.yaml`) |
+| `--wait` | — | on | wait for every resource to be Ready (default behaviour) |
+| `--no-wait` | — | — | return once resources are applied, without waiting for Ready |
+| `--wait-for-jobs` | — | — | also block until Job resources complete |
+| `--timeout` | duration | 5m0s | how long the readiness wait may run before failing |
+| `--dry-run` | string | — | `client` renders locally; `server` also validates against the API |
+| `-o, --output` | string | table | result format: `table`, `json`, or `yaml` |
+| `--description` | string | — | free-text note stored on revision 1 |
+| `--no-atomic` | — | — | leave partial changes in place on failure instead of rolling back |
 | `--no-force` | — | — | don't force field ownership on server-side apply |
-| `--no-hooks` | — | — | skip lifecycle hooks for this operation |
-| `--no-wait` | — | — | don't wait for resources to be ready |
-| `-o, --output` | string | "table" | output format: table, json, yaml |
-| `--post-renderer` | string | — | command piped the rendered manifests on stdin (yields stdout) |
-| `--post-renderer-timeout` | duration | 5m0s | per-stage timeout for post-renderers |
-| `--post-renderers` | stringArray | — | chained post-renderers (repeatable; output of N feeds N+1) |
-| `--profile` | string | — | profile name to apply |
+| `--no-hooks` | — | — | skip all lifecycle hooks for this install |
+| `--create-namespace` | — | — | create the target namespace if it doesn't exist |
+| `--include-crds` | — | — | include CRDs from `crds/` in the rendered manifest |
+| `--labels` | stringArray | — | `key=value` label recorded on the release (repeatable) |
+| `--api-versions` | stringArray | — | extra API versions to report as available in capability checks (repeatable) |
+| `--kube-version` | string | — | override the Kubernetes version reported to templates |
+| `--post-renderer` | string | — | command fed the manifest on stdin; its stdout is applied |
+| `--post-renderers` | stringArray | — | chained post-renderers; output of N feeds N+1 (repeatable) |
+| `--post-renderer-timeout` | duration | 5m0s | per-stage timeout for each post-renderer |
+| `--cleanup-on-fail` | — | — | delete resources this install created if it fails |
 | `--recreate-pods` | — | — | trigger a rolling restart of Deployments/StatefulSets/DaemonSets |
-| `--set` | stringArray | — | set key=value overrides (repeatable) |
-| `--set-file` | stringArray | — | set key=path; the value is read from path (repeatable) |
-| `--set-json` | stringArray | — | set key=<json>; value is parsed as a JSON literal (repeatable) |
-| `--set-string` | stringArray | — | set key=value overrides forcing string interpretation (repeatable) |
-| `--skip-requires` | — | — | skip installation of required co-deployed packages |
-| `--timeout` | duration | 5m0s | timeout for readiness wait |
-| `-f, --values` | stringArray | — | values file overrides (repeatable) |
-| `--verify` | — | — | verify package signatures before installing |
-| `--wait` | — | behaviour | wait for resources to be ready |
-| `--wait-for-jobs` | — | — | wait for Job resources to complete (in addition to --wait) |
+| `--force` | — | — | delete and recreate resources to update immutable fields |
+| `--hook-timeout` | duration | 0 | cap each hook's timeout (0 = use the chart-declared value) |
+| `--keyring` | string | `~/.config/keramos/keyring` | PGP keyring directory used by `--verify` |
+| `--generate-name` | — | — | derive the release name from the package (omit `<release-name>`) |
+| `--verify` | — | — | verify the package's signatures before installing |
+| `--skip-requires` | — | — | don't install the package's required co-deployed packages |
+| `--history-max` | int | 0 | max revisions to retain in history (0 = unlimited) |
 
 ## Persistent flags inherited from `keramos`
 
@@ -61,39 +82,67 @@ keramos install <release-name> <package-path> [flags]
 | `--debug` | — | enable debug output |
 | `--kube-context` | string | Kubernetes context to use |
 | `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| `-n, --namespace` | string | namespace to install into |
 
-## Examples
+## Worked example — inputs and the release they produce
 
-Install from a local package directory, creating the namespace if missing:
+**INPUT 1 — the package (`./web`).** `keramos.yaml` names it and `values.yaml`
+sets a default replica count:
 
-```sh
-keramos install my-app ./my-app -n my-app-prod --create-namespace
+```yaml
+# ./web/keramos.yaml
+name: web
+version: 1.0.0
+
+# ./web/values.yaml
+replicas: 2          # ← default in the package
 ```
 
-Install from an OCI registry at a specific tag, verifying the package's PGP signature first:
+**INPUT 2 — the command.** You override the replica count and ask for the
+namespace to be created:
 
 ```sh
-keramos install my-app oci://ghcr.io/example/charts/my-app:1.2.3 -n my-app-prod --verify
+keramos install web ./web -n apps --create-namespace --set replicas=3
 ```
 
-Install with values overrides and a non-default profile:
+There is no third input: `install` writes revision 1 from scratch, so there is
+no prior state to read.
 
-```sh
-keramos install my-app ./my-app -f overrides.yaml --set replicas=5 --profile ha-3node -n prod
+**OUTPUT:**
+
+```
+release web installed (revision 1)
 ```
 
-Render-only sanity check before commit (no cluster contact):
+**State written** (the stored release `install` created):
+
+```yaml
+# keramos get web -n apps  →  the recorded revision 1
+name: web
+namespace: apps
+revision: 1
+status: deployed
+```
+
+**Tracing every line back to the inputs:**
+
+| Output / state | Which input it came from | Why |
+|---|---|---|
+| `release web` | INPUT 2 `<release-name>` | the name you passed |
+| `installed (revision 1)` | fresh install | the first apply of a name is always revision 1 |
+| namespace `apps` | INPUT 2 `-n apps` + `--create-namespace` | the namespace was created and used |
+| `replicas: 3` in the applied Deployment | INPUT 2 `--set replicas=3` | your override beat the package default of 2 |
+| `status: deployed` | readiness wait passed | `--wait` (default) confirmed every resource is Ready |
+
+Render and validate without touching the cluster:
 
 ```sh
-keramos install my-app ./my-app --dry-run client
+keramos install web ./web --dry-run client
 ```
 
 ## See also
 
-- [`upgrade`](upgrade.md) — apply changes to an existing release
-- [`uninstall`](uninstall.md)
-- [`diff`](diff.md) — preview changes
-- [`plan`](plan.md) and [`apply`](apply.md)
-- [Quickstart](../guides/quickstart.md)
-- [Values](../guides/values.md)
+- [`upgrade`](upgrade.md) — apply a new revision to an existing release
+- [`uninstall`](uninstall.md) — remove a release
+- [`plan`](plan.md) — preview what an install or upgrade would change
+- [`status`](status.md) — inspect a release after installing

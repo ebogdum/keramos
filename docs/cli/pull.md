@@ -1,86 +1,95 @@
 # keramos pull
 
-## Synopsis
-
-`keramos pull` downloads a package archive from a source — an OCI registry (`oci://...`) or a chart name plus `--repo <url>` for an HTTP repository. By default the archive is saved as-is; with `--untar`, it's extracted into a directory. With `--prov`, the detached provenance signature is fetched alongside; with `--verify`, keramos validates the signature before saving.
+Download a package from an OCI registry or an HTTP repository, and optionally
+unpack it.
 
 ## When to use it
 
-Use to vendor a copy of an upstream package into your monorepo, to inspect a package's contents offline before installing, or to feed an air-gapped install workflow. For installing directly from a registry without a separate pull step, use `keramos install <release> oci://...:<tag>`.
+- To vendor a copy of an upstream package into your repo, or stage one for an
+  air-gapped install.
+- To inspect a package's contents offline before installing — pair with
+  `--untar`.
+- To fetch by chart name from an HTTP repository (`--repo`) with SemVer version
+  selection, which the OCI-only [`keramos registry pull`](registry-pull.md) does
+  not do.
 
-## What happens when you run it
+## What happens
 
-1. Resolves the source: OCI reference parsed from `<chart>` if it starts with `oci://`; otherwise treats `<chart>` as a name to look up in `<repo>/index.yaml`.
-2. With `--version` set, picks the version satisfying the SemVer constraint; without it, picks the latest.
-3. Downloads the archive (and `.prov`/sidecar if `--prov`) into `--destination`.
-4. With `--verify`, validates the `.prov` against the local keyring before keeping the archive.
-5. With `--untar`, extracts into `--untardir` (default `<dest>/<chart>`).
+1. Reads `<chart>`. If it starts with `oci://`, keramos pulls from that registry
+   reference (`--version` is appended as the tag when set).
+2. Otherwise `<chart>` is a name looked up in `<repo>/index.yaml`, so `--repo`
+   is required. Keramos picks the version matching `--version`, or the latest when
+   it is unset.
+3. Downloads the archive into `--destination` (default the current directory).
+   With `--prov`, the `.prov` provenance sidecar is fetched alongside.
+4. With `--verify`, the provenance signature is checked before the archive is
+   kept; a bad signature aborts the pull.
+5. With `--untar`, the archive is extracted into `--untardir`
+   (default `<destination>/<chart>`).
+6. Prints the path of the archive, or the extraction directory when unpacked.
 
 ## Usage
 
 ```
-keramos pull <chart> [flags]
+keramos pull <chart>
 ```
+
+`<chart>` is either an `oci://…` reference or a chart name used with `--repo`.
 
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--ca-file` | string | "" | CA bundle for HTTPS |
-| `--cert-file` | string | "" | client certificate for HTTPS |
-| `--destination` | string | . | directory to save the archive in |
-| `-h, --help` | bool | false | help for pull |
-| `--key-file` | string | "" | client key for HTTPS |
-| `--prov` | bool | false | also download the `.prov` provenance sidecar |
-| `--repo` | string | "" | HTTP repository URL containing `index.yaml` |
-| `--untar` | bool | false | extract the archive after downloading |
-| `--untardir` | string | "" | extraction directory (default: `<dest>/<chart>`) |
-| `--verify` | bool | false | verify provenance signature before saving |
-| `--version` | string | "" | specific version to pull (default: latest) |
+| `--version` | string | "" | Version to pull. Unset takes the latest available. |
+| `--destination` | string | `.` | Directory the archive is saved in. |
+| `--repo` | string | "" | HTTP repository URL containing `index.yaml`. Required for non-OCI chart names. |
+| `--untar` | bool | false | Extract the archive after downloading. |
+| `--untardir` | string | "" | Directory to extract into. Default `<destination>/<chart>`. |
+| `--prov` | bool | false | Also download the `.prov` provenance sidecar. |
+| `--verify` | bool | false | Verify the provenance signature before saving; a bad signature aborts. |
+| `--ca-file` | string | "" | CA bundle to trust for an HTTPS repository. |
+| `--cert-file` | string | "" | Client certificate for mutual-TLS to the repository. |
+| `--key-file` | string | "" | Client key paired with `--cert-file`. |
 
-## Persistent flags inherited from `keramos`
+Global flags are inherited from `keramos`.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
+You want version 1.2.3 of `my-app` from an HTTP repository, unpacked so you can
+read it, then installed.
 
-Pull from an HTTP repo, picking the highest 1.2.x version, and untar it:
+**INPUT:**
 
 ```sh
-keramos pull my-app --repo https://charts.example.com --version "^1.2.0" -d ./pulled --untar
+keramos pull my-app --repo https://charts.example.com --version 1.2.3 \
+  -d ./pulled --untar
 ```
 
-Pull a specific OCI tag, verifying the provenance signature first:
+**OUTPUT:**
 
-```sh
-keramos pull oci://ghcr.io/example/charts/my-app --version 1.2.3 --prov --verify -d ./pulled --untar
+```
+Pulled and extracted: ./pulled/my-app
 ```
 
-Pull with mutual TLS (private repo with cert auth):
+**RESULT:** the archive is fetched and expanded, leaving a package directory at
+`./pulled/my-app` that you can inspect or install:
 
 ```sh
-keramos pull my-app --repo https://charts.example.internal --version 1.2.3 \
-  --ca-file /etc/keramos/ca.pem \
-  --cert-file /etc/keramos/client.crt \
-  --key-file /etc/keramos/client.key
-```
-
-Pull and immediately install:
-
-```sh
-keramos pull    my-app --repo https://charts.example.com --version 1.2.3 -d ./pulled --untar
 keramos install hello ./pulled/my-app -n staging --create-namespace
+```
+
+Pulling an OCI reference instead writes the archive and names it:
+
+```sh
+keramos pull oci://ghcr.io/example/charts/my-app --version 1.2.3 --destination ./pulled
+```
+```
+Pulled oci://ghcr.io/example/charts/my-app:1.2.3 to ./pulled/my-app-1.2.3.keramos.tgz
 ```
 
 ## See also
 
-- [`install`](install.md)
-- [`registry pull`](registry-pull.md) — OCI-only with extra flags
-- [`repo add`](repo-add.md)
-- [Signing guide](../guides/signing.md)
-- [Repositories guide](../guides/repositories.md)
+- [`registry pull`](registry-pull.md) — OCI-only pull with cosign verification
+- [`install`](install.md) — install the pulled package
+- [`package`](package.md) — build an archive
+- [`login`](login.md) — credentials for a private source

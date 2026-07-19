@@ -2,19 +2,43 @@
 
 ## Synopsis
 
-`keramos controller run` starts the in-cluster reconciler in the foreground. The reconciler lists every `KeramosRelease` CR (cluster-wide or in a single namespace), compares each spec against the corresponding keramos release record, and applies the difference. It re-checks the world on a configurable interval. The process is meant to run inside a cluster pod or as a sidecar daemon under systemd; killing it stops reconciliation but leaves any already-installed releases alone.
+`keramos controller run` starts the reconcile loop in the foreground. On a fixed
+interval it lists every `KeramosRelease` in the cluster, and for each one installs
+or upgrades the release its spec describes, then records the outcome on the
+CR's `status`. This is the process you deploy as a Deployment (or run under
+systemd) to make keramos operate as an in-cluster operator.
+
+It runs until you stop it (Ctrl-C, or the pod is terminated). Stopping it halts
+reconciliation but leaves every already-installed release in place.
 
 ## When to use it
 
-Run keramos as an operator when you want declarative `KeramosRelease` CRs to drive your installs and upgrades — typical in GitOps pipelines where Argo CD or Flux applies the CRs and the keramos controller turns them into actual cluster state. For one-shot operator commands run from a CLI machine, `keramos install` / `keramos upgrade` are simpler.
+- To run keramos as a Kubernetes-native operator driven by `KeramosRelease` CRs —
+  typically behind a GitOps engine (Argo CD, Flux) that applies the CRs while
+  the controller turns them into real releases.
+- For one-off installs from a workstation, [`install`](install.md) and
+  [`upgrade`](upgrade.md) are simpler; you don't need the controller.
 
-## What happens when you run it
+## What happens
 
-1. Keramos starts a watcher on `KeramosRelease` resources in `--watch-namespace` (empty = all namespaces).
-2. Every `--interval` it lists known CRs, compares each spec to the stored release record, and reconciles any divergence by calling the same code paths as `keramos install` / `keramos upgrade`.
-3. Each CR-supplied package path is resolved relative to `--package-root`; paths escaping that root are rejected (anti-traversal protection).
-4. Status is reported back to the CR via standard k8s `.status` conditions.
-5. The process runs until interrupted (`SIGINT` / `SIGTERM`).
+1. The loop starts and immediately runs a reconcile pass, then repeats every
+   `--interval`.
+2. Each pass lists every `KeramosRelease` in `--watch-namespace` (empty = all
+   namespaces). A CR whose `resourceVersion` is unchanged since the last pass
+   is skipped.
+3. For each changed CR it reads `spec.package` and resolves it under
+   `--package-root`. A package that resolves outside that root — an absolute
+   path, a `..` sequence, or a symlink escape — is rejected and the CR is
+   marked `Failed`.
+4. It renders the package with the CR's `spec.values` and `spec.profile`, then
+   installs or upgrades the release (named `spec.releaseName`, defaulting to the
+   CR's name) into the CR's namespace, waiting for readiness and rolling back on
+   failure.
+5. It writes the result to the CR's `status`: `phase` (`Deployed` or `Failed`),
+   `message`, `revision`, and `lastTransition`. Secret-shaped substrings in any
+   error message are redacted before being stored.
+6. While everything reconciles cleanly the process is quiet; a failed CR is
+   logged to stderr as a `[WARN]` line and the loop continues with the next CR.
 
 ## Usage
 
@@ -26,48 +50,74 @@ keramos controller run [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | bool | false | help for run |
-| `--interval` | duration | 30s | reconcile interval |
-| `--package-root` | string | /var/lib/keramos/packages | directory under which CR-supplied package paths must resolve (anti-traversal root) |
-| `--watch-namespace` | string | "" | namespace to watch (empty = all) |
+| `--interval` | duration | `30s` | how often to re-list and reconcile every KeramosRelease; lower it for a tighter loop, raise it to reduce API load |
+| `--package-root` | string | `/var/lib/keramos/packages` | directory that CR-supplied `spec.package` paths must resolve under; anything resolving outside it is rejected, so a namespaced tenant cannot point the controller at `/etc` or a secret mount |
+| `--watch-namespace` | string | `""` | namespace to watch; empty watches every namespace |
 
-## Persistent flags inherited from `keramos`
+Global flags also apply:
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--debug` | — | — | print debug output for each reconcile pass |
+| `--kube-context` | string | (current) | which cluster to reconcile |
+| `--kubeconfig` | string | (default) | path to the kubeconfig file |
+| `-n, --namespace` | string | — | Kubernetes namespace |
 
-## Examples
+## Worked example
 
-Watch every namespace, default reconcile interval, default package root:
-
-```sh
-keramos controller run
-```
-
-Restrict the watch to a single tenant namespace:
+Install the CRD, create one `KeramosRelease`, then start the loop:
 
 ```sh
-keramos controller run --watch-namespace tenant-a
+keramos controller install-crd
+
+kubectl apply -f - <<'EOF'
+apiVersion: keramos.dev/v1
+kind: KeramosRelease
+metadata:
+  name: web
+  namespace: apps
+spec:
+  package: web          # a package pre-provisioned at /var/lib/keramos/packages/web
+  values:
+    replicas: 3
+EOF
+
+keramos controller run --watch-namespace apps
 ```
 
-Tighten the reconcile loop for a development cluster:
+**Output:** with a valid `web` package, the loop stays silent — it installs the
+release and records the result on the CR. Read the outcome from the object:
+
+```sh
+kubectl get keramosrelease web -n apps -o jsonpath='{.status}'
+```
+
+```
+{"phase":"Deployed","message":"ok","revision":1,"lastTransition":"2026-07-18T14:05:33Z"}
+```
+
+If a CR points at a package that isn't under `--package-root`, that CR fails
+and the loop logs it to stderr, then carries on:
+
+```
+[WARN] KeramosRelease apps/web: package "../../etc" does not exist under allowlisted root
+```
+
+and its status reads:
+
+```
+{"phase":"Failed","message":"package \"../../etc\" ...","revision":0,"lastTransition":"..."}
+```
+
+Tighten the loop on a dev cluster:
 
 ```sh
 keramos controller run --interval 5s --debug
 ```
 
-Use a non-default package root (e.g. when running outside a pod with packages mounted at a custom path):
-
-```sh
-keramos controller run --package-root /opt/keramos/charts
-```
-
 ## See also
 
-- [`controller`](controller.md)
-- [`controller install-crd`](controller-install-crd.md) — install the CRD first
-- [`controller crd`](controller-crd.md)
+- [`controller install-crd`](controller-install-crd.md) — register the CRD first
+- [`controller crd`](controller-crd.md) — inspect the CRD schema
+- [`install`](install.md) / [`upgrade`](upgrade.md) — the operations each reconcile runs
+- [`controller`](controller.md) — operator overview

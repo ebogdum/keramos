@@ -2,62 +2,72 @@
 
 ## Synopsis
 
-`keramos controller install-crd` applies the `KeramosRelease` CRD to the cluster. The CRD lets operators describe a release declaratively (`apiVersion: keramos.dev/v1, kind: KeramosRelease`) and have the in-cluster reconciler converge it. The CRD must exist before `keramos controller run` can watch and reconcile any `KeramosRelease` objects.
+`keramos controller install-crd` registers the `KeramosRelease` CustomResourceDefinition
+in your cluster. It applies the same YAML that [`controller crd`](controller-crd.md)
+prints, then waits for the API server to start serving the new kind. The CRD
+must exist before [`controller run`](controller-run.md) can see any
+`KeramosRelease` objects.
 
 ## When to use it
 
-Run once per cluster as a prerequisite step before deploying the controller. Re-running is safe: the apply is idempotent and will leave an existing CRD untouched if the schema already matches, or upgrade it in place if it has changed.
+- Once per cluster, before you deploy the controller.
+- Again after upgrading keramos, to pick up CRD schema changes. Re-running is
+  safe: the apply is idempotent.
 
-## What happens when you run it
+## What happens
 
 1. Keramos connects to the cluster using the active kubeconfig context.
-2. Server-side applies the embedded `KeramosRelease` CRD definition (group `keramos.dev`).
-3. Waits briefly for the CRD to reach `Established=true`.
-4. Prints the applied object's name on success, or the API server error on failure.
+2. It applies the embedded `KeramosRelease` CRD (group `keramos.dev`).
+3. It waits (up to two minutes) for the CRD to become `Established` — the point
+   at which the API server serves the kind.
+4. On success the command exits 0 with no output. On failure it prints the API
+   server error and exits non-zero (for example, when your context lacks
+   permission to create CRDs).
 
 ## Usage
 
 ```
-keramos controller install-crd [flags]
+keramos controller install-crd
 ```
 
 ## Flags
 
+Inherits the global flags.
+
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | bool | false | help for install-crd |
+| `--debug` | — | — | print debug output while applying |
+| `--kube-context` | string | (current) | which cluster to apply the CRD to |
+| `--kubeconfig` | string | (default) | path to the kubeconfig file |
+| `-n, --namespace` | string | — | Kubernetes namespace (the CRD itself is cluster-scoped) |
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Install the CRD using the current kubeconfig context:
+Register the CRD, then confirm it landed:
 
 ```sh
 keramos controller install-crd
+kubectl get crd keramosreleases.keramos.dev
 ```
 
-Install into an explicit cluster context:
+**Output:**
 
-```sh
-keramos controller install-crd --kube-context prod-cluster
+```
+# keramos controller install-crd prints nothing and exits 0
+
+# kubectl now sees the registered CRD:
+NAME                    CREATED AT
+keramosreleases.keramos.dev   2026-07-18T14:02:11Z
 ```
 
-Verify the CRD landed:
+Target a specific cluster:
 
 ```sh
-keramos controller install-crd && kubectl get crd keramosreleases.keramos.dev
+keramos controller install-crd --kube-context prod
 ```
 
 ## See also
 
-- [`controller`](controller.md)
-- [`controller crd`](controller-crd.md) — print without applying
-- [`controller run`](controller-run.md) — start the reconciler
+- [`controller crd`](controller-crd.md) — print the CRD without applying it
+- [`controller run`](controller-run.md) — start the reconciler once the CRD exists
+- [`controller`](controller.md) — operator overview

@@ -2,18 +2,23 @@
 
 ## Synopsis
 
-`keramos keyring list` (alias `keramos keyring ls`) prints every public key currently installed in the keramos keyring directory: file name, fingerprint, user-id, and creation date. The keyring is the trust store consulted by `--verify` operations on pull and install.
+`keramos keyring list` (alias `keramos keyring ls`) prints every public key installed
+in `~/.config/keramos/keyring/`, showing each key's fingerprint and file name.
+These are the signers keramos trusts for `--verify` operations.
 
 ## When to use it
 
-Use to audit which signers are trusted on this machine, to find a fingerprint for a `keramos keyring remove` call, or to confirm a `keramos keyring add` succeeded.
+- To audit which signers are trusted on this machine.
+- To find the fingerprint or filename to pass to `keramos keyring remove`.
+- To confirm a `keramos keyring add` succeeded.
 
-## What happens when you run it
+## What happens
 
-1. Reads `~/.config/keramos/keyring/` (or `${KERAMOS_CONFIG_HOME}/keyring/`).
-2. Parses each `.asc` file as a PGP public key block.
-3. Prints one row per key.
-4. Read-only; no cluster contact, no network.
+1. Reads `~/.config/keramos/keyring/`, creating it empty if it does not exist.
+2. If the directory holds no keys, prints `No keys installed.` and stops.
+3. Otherwise prints a `FINGERPRINT` / `FILE` table, one row per key. A key file
+   keramos cannot parse shows its fingerprint as `(unreadable)`.
+4. Reads only local files — no cluster, no network.
 
 ## Usage
 
@@ -23,42 +28,38 @@ keramos keyring list [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for list |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+**INPUT — a keyring with one key already added:**
 
-## Examples
+```sh
+keramos keyring add ./jane.pub
+```
 
-List trusted keys:
+**List the trusted keys:**
 
 ```sh
 keramos keyring list
 ```
 
-Use the short alias:
+**OUTPUT — the fingerprint and file name of each key:**
 
-```sh
-keramos keyring ls
+```
+FINGERPRINT                                  FILE
+3AA5C34371567BD2                             jane.pub
 ```
 
-Find a specific signer:
+On a fresh machine with nothing added yet, the same command prints:
 
-```sh
-keramos keyring list | grep jane@example.com
+```
+No keys installed.
 ```
 
 ## See also
 
-- [`keyring`](keyring.md)
-- [`keyring add`](keyring-add.md)
-- [`keyring remove`](keyring-remove.md)
-- [Signing guide](../guides/signing.md)
+- [`keyring`](keyring.md) — the parent command
+- [`keyring add`](keyring-add.md) — install a key
+- [`keyring remove`](keyring-remove.md) — remove a key
+- [`package verify`](package-verify.md) — verify a package against the keyring

@@ -1,64 +1,34 @@
 # keramos repo
 
-## Synopsis
+`keramos repo` manages the list of HTTP package repositories that keramos searches
+and pulls charts from.
 
-`keramos repo` manages HTTP package repositories. Subcommands add, remove, and list repositories; refresh local index caches; and generate or update an `index.yaml` for a directory of packaged archives (the publication side).
+You register a repository under a short name and URL, refresh its index so
+searches and pulls can see its charts, and remove it when you no longer need
+it. `keramos repo index` covers the other side: building an `index.yaml` for a
+directory of archives you want to serve as a repository.
 
-## When to use it
+The repository list lives at `~/.config/keramos/repositories.yaml`. Fetched
+indexes are cached under `~/.cache/keramos/indexes/`.
 
-Use to manage your local list of upstream repositories and to generate index files for repositories you publish.
+## Subcommands
+
+| Command | What it does |
+|---|---|
+| [`add`](repo-add.md) | Register a repository under a name and URL. |
+| [`index`](repo-index.md) | Build an `index.yaml` for a directory of archives. |
+| [`list`](repo-list.md) | Show the repositories you have registered. |
+| [`remove`](repo-remove.md) | Drop a repository from your list. |
+| [`update`](repo-update.md) | Re-fetch the index of every registered repository. |
 
 ## Usage
 
 ```
-keramos repo [command]
-```
-
-## Subcommands
-
-- [`keramos repo add`](repo-add.md) — register a repository
-- [`keramos repo remove`](repo-remove.md) — unregister a repository
-- [`keramos repo list`](repo-list.md) — list registered repositories
-- [`keramos repo update`](repo-update.md) — refresh local index caches
-- [`keramos repo index`](repo-index.md) — generate or update an `index.yaml` for a directory of archives
-
-## Flags
-
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | — | — | help for repo |
-
-## Persistent flags inherited from `keramos`
-
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Add a repo:
-
-```sh
-keramos repo add my-charts https://charts.example.com
-```
-
-Refresh the local index cache for every added repo:
-
-```sh
-keramos repo update
-```
-
-Generate an index for a directory you're publishing:
-
-```sh
-keramos repo index ./build --url https://charts.example.com
+keramos repo [command] [flags]
 ```
 
 ## See also
 
-- [`pull`](pull.md)
-- [`search`](search.md)
-- [Repositories guide](../guides/repositories.md)
+- [`search`](search.md) — find charts across your registered repositories
+- [`pull`](pull.md) — download a chart from a repository
+- [`install`](install.md) — install a package as a release

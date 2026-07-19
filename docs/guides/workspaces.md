@@ -1,25 +1,32 @@
-# Workspaces
+# Manage a workspace of packages
 
-A workspace is a `keramos-workspace.yaml` file plus a tree of member packages. The workspace is installed, upgraded, diffed, or uninstalled by a single command, with keramos computing a topological order from `dependsOn` declarations and running members in parallel where the graph allows it. Each member is its own release — workspaces are not a way to compose templates (use `layers:` for that); they're a way to orchestrate many independently-installable packages from one repository.
+A workspace is a `keramos-workspace.yaml` file plus a tree of member packages.
+One command installs, upgrades, diffs, or uninstalls the whole set, with keramos
+computing a topological order from `dependsOn` and running independent members
+in parallel. Each member is its own release — a workspace orchestrates many
+independently-installable packages from one repository. (To compose one release
+from reusable pieces, use `layers:` instead; see [Layers](layers.md).)
 
-The full file-format reference is in [`keramos-workspace.yaml`](../reference/keramos-workspace-yaml.md). This guide explains *how* to use it.
+The file-format reference is
+[`keramos-workspace.yaml`](../reference/keramos-workspace-yaml.md); the command
+reference is [`keramos workspace`](../cli/workspace.md). This guide covers the
+workflow.
 
 ## When to reach for a workspace
 
-You have a workspace if you have all of these:
+You want a workspace when all of these hold:
 
-- Multiple packages in **one repository** (a monorepo for an application platform).
-- A **dependency graph** between them (postgres before app, app before edge).
-- A desire to **install/upgrade/uninstall the whole graph** with one command.
-- Each member is its own **independently-versioned release** (you can upgrade `api` without touching `postgres`).
+- Multiple packages in **one repository**.
+- A **dependency graph** between them (postgres before api, api before gateway).
+- A wish to **install/upgrade/uninstall the whole graph** with one command.
+- Each member is its own **independently-versioned release**.
 
-If any of those isn't true, a workspace is overkill.
+If any of those is false, a workspace is overkill:
 
-- One package, with reusable building blocks → use `layers:`.
+- One release built from reusable blocks → use `layers:`.
 - Many releases from many sources → use [`keramos-releases.yaml`](releases.md).
-- One release backing a CR → use the KeramosRelease controller.
 
-## Layout
+## Lay out the workspace
 
 ```
 my-platform/
@@ -29,7 +36,6 @@ my-platform/
 │   ├── values.yaml
 │   └── templates/
 ├── redis/
-│   ├── keramos.yaml
 │   └── ...
 ├── api/
 │   └── ...
@@ -39,9 +45,9 @@ my-platform/
     └── ...
 ```
 
-`keramos-workspace.yaml` at the root, members underneath. The members can be anywhere reachable from the workspace root — paths resolve relative to the file.
+`keramos-workspace.yaml` sits at the root; member paths resolve relative to it.
 
-## A small workspace
+## Write the workspace file
 
 ```yaml
 # keramos-workspace.yaml
@@ -71,185 +77,214 @@ members:
   - name: gateway
     path: ./gateway
     dependsOn: [api]
-    namespace: my-platform-edge      # overrides default
+    namespace: my-platform-edge      # overrides the default
 ```
 
-## Topology and levels
+Each member has a `name`, a `path`, and optionally `namespace`, `profile`,
+`dependsOn`, `atomic`, and `wait`. The `defaults` block sets `namespace`,
+`profile`, `atomic`, and `wait` for any member that does not override them.
 
-Keramos resolves members into **levels** using Kahn's algorithm:
+## Preview the order
 
-- Level 0: members with no `dependsOn`.
-- Level N: members whose every `dependsOn` target is at a lower level.
-
-Members within the same level are mutually independent and can be installed concurrently. The above workspace yields:
-
-```
-Level 0:
-  - postgres
-  - redis
-Level 1:
-  - api          (depends on postgres, redis)
-  - worker       (depends on postgres)
-Level 2:
-  - gateway      (depends on api)
-```
-
-Inspect with:
+Every `keramos workspace` command reads `keramos-workspace.yaml` from the directory
+given by `--dir` (default the current directory) — there is no positional path
+argument.
 
 ```sh
-keramos workspace plan . --levels
+keramos workspace plan
 ```
 
-Output is the same level grouping; `keramos workspace plan . --json` prints a structured representation suitable for piping into other tooling.
+```
+1. postgres (path=./postgres, ns=my-platform, profile=ha-3node)
+2. redis (path=./redis, ns=my-platform, profile=)
+3. api (path=./api, ns=my-platform, profile=)
+4. worker (path=./worker, ns=my-platform, profile=)
+5. gateway (path=./gateway, ns=my-platform-edge, profile=)
+```
+
+Add `--levels` to group members by dependency depth — members in the same
+level are mutually independent and can run in parallel:
+
+```sh
+keramos workspace plan --levels
+```
+
+```
+level 0 (2 members, parallelisable):
+  - postgres (path=./postgres, ns=my-platform)
+  - redis (path=./redis, ns=my-platform)
+level 1 (2 members, parallelisable):
+  - api (path=./api, ns=my-platform)
+  - worker (path=./worker, ns=my-platform)
+level 2 (1 members, parallelisable):
+  - gateway (path=./gateway, ns=my-platform-edge)
+```
+
+Level 0 holds members with no `dependsOn`; a member lands at level N when every
+member it depends on sits at a lower level. To plan a workspace in another
+directory, point `--dir` at it:
+
+```sh
+keramos workspace plan --dir ./my-platform --levels
+```
 
 ## Install, upgrade, uninstall
 
 ```sh
-keramos workspace install   .   # install all members in level order
-keramos workspace upgrade   .   # upgrade existing, install missing
-keramos workspace uninstall .   # reverse-level order: uninstall everything
-keramos workspace plan      .   # what would happen — no changes applied
-keramos workspace status    .   # per-member release status
-keramos workspace diff      .   # per-member diff against current values
+keramos workspace install     # install all members in dependency order
+keramos workspace upgrade     # upgrade existing, install missing
+keramos workspace uninstall   # reverse order: dependents down first
+keramos workspace status      # per-member revision and status
+keramos workspace diff        # per-member preview of pending changes
 ```
 
-The `.` in each invocation is the workspace directory (the directory containing `keramos-workspace.yaml`).
+## Run members in parallel
 
-## Parallelism
-
-`--parallel N` controls per-level concurrency. Within a level, keramos runs up to N installs in parallel; the next level only starts when **every** member of the current level has finished.
+`--parallel N` sets the per-level concurrency (default `1`, i.e. sequential).
+Within a level, up to N members run at once; the next level starts only when
+**every** member of the current one has finished.
 
 ```sh
-keramos workspace install . --parallel 4
+keramos workspace install --parallel 4 --progress
 ```
 
-For the example above, with `--parallel 4`:
+```
+workspace: 5 members across 3 level(s), parallel=4, op=install
 
-- Level 0 starts both `postgres` and `redis` in parallel.
-- Level 1 waits for both to complete, then starts `api` and `worker` in parallel.
-- Level 2 waits for those, then starts `gateway`.
+[level 0/2] 2 member(s) starting concurrently
+  → postgres (ns=my-platform) start
+  → redis (ns=my-platform) start
+  ✓ redis done in 8.1s
+  ✓ postgres done in 12.4s
 
-## Health-gate
+[level 1/2] 2 member(s) starting concurrently
+  → api (ns=my-platform) start
+  → worker (ns=my-platform) start
+  ✓ worker done in 4.7s
+  ✓ api done in 5.2s
 
-`--health-gate` adds a wait between levels: keramos doesn't start level N+1 until every member of level N has its workloads Ready (Deployment available, StatefulSet ready, etc.). Without `--health-gate`, level N+1 starts as soon as level N's apply calls return — Pods may still be coming up.
+[level 2/2] 1 member(s) starting concurrently
+  → gateway (ns=my-platform-edge) start
+  ✓ gateway done in 3.1s
+
+All 5 member(s) succeeded.
+```
+
+`--progress` prints these live lines. Without it, a fully successful run prints
+nothing; failures are always reported.
+
+## Gate on readiness between levels
+
+By default a level advances as soon as its apply calls return — pods may still
+be starting. `--health-gate` makes keramos wait until every pod owned by a level
+is Ready before starting the next level, so dependents start against a
+dependency that is actually serving.
 
 ```sh
-keramos workspace install . --parallel 4 --health-gate
+keramos workspace install --parallel 4 --health-gate
 ```
 
-Use `--health-gate` when:
+Use it when a level genuinely depends on the previous one being functionally up
+(api cannot start until postgres accepts connections). Skip it when each member
+tolerates its dependencies being slow to come up, for a faster rollout.
+`--health-gate-timeout` (default `5m0s`) caps each level's wait.
 
-- Members at level N+1 actually depend on level N being **functionally** ready (api can't start until postgres is accepting connections).
-- Your environment has fast scheduling but slow image pulls (without the gate, the api would CrashLoopBackOff for several minutes before postgres's Pod is up).
+## Control failure handling
 
-Skip `--health-gate` when:
-
-- Each member can tolerate its dependencies being slow to come up (Kubernetes-native retry semantics handle the temporary unavailability).
-- You want the fastest possible rollout and don't mind brief restarts as dependencies catch up.
-
-## Atomic-workspace
-
-`--atomic-workspace` means: if any member fails, every member that previously succeeded in this run gets uninstalled. The workspace is "all or nothing".
+`--atomic-workspace` makes the run all-or-nothing: if any member fails, every
+member that already succeeded in this run is uninstalled.
 
 ```sh
-keramos workspace install . --atomic-workspace
+keramos workspace install --atomic-workspace
 ```
 
-Pair with per-member `atomic: true` (the default) for symmetric behaviour: each member self-rolls-back its own resources on failure, AND the workspace as a whole rolls everything back.
-
-Without `--atomic-workspace`, a partial workspace install leaves successful members deployed even if a later member fails. This is sometimes what you want — you can re-run the workspace install and it'll skip already-installed members.
-
-## Continue-on-error
-
-`--continue-on-error` means a single member's failure does not abort the workspace. Remaining members keep installing. Use with `--atomic-workspace` for "each member self-rolls-back, but we keep going" semantics.
+`--continue-on-error` does the opposite — a member's failure does not abort the
+run; the rest keep going and all failures are reported at the end.
 
 ```sh
-keramos workspace install . --continue-on-error
+keramos workspace install --continue-on-error
 ```
 
-The summary at the end lists which members succeeded and which failed. Exit code is non-zero if any failed.
+The two are **mutually exclusive**. Pair per-member `atomic: true` (the
+default) with `--atomic-workspace` for symmetric behaviour: each member rolls
+back its own resources on failure, and the workspace rolls back the whole set.
 
-## Progress
-
-`--progress` toggles a verbose, level-by-level progress display. Without it, keramos prints a one-line summary per member as it finishes.
+## Preview changes before upgrading
 
 ```sh
-keramos workspace install . --progress
+keramos workspace diff
 ```
 
-Output:
-
 ```
-Level 0 (2 members) ────────────────────────────
-  ✓ postgres        12.4s  → ready
-  ✓ redis            8.1s  → ready
-Level 1 (2 members) ────────────────────────────
-  ✓ api              5.2s  → ready
-  ✓ worker           4.7s  → ready
-Level 2 (1 member)  ────────────────────────────
-  ✓ gateway          3.1s  → ready
+=== postgres (ns=my-platform) ===
+  no changes
 
-Workspace installed in 33.5s.
+=== api (ns=my-platform) ===
+~ update  Deployment/api  (namespace my-platform)
+      ~ spec.replicas
+          - 2   (state)
+          + 3
+
+Summary: 0 added, 1 changed, 0 removed.
 ```
 
-## Diff
+`diff` renders each member and compares it against the state keramos recorded at
+its last apply, grouped by member in dependency order. Nothing is applied.
 
-`keramos workspace diff .` runs a per-member `keramos diff` against current state. Output groups by member:
+## Check status
 
-```
-api ─────────────────────
-  Deployment/api
-    spec.replicas: 2 → 3
-    spec.template.spec.containers[0].image:
-      registry/api:1.0.0 → registry/api:1.1.0
-
-postgres ────────────────
-  (no changes)
+```sh
+keramos workspace status
 ```
 
-## Status
-
-`keramos workspace status .` queries each member's release record:
-
 ```
-NAME       NS              REV  STATUS    PACKAGE       VERSION   AGE
-postgres   my-platform     7    deployed  postgres      3.0.4     14d
-redis      my-platform     2    deployed  redis         2.4.1      8d
-api        my-platform     12   deployed  api           1.1.0      4h
-worker     my-platform     12   deployed  worker        1.1.0      4h
-gateway    my-platform-edge 3   deployed  gateway       0.5.2      4h
+MEMBER                         NAMESPACE            REVISION   STATUS
+postgres                       my-platform          7          deployed
+redis                          my-platform          2          deployed
+api                            my-platform          12         deployed
+worker                         my-platform          12         deployed
+gateway                        my-platform-edge     -          not deployed
 ```
 
-## Per-member overrides
+A member with no release shows `-` and `not deployed`.
 
-Most flags on `keramos install`/`keramos upgrade` have analogues on the workspace commands and can be customised per member via `keramos-workspace.yaml`:
+## Override settings per member
+
+Most per-release settings can be customised on the member entry:
 
 ```yaml
 members:
-  - name: api
-    path: ./api
-    namespace: api-prod         # overrides default ns for this member
-    profile: prod               # selects api/profiles/prod.yaml
-    atomic: false               # don't roll back this member on failure
-    wait: false                 # don't wait for ready (good for non-deployment members like CronJobs)
+  - name: worker
+    path: ./worker
+    namespace: worker-prod      # overrides the default namespace
+    profile: prod               # selects worker's prod profile
+    atomic: false               # leave a failed install in place to inspect
+    wait: false                 # don't wait for Ready (e.g. CronJob members)
 ```
 
-## Shared values across members
+## Share values across members
 
-Workspace commands don't expose `--set` / `-f` flags — each member is rendered against its own `values.yaml` plus its own selected profile or environment. To propagate a common value across members (a shared image registry, a shared domain, common labels), keep it in each member's `values.yaml` under the conventional `global` key:
+Workspace commands do not expose `-f`/`--set`: each member renders against its
+own `values.yaml` plus its selected `profile`. To propagate a common value —
+a shared registry, a shared domain — keep it under the conventional `global`
+key in each member's `values.yaml`:
 
 ```yaml
 # api/values.yaml
 global:
   imageRegistry: registry.example.com
   domain: example.com
-
-# worker/values.yaml — same global block
-global:
-  imageRegistry: registry.example.com
-  domain: example.com
 ```
 
-Inside any layer's templates, `${values.global.imageRegistry}` resolves the same way regardless of where the layer is composed.
+Templates reference it the same way regardless of where the member sits:
+`${values.global.imageRegistry}`.
 
-For environment-specific overrides (dev vs staging vs prod), use the `environments:` block in each member's `keramos.yaml` (see [Values guide](values.md)) and select with `--env` on a per-member basis (workspaces honour the member's own environment selection).
+## See also
+
+- [`keramos workspace`](../cli/workspace.md) — command reference
+- [`keramos-workspace.yaml`](../reference/keramos-workspace-yaml.md) — file-format
+  reference
+- [Cross-release dependencies](releases.md) — orchestrate releases from many
+  sources
+- [Layers](layers.md) — compose one release from reusable pieces
+- [Values](values.md) — profiles and environments

@@ -1,19 +1,26 @@
 # keramos sbom
 
-## Synopsis
-
-`keramos sbom` emits a CycloneDX 1.5 JSON SBOM for a release. The SBOM lists the release's package metadata, its declared layers, and every container image referenced in the rendered manifest with the SHA-256 digests where computable. Output goes to stdout — redirect to a file for archival or feed it directly into `cosign attest`, `grype`, `trivy`, or Dependency Track.
+`keramos sbom` emits a CycloneDX 1.5 JSON software bill of materials for a
+release — its package plus every container image it runs.
 
 ## When to use it
 
-Use as part of supply-chain documentation: every install / upgrade gets an SBOM emitted into the artefact store, pinned to the revision number. With `cosign attest --predicate <sbom>` the SBOM becomes a verifiable attestation alongside the OCI image.
+- To produce a supply-chain artifact for each deploy that `cosign attest`,
+  Grype, Trivy, or Dependency Track can ingest.
+- To answer "what images and package version is this release actually
+  running?" for a security or compliance review.
+- To diff what shipped between two revisions by generating an SBOM for each.
 
-## What happens when you run it
+## What happens
 
-1. Reads the release record at `<release-name>` (current revision unless `--revision` is set).
-2. Parses the rendered manifest to discover every `image:` reference.
-3. Emits a CycloneDX 1.5 JSON document containing the package metadata and the image bill-of-materials.
-4. Prints to stdout. Cluster contact is read-only.
+1. You name a release. keramos reads its stored record — the latest revision, or
+   the one you pass to `--revision`.
+2. keramos walks the rendered manifest and collects every container image it
+   references (in containers, init containers, and ephemeral containers).
+3. It builds a CycloneDX 1.5 document: the release as the root component, its
+   keramos package as a library component, and one container component per image.
+4. The JSON document is printed to stdout. Redirect it to a file or pipe it
+   into your scanner. Contact with the cluster is read-only.
 
 ## Usage
 
@@ -25,40 +32,73 @@ keramos sbom <release-name> [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | bool | false | help for sbom |
-| `--revision` | int | 0 | release revision (0 = latest) |
+| `--revision` | int | `0` | build the SBOM for this revision; `0` uses the latest |
 
-## Persistent flags inherited from `keramos`
+### Persistent flags inherited from `keramos`
 
 | Flag | Type | Description |
 |---|---|---|
-| `--debug` | bool | enable debug output |
+| `--debug` | — | enable debug output |
 | `--kube-context` | string | Kubernetes context to use |
 | `--kubeconfig` | string | path to kubeconfig file |
 | `-n, --namespace` | string | Kubernetes namespace |
 
-## Examples
+## Worked example
 
-Emit the SBOM for the current revision:
+Write the SBOM for the current revision to a file:
 
 ```sh
-keramos sbom hello -n prod > hello.cdx.json
+keramos sbom web-api -n prod > web-api.cdx.json
 ```
 
-SBOM for a historical revision:
+The document written looks like this:
 
-```sh
-keramos sbom hello --revision 3 -n prod > hello-rev3.cdx.json
+```json
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:4c1e9a2f-...",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-07-18T12:00:00Z",
+    "tools": [
+      { "vendor": "keramos", "name": "keramos", "version": "dev" }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "release/web-api",
+      "name": "web-api",
+      "version": "rev-3",
+      "description": "public API service"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "package/webapp@1.4.0",
+      "name": "webapp",
+      "version": "1.4.0",
+      "purl": "pkg:keramos/webapp@1.4.0"
+    },
+    {
+      "type": "container",
+      "bom-ref": "image/registry.example.com/api:1.5.0",
+      "name": "api",
+      "version": "1.5.0",
+      "purl": "pkg:oci/api@1.5.0"
+    }
+  ]
+}
 ```
 
-Pipe directly into a vulnerability scanner:
+Pipe a historical revision straight into a vulnerability scanner:
 
 ```sh
-keramos sbom hello -n prod | grype sbom:-
+keramos sbom web-api --revision 2 -n prod | grype sbom:-
 ```
 
 ## See also
 
-- [`audit`](audit.md)
-- [`get manifest`](get-manifest.md)
-- [Signing guide](../guides/signing.md)
+- [`get manifest`](get-manifest.md) — the rendered manifest the images come from
+- [`audit`](audit.md) — the change trail for the same release
+- [`scan`](scan.md) — refactor packages, not scan for vulnerabilities

@@ -2,18 +2,27 @@
 
 ## Synopsis
 
-`keramos keyring add` installs an armoured PGP public key into keramos's local keyring directory (`~/.config/keramos/keyring/`, or `${KERAMOS_CONFIG_HOME}/keyring/`). Once installed, the key's signer is trusted for all subsequent `--verify` operations on `keramos pull`, `keramos install`, and dependency resolution.
+`keramos keyring add` installs a PGP public key into keramos's keyring so that its
+signer becomes trusted for `--verify` operations. You point it at a key file;
+keramos validates the file is a real public key and copies it into
+`~/.config/keramos/keyring/`.
 
 ## When to use it
 
-Use to trust a new package signer — typically a CI-bot key or a maintainer's published public key. Existing keys are not overwritten unless you pass `--force`. The keyring is per-user and per-machine; there is no shared cluster-wide keyring.
+- To trust a new package signer — a maintainer's published key or a CI-bot
+  key — before you verify or install their signed packages.
+- After a key rotation, to install the replacement key (use `--force` to
+  overwrite the old file).
 
-## What happens when you run it
+## What happens
 
-1. Reads the public key file at `<key-file>` (must be ASCII-armoured).
-2. Validates that it is a recognisable PGP public key block.
-3. Copies the file into `~/.config/keramos/keyring/<basename>.asc` (basename collisions error unless `--force`).
-4. Prints the imported key's fingerprint and user-id on success.
+1. Reads the key file at `<key-file>`. If it cannot be read, the command
+   errors.
+2. Validates that the file is a recognisable PGP public key (ASCII-armoured or
+   binary). Anything else is rejected, so junk never enters the trust store.
+3. Copies it into `~/.config/keramos/keyring/` under its original filename. A
+   filename already in the keyring is an error unless you pass `--force`.
+4. Prints `Installed key <filename> (<fingerprint>)`.
 
 ## Usage
 
@@ -23,45 +32,48 @@ keramos keyring add <key-file> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `--force` | bool | false | overwrite an existing key file with the same basename |
-| `-h, --help` | bool | false | help for add |
+| Flag | Cause → effect |
+|---|---|
+| `--force` | Overwrite a key already installed under the same filename; without it, a name collision is an error. |
 
-## Persistent flags inherited from `keramos`
+Also inherits the global flags.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
-
-Trust a new signer's key:
+**INPUT — a signer's public key** exported to `jane.pub`:
 
 ```sh
-keramos keyring add /path/to/jane@example.com.pub
+gpg --export --armor jane@example.com > jane.pub
 ```
 
-Replace an existing key (e.g. after a key rotation):
+**Add it to the keyring:**
 
 ```sh
-keramos keyring add /path/to/jane@example.com.pub --force
+keramos keyring add ./jane.pub
 ```
 
-Install a key fetched from a keyserver:
+**OUTPUT — keramos confirms the install and prints the fingerprint:**
+
+```
+Installed key jane.pub (3AA5C34371567BD2)
+```
+
+**Confirm it is trusted** — the key now appears in the listing:
 
 ```sh
-gpg --keyserver hkps://keys.openpgp.org --recv-keys 0xABCD1234
-gpg --export --armor 0xABCD1234 > /tmp/jane.pub
-keramos keyring add /tmp/jane.pub
+keramos keyring list
 ```
+
+```
+FINGERPRINT                                  FILE
+3AA5C34371567BD2                             jane.pub
+```
+
+keramos will now accept packages signed by this key when you pass `--verify`.
 
 ## See also
 
-- [`keyring`](keyring.md)
-- [`keyring list`](keyring-list.md)
-- [`keyring remove`](keyring-remove.md)
-- [Signing guide](../guides/signing.md)
+- [`keyring`](keyring.md) — the parent command
+- [`keyring list`](keyring-list.md) — confirm the key installed
+- [`keyring remove`](keyring-remove.md) — revoke the key later
+- [`package verify`](package-verify.md) — verify a package against the keyring

@@ -1,74 +1,106 @@
 # keramos dependency update
 
-## Synopsis
-
-`keramos dependency update` re-resolves every layer and required package against its source (HTTP repo index, OCI registry tag list, git ref, local path) and rewrites `keramos.lock` with the freshest pinned digests. The lockfile is the source of truth for `keramos install`, `keramos template`, and `keramos dependency build` — they all consult `keramos.lock` first and only fall back to `keramos.yaml`'s constraint if the lock is missing or stale.
+`keramos dependency update` re-resolves every layer and required package against
+its source and rewrites `keramos.lock` with the pinned versions and commits.
 
 ## When to use it
 
-Run whenever you edit `keramos.yaml`'s `layers:` or `requires:`, or when you want to bump a layer to the highest version still satisfying its constraint. Pass an optional `[name]` argument to update a single layer in place; without it, every layer is re-resolved. Always commit the resulting `keramos.lock` to source control — without it, two builds of the same package can pick up different layer versions if the constraint allows it.
+- After editing `layers:` or `requires:` in `keramos.yaml`, to refresh the lock.
+- To move a `git::` or registry source forward to the latest ref or version
+  its constraint allows.
 
-## What happens when you run it
+## What happens
 
-1. Reads `keramos.yaml` from `<package-path>`.
-2. Refreshes upstream indexes (HTTP repo `index.yaml`, OCI registry tag list) unless `--skip-refresh` is set.
-3. For each layer / require, resolves the constraint (`version:`, `ref:`) to a specific tag/commit/digest.
-4. Writes `keramos.lock` next to `keramos.yaml`.
-5. Prints a summary of changed layers (added, upgraded, removed) on stdout.
+keramos reads `keramos.yaml` and, for each layer and required package, resolves its
+`source`:
+
+- **git** sources are fetched and the exact commit is recorded as
+  `resolvedCommit`.
+- **registry** sources record the selected `resolvedVersion`.
+- **local** sources are recorded by path.
+
+keramos then writes `keramos.lock` with a fresh `generated` timestamp and one entry
+per layer and require. This lock is what [`build`](dependency-build.md),
+[`install`](install.md), and [`template`](template.md) read first, so every
+later render uses the same pinned versions. On success keramos prints
+`Layers updated successfully.`
 
 ## Usage
 
 ```
-keramos dependency update <package-path> [name] [flags]
+keramos dependency update <package-path> [name]
 ```
+
+The optional `[name]` argument updates a single legacy `dependencies:` entry;
+for `layers:`/`requires:` packages, all entries are re-resolved together.
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for update |
-| `--skip-refresh` | bool | false | skip repository index refresh before resolving |
+| Flag | Cause → effect |
+|---|---|
+| `--skip-refresh` | skip refreshing repository indexes first; resolve against the index already cached — faster, but may miss versions published since the last refresh |
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
+**INPUT — `./web/keramos.yaml`** with two layers and one required package, no
+lock yet:
+
+```yaml
+apiVersion: keramos/v1
+name: web
+version: 0.3.0
+layers:
+  - name: base-layer
+    source: ../base-layer
+  - name: common
+    source: ../common-layer
+requires:
+  - name: redis
+    source: ../redis-req
+```
+
+**Command:**
+
+```sh
+keramos dependency update ./web
+```
+
+**OUTPUT:**
+
+```
+Layers updated successfully.
+```
+
+**`./web/keramos.lock` that gets written:**
+
+```yaml
+apiVersion: keramos/v1
+generated: 2026-07-18T23:47:45.658955+02:00
+layers:
+    - name: base-layer
+      source: ../base-layer
+    - name: common
+      source: ../common-layer
+requires:
+    - name: redis
+      source: ../redis-req
+```
+
+**Tracing each input to its lock entry:**
+
+| `keramos.yaml` entry | `keramos.lock` entry | Why |
 |---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| `layers[0]` `base-layer` | `layers: - name: base-layer` | resolved and pinned under `layers:` |
+| `layers[1]` `common` | `layers: - name: common` | second layer, pinned |
+| `requires[0]` `redis` | `requires: - name: redis` | requires are pinned in their own block |
 
-## Examples
-
-Re-resolve every layer and rewrite `keramos.lock`:
-
-```sh
-keramos dependency update ./my-app
-```
-
-Update a single layer by name (other layers remain at their locked versions):
-
-```sh
-keramos dependency update ./my-app shared-base
-```
-
-Skip the index refresh — useful in CI when an earlier step has already populated the cache:
-
-```sh
-keramos dependency update ./my-app --skip-refresh
-```
-
-Pair with `dependency build` to actually fetch the resolved versions:
-
-```sh
-keramos dependency update ./my-app
-keramos dependency build  ./my-app
-```
+A `git::` source would add `resolvedCommit:`, and a registry source
+`resolvedVersion:`, so the lock records the exact bits, not just the name.
+Run [`dependency list`](dependency-list.md) afterward and every `STATUS`
+reads `locked`.
 
 ## See also
 
-- [`dependency`](dependency.md)
-- [`dependency build`](dependency-build.md) — materialise the cache
-- [`dependency list`](dependency-list.md) — inspect the lock
-- [`dependency tree`](dependency-tree.md) — visualise the composition chain
-- [Layers guide](../guides/layers.md)
+- [`dependency build`](dependency-build.md) — download what this lock pins
+- [`dependency list`](dependency-list.md) — confirm entries are now `locked`
+- [`install`](install.md) — install using the pinned versions

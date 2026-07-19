@@ -1,19 +1,27 @@
 # keramos search repo
 
-## Synopsis
-
-`keramos search repo` searches the locally-cached `index.yaml` of every registered HTTP repository for packages whose name or description matches the keyword. Results include the source repo, package name, latest version, and short description. The freshness of the result depends on how recently you ran `keramos repo update` — without a recent update, the search is against potentially stale data.
+`keramos search repo` searches the repositories you have added with
+`keramos repo add` for a package whose name or description contains a keyword.
 
 ## When to use it
 
-Use to find packages across your trusted, registered repositories without going to the public Artifact Hub. Pair with `keramos repo update` first if you want the most current view.
+Use it to find a package across your own trusted repositories. Reach for
+[`search hub`](search-hub.md) instead when you want to discover packages you
+have not added a repository for yet.
 
-## What happens when you run it
+## What happens
 
-1. Reads cached indexes from `~/.cache/keramos/indexes/`.
-2. Substring-matches the keyword against package names and descriptions.
-3. Prints a tabular view to stdout.
-4. No cluster contact, no network access (the index has already been cached).
+1. You pass one keyword; keramos lowercases it.
+2. keramos reads your configured repository list. If it is empty, it prints
+   `No repositories configured. Use 'keramos repo add' first.` and stops.
+3. For each repository it fetches the index and keeps every chart whose name
+   or whose description contains the keyword.
+4. It prints one row per match — repository-qualified name, latest version,
+   app version, and description — under a `NAME VERSION APP VERSION
+   DESCRIPTION` header. With no matches it prints `No results found for
+   "<keyword>"`.
+
+No cluster is contacted.
 
 ## Usage
 
@@ -23,43 +31,33 @@ keramos search repo <keyword> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for repo |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Refresh first, then search:
-
-```sh
-keramos repo update
-keramos search repo postgres
-```
-
-Search without refreshing (uses cached indexes — may be stale):
-
-```sh
-keramos search repo postgres
-```
-
-Find every package across registered repos with `redis` in the name:
+You have added the `bitnami` and `myrepo` repositories. Search for `redis`:
 
 ```sh
 keramos search repo redis
 ```
 
+Output:
+
+```
+NAME                           VERSION         APP VERSION     DESCRIPTION
+bitnami/redis                  20.1.3          7.4.0           Open source, in-memory data store
+myrepo/cache-redis             10.2.0          7.2.4           Redis with clustering enabled
+```
+
+The `bitnami/redis` row matched because `redis` is in the chart name; the
+`myrepo/cache-redis` row matched on either its name or its description. Each
+row shows the latest version in that repository — feed the `NAME` straight
+into `keramos pull` or `keramos install`.
+
 ## See also
 
 - [`search`](search.md)
 - [`search hub`](search-hub.md) — search Artifact Hub instead
-- [`repo update`](repo-update.md) — refresh index caches
-- [`pull`](pull.md)
+- [`repo`](repo.md) — add the repositories searched here
+- [`pull`](pull.md) — download a matched chart
+- [`install`](install.md) — install a matched package

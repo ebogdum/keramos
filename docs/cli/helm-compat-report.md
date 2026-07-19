@@ -1,19 +1,26 @@
 # keramos helm-compat report
 
-## Synopsis
-
-`keramos helm-compat report` walks a Helm chart directory and prints which template constructs keramos supports natively, which ones the `keramos migrate` translator can rewrite automatically, and which ones will need manual review after migration. The output is a per-file inventory: file → construct count → translation outcome. The command is read-only and does not produce a keramos package — that's `keramos migrate`'s job.
+`keramos helm-compat report` analyses a Helm chart and reports how much
+Go-template logic it contains, so you can gauge the work of moving it to keramos.
 
 ## When to use it
 
-Run before `keramos migrate` to understand the scope of post-migration cleanup. A chart with mostly simple `{{ .Values.x }}` references and standard sprig calls migrates with little manual work; one with elaborate `{{ with $foo := ... }}` blocks, custom Go template helpers, or unusual `range` patterns will produce more review items. The report tells you which.
+Run it before [`migrate`](migrate.md) to size the job. A chart with few
+`{{ ... }}` blocks converts with little effort; one packed with them will need
+more review after translation. The report is read-only — it inspects the chart
+but produces no keramos package.
 
-## What happens when you run it
+## What happens
 
-1. Reads the Helm chart at `<chart-path>`.
-2. Walks every `.tpl` and `.yaml` template file in `templates/`.
-3. For each, parses the Go-template AST and classifies each node: native-supported, auto-translatable, or manual-review.
-4. Prints a summary table to stdout.
+1. keramos walks the `templates/` directory of `<chart-path>`, visiting every
+   `.yaml`, `.yml`, and `.tpl` file.
+2. It counts the template files and, in each, the number of Go-template
+   blocks (occurrences of `{{`).
+3. For every file that contains at least one block it adds a note with that
+   file's block count.
+4. It recommends running `keramos migrate` when any blocks are present, and notes
+   how sub-charts are handled.
+5. It prints the whole report to stdout as JSON.
 
 ## Usage
 
@@ -23,44 +30,43 @@ keramos helm-compat report <chart-path> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for report |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Report on a vendored upstream chart:
+Report on a vendored PostgreSQL chart:
 
 ```sh
 keramos helm-compat report ./vendor/postgresql
 ```
 
-Pull a chart from an OCI registry, then report on it:
+Output:
 
-```sh
-keramos registry pull oci://registry-1.docker.io/bitnamicharts/postgresql:15.0.0 -d ./pulled
-keramos helm-compat report ./pulled/postgresql
+```json
+{
+  "chart": "postgresql",
+  "templates": 12,
+  "goTemplateBlocks": 348,
+  "notes": [
+    "statefulset.yaml: 96 Go-template blocks (run 'keramos migrate' to translate)",
+    "secrets.yaml: 41 Go-template blocks (run 'keramos migrate' to translate)"
+  ],
+  "recommendations": [
+    "Run 'keramos migrate ./vendor/postgresql' to translate go-template blocks to keramos's ${...} syntax",
+    "Sub-charts: drop them under <keramos-pkg>/charts/ unchanged; keramos layer-resolves them via dependencies in keramos.yaml"
+  ]
+}
 ```
 
-Use the report to decide whether migration is worth it:
-
-```sh
-keramos helm-compat report ./vendor/postgresql > report.txt
-grep -c "manual-review" report.txt
-```
+Read it back to the chart: the `{{ ... }}` blocks in `templates/statefulset.yaml`
+produce the `statefulset.yaml: 96 Go-template blocks` note, and the 348 across
+all 12 files is the total translation surface. Because that total is above
+zero, the first recommendation tells you the exact `keramos migrate` command to
+run next.
 
 ## See also
 
 - [`helm-compat`](helm-compat.md)
 - [`helm-compat export`](helm-compat-export.md)
-- [`migrate`](migrate.md) — actually translate the chart
-- [Migration guide](../guides/migration.md)
+- [`migrate`](migrate.md) — actually translate the chart to a keramos package
+- [`template`](template.md) — render a keramos package to manifests

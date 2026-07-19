@@ -1,20 +1,27 @@
 # keramos config
 
-## Synopsis
-
-`keramos config` walks a package's `values.schema.json` interactively, prompting for each property in turn. The result is a values file written to the path of your choice (default: `values.local.yaml`). Honours `default`, `enum`, `description`, and `oneOf` discriminated unions in the schema for richer prompts.
+`keramos config` walks a package's `values.schema.json` interactively and writes
+the answers to a values file.
 
 ## When to use it
 
-Use to materialise a values file for a package you're about to install — particularly for packages with deep schemas where remembering every required field is hard. The interactive flow uses the schema's `description`, `default`, and `enum` annotations to make prompts useful, so authors who maintain a thorough `values.schema.json` get the most benefit.
+- Produce a values file for a package without hand-editing YAML.
+- Discover a package's configurable fields by being prompted for each one, with
+  the schema's type, description, and default shown inline.
 
-## What happens when you run it
+## What happens
 
-1. Reads `<package-path>/values.schema.json`.
-2. Walks the schema depth-first, prompting for each property.
-3. Composes a YAML document from the answers.
-4. Writes to `--out` (`-` = stdout).
-5. No cluster contact, no validation against the live API.
+1. Reads `<package-path>/values.schema.json` (required; the command fails
+   without it).
+2. Prompts for each property in sorted key order. The prompt shows the type,
+   the `description`, the `default` in brackets, and `*` for required keys.
+   Prompts are written to stderr.
+3. Press Enter to accept the shown default; type a value to override it. Input
+   is validated against the property type (integer, number, boolean, string).
+4. Marshals the collected values to YAML and writes them to `--out`, or to
+   stdout when `--out` is `-`.
+
+No cluster is contacted.
 
 ## Usage
 
@@ -26,41 +33,49 @@ keramos config <package-path> [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | — | — | help for config |
-| `-o, --out` | string | "-" | output values file path (- for stdout) |
+| `-o, --out` | string | "-" | write the values file here; `-` prints to stdout |
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+**INPUT** — `webapp/values.schema.json`:
 
-## Examples
-
-Build values interactively, write to a file:
-
-```sh
-keramos config ./my-app -o values.dev.yaml
+```json
+{
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name":     {"type": "string",  "description": "release name"},
+    "replicas": {"type": "integer", "description": "pod count", "default": 2},
+    "debug":    {"type": "boolean", "default": false}
+  }
+}
 ```
 
-Pipe to stdout (default), then redirect:
+**Session** (`keramos config webapp`) — prompts on stderr, your input after each:
 
-```sh
-keramos config ./my-app > values.staging.yaml
+```
+debug (boolean) [false]:                    ⏎   (kept the default)
+name (string) — release name *: orders
+replicas (integer) — pod count [2]: 5
 ```
 
-End-to-end: configure, then install with the result:
+You accepted the `debug` default, typed `orders` for the required `name`, and
+overrode `replicas` with `5`.
 
-```sh
-keramos config  ./my-app -o values.dev.yaml
-keramos install hello ./my-app -f values.dev.yaml -n dev --create-namespace
+**OUTPUT** (stdout):
+
+```yaml
+debug: false
+name: orders
+replicas: 5
 ```
+
+`debug: false` is the schema default you kept; `name` and `replicas` are the
+values you entered. Add `-o values.yaml` to write the file instead of printing
+it.
 
 ## See also
 
-- [`values`](values.md)
-- [Schema validation guide](../guides/schema-validation.md)
-- [`values.schema.json` reference](../reference/values-schema-json.md)
+- [`values`](values.md) — resolve and trace the merged values
+- [`show values`](show-values.md) — print the package's default `values.yaml`
+- [`install`](install.md) — install using a values file (`-f`)

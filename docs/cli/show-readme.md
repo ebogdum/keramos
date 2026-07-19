@@ -1,63 +1,53 @@
 # keramos show readme
 
-## Synopsis
-
-`keramos show readme` prints the contents of a package's `README.md` to stdout. The output is the human-facing documentation the author shipped — typically install notes, configuration guidance, and links to upstream resources.
+`keramos show readme` prints a package's README to stdout.
 
 ## When to use it
 
-Use to read a package's documentation without opening the file in an editor — useful when reviewing pulled packages from the terminal, or piping the README through a renderer like `glow` or `bat`.
+- Read a package's install notes and configuration guidance from the terminal.
+- Pipe the README into a Markdown renderer or pager.
 
-## What happens when you run it
+## What happens
 
-1. Reads `<package-path>/README.md`.
-2. Prints the content to stdout, unchanged.
-3. No cluster contact, no network access.
+1. Looks in `<package-path>` for `README.md`, then `README.txt`, then `README`,
+   and prints the first one it finds verbatim.
+2. If none exists, exits with the error `no README found in package`.
+
+The path may be a directory or a keramos archive; no cluster is contacted.
 
 ## Usage
 
 ```
-keramos show readme <package-path> [flags]
+keramos show readme <package-path>
 ```
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for readme |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+**INPUT** — `webapp/README.md` on disk:
 
-## Examples
+```markdown
+# webapp
 
-Show a local package's README:
-
-```sh
-keramos show readme ./my-app
+Install notes for the webapp package.
 ```
 
-After pulling a package from a repo:
+**OUTPUT** (`keramos show readme webapp`) — the file's contents, unchanged:
 
-```sh
-keramos pull my-app --repo https://charts.example.com --version 1.2.3 -d ./pulled --untar
-keramos show readme ./pulled/my-app
+```
+# webapp
+
+Install notes for the webapp package.
 ```
 
-Pipe through a Markdown renderer for nicer terminal display:
-
-```sh
-keramos show readme ./my-app | glow -
-```
+Pipe it through a renderer for nicer display, for example
+`keramos show readme webapp | glow -`.
 
 ## See also
 
-- [`show`](show.md)
-- [`show all`](show-all.md)
-- [`show chart`](show-chart.md)
+- [`show`](show.md) — the show command index
+- [`show all`](show-all.md) — chart, values, and README together
+- [`show chart`](show-chart.md) — the package metadata

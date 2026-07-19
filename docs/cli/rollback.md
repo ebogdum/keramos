@@ -1,22 +1,30 @@
 # keramos rollback
 
-## Synopsis
-
-`keramos rollback` re-applies a previous revision of a release. Keramos retrieves the stored manifest from that revision, runs the revision's `pre-rollback` hooks (re-rendered from the version that originally shipped them, not from the current state), applies the manifest, then runs the revision's `post-rollback` hooks. The rollback itself becomes a new revision with `pendingRollback` → `deployed` status; the chronological history is preserved.
+`keramos rollback` re-applies a previous revision of a release and records the
+result as a new revision, so history only ever grows forward.
 
 ## When to use it
 
-Use this when a recent upgrade caused a problem and you need to revert. Inspect `keramos history` to find the revision number to roll back to. Rollbacks are idempotent — rolling back to a revision that already matches current state is a no-op (a new revision is still recorded for the audit trail).
+- An `upgrade` shipped a bad revision and you want the last known-good state
+  back in the cluster now.
+- You need the revert itself recorded in history and the audit trail, not a
+  silent hand-edit of the cluster.
 
-## What happens when you run it
+## What happens
 
-1. Reads the release record and identifies the target revision (default: the previous revision; explicit `[revision]` overrides).
-2. Marks the release status `pending-rollback`.
-3. Runs the target revision's `pre-rollback` hooks (re-rendered from the hooks-as-stored at that revision).
-4. Server-side applies the target revision's stored manifest. Resources currently present but absent in the target revision are deleted.
-5. With the default `--wait`, blocks until workloads converge to Ready.
-6. Runs the target revision's `post-rollback` hooks.
-7. Records a new revision with the rollback metadata (parent revision, action `rollback`); status is `deployed`.
+1. Resolves the release named by `<release-name>` in the target namespace and
+   loads the manifest of the revision you name, or of the immediately previous
+   revision when `[revision]` is omitted.
+2. Applies that stored manifest to the cluster, running lifecycle hooks unless
+   `--no-hooks` is set.
+3. Waits for the applied resources to become ready (unless `--no-wait`), up to
+   `--timeout`.
+4. Records the result as a brand-new revision — the target revision is copied
+   forward, not restored in place — and marks the prior current revision
+   `superseded`.
+
+This command mutates the cluster. It requires a reachable cluster and an
+existing release with a prior revision to roll back to.
 
 ## Usage
 
@@ -24,66 +32,80 @@ Use this when a recent upgrade caused a problem and you need to revert. Inspect 
 keramos rollback <release-name> [revision] [flags]
 ```
 
+`[revision]` is the revision number to roll back **to**. Omit it to target the
+revision immediately before the current one.
+
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--cleanup-on-fail` | — | — | delete partially-applied resources if rollback fails |
-| `--description` | string | — | rollback description |
-| `--force` | — | — | delete and recreate resources to force update of immutable fields |
-| `-h, --help` | — | — | help for rollback |
-| `--history-max` | int | — | maximum revisions to retain in history (0 = unlimited) |
-| `--no-hooks` | — | — | skip lifecycle hooks for this operation |
-| `--no-wait` | — | — | don't wait for resources to be ready |
-| `-o, --output` | string | "table" | output format: table, json, yaml |
-| `--recreate-pods` | — | — | trigger a rolling restart of Deployments/StatefulSets/DaemonSets |
-| `--timeout` | duration | 5m0s | timeout for readiness wait |
-| `--wait` | — | — | wait for resources to be ready (default) |
+| `--cleanup-on-fail` | bool | false | on a failed rollback, delete the resources it partially applied instead of leaving them behind |
+| `--description` | string | — | set the description recorded on the new revision (shown by `history` and `status`) |
+| `--force` | bool | false | delete and recreate resources so immutable fields can change |
+| `--history-max` | int | 0 | cap retained revisions after this rollback; 0 keeps unlimited history |
+| `--no-hooks` | bool | false | skip the release's lifecycle hooks for this rollback |
+| `--no-wait` | bool | false | return once resources are applied, without waiting for readiness |
+| `-o, --output` | string | "table" | render the resulting release as `table`, `json`, or `yaml` |
+| `--recreate-pods` | bool | false | trigger a rolling restart of Deployments, StatefulSets, and DaemonSets |
+| `--timeout` | duration | 5m0s | how long to wait for readiness before failing the rollback |
+| `--wait` | bool | on | wait for resources to be ready; on by default, `--no-wait` turns it off |
 
 ## Persistent flags inherited from `keramos`
 
 | Flag | Type | Description |
 |---|---|---|
-| `--debug` | — | enable debug output |
+| `--debug` | bool | enable debug output |
 | `--kube-context` | string | Kubernetes context to use |
 | `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| `-n, --namespace` | string | namespace of the release |
 
-## Examples
+## Worked example
 
-Roll back the most recent change (to revision 1 step prior):
+**INPUT — the stored history of release `web` before you roll back.** Revision 2
+is current and shipped a broken image; revision 1 is the last good state:
 
-```sh
-keramos rollback my-app -n my-app-prod
+```
+REVISION    STATUS       PACKAGE      UPDATED                DESCRIPTION
+1           superseded   web-1.4.0    2026-07-18 09:00:00    Install complete
+2           deployed     web-1.5.0    2026-07-18 11:30:00    Upgrade complete
 ```
 
-Roll back to a specific revision:
+**Roll back to revision 1:**
 
 ```sh
-keramos rollback my-app 5 -n my-app-prod
+keramos rollback web 1
 ```
 
-Roll back without re-running hooks (use only when hooks would interfere with revert):
+**OUTPUT:**
 
-```sh
-keramos rollback hello 5 --no-hooks -n prod
+```
+release web rolled back to revision 1 (new revision 3)
 ```
 
-Roll back and force replacement of immutable fields:
+**Resulting history — `keramos history web`:**
 
-```sh
-keramos rollback hello 5 --force -n prod
+```
+REVISION    STATUS       PACKAGE      UPDATED                DESCRIPTION
+1           superseded   web-1.4.0    2026-07-18 09:00:00    Install complete
+2           superseded   web-1.5.0    2026-07-18 11:30:00    Upgrade complete
+3           deployed     web-1.4.0    2026-07-18 12:05:00    Rollback to 1
 ```
 
-Roll back with a description recorded in the audit trail:
+**Tracing the output back to the input:**
 
-```sh
-keramos rollback hello 5 --description "revert after CVE-2026-1234" -n prod
-```
+| Output | Which input it read | Why |
+|---|---|---|
+| `rolled back to revision 1` | the `1` you passed | the target revision whose manifest is re-applied |
+| `new revision 3` | prior current was revision 2 | history grows forward: the next number after 2 is 3 |
+| revision 3 `PACKAGE web-1.4.0` | copied from revision 1 | rev 3 re-applies rev 1's manifest, so it carries `web-1.4.0` |
+| revision 2 now `superseded` | it was `deployed` before | the previous current revision is displaced by the rollback |
+
+The cluster runs `web-1.4.0` again, and every step is a numbered, audited
+revision — nothing was overwritten.
 
 ## See also
 
-- [`history`](history.md)
-- [`audit`](audit.md)
-- [`upgrade`](upgrade.md)
-- [Hooks guide](../guides/hooks.md)
+- [`history`](history.md) — list the revisions you can roll back to
+- [`status`](status.md) — confirm the current revision after rolling back
+- [`upgrade`](upgrade.md) — the forward operation rollback reverses
+- [`audit`](audit.md) — who ran the rollback, when, and with which flags

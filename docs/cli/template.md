@@ -1,22 +1,28 @@
 # keramos template
 
-## Synopsis
-
-`keramos template` renders a package locally and prints the resulting Kubernetes manifest to stdout. By default, no cluster contact is made — templates that depend on `lookup` see `nil`, and capabilities default to a baseline Kubernetes version. With `--api-versions` and `--kube-version` you can simulate a specific cluster's view; with `--validate`, keramos does perform a server-side dry-run apply at the end to check the manifest against the live API server's defaulters and admission policies.
+`keramos template` renders a package to Kubernetes YAML locally and prints it to
+stdout — no cluster, no release record, no apply.
 
 ## When to use it
 
-Use to inspect what `keramos install` / `upgrade` *would* apply, to feed the output into other tools (kubeval, kube-linter, conftest, OPA, sed/yq), or to render once and apply with raw `kubectl` (skipping keramos's release tracking — only do this for one-off troubleshooting). Pair with `--show-only` to render a single file.
+- To see the exact manifests a package produces before you install or upgrade.
+- To pipe rendered YAML into another tool: `keramos policy check`, `kubectl
+  apply -f -`, `kubeconform`, or a post-renderer.
+- To debug how values, profiles, and `--set` overrides resolve into output.
 
-## What happens when you run it
+## What happens
 
-1. Reads `<package-path>`, resolves layers, merges values (defaults → layer values → environment → profile → `-f` files → `--set*` flags).
-2. Validates merged values against `values.schema.json` if present.
-3. Renders every template; `--show-only <file>` restricts to one named template.
-4. With `--include-crds`, prepends the `crds/` content.
-5. Optionally pipes through `--post-renderer`.
-6. With `--validate`, server-side dry-runs the result for early feedback.
-7. Prints to stdout.
+1. Resolves `<package-path>` and its layers. If `--env` is given, the named
+   environment's profile and value files fold in at the lowest precedence.
+2. Merges values: `values.yaml` defaults, then `-f` files, then `--set` /
+   `--set-string` / `--set-file` / `--set-json` (later wins).
+3. Validates the merged values against `values.schema.json` if the package
+   ships one; a schema violation stops the render.
+4. Renders every template, substituting each `${...}` expression. With
+   `--show-only`, only the named template files are rendered.
+5. Prepends `crds/` with `--include-crds`, pipes the result through
+   `--post-renderer`, and runs a server-side dry-run with `--validate`.
+6. Writes the joined YAML (documents separated by `---`) to stdout.
 
 ## Usage
 
@@ -24,82 +30,115 @@ Use to inspect what `keramos install` / `upgrade` *would* apply, to feed the out
 keramos template <package-path> [flags]
 ```
 
+The package path is required. The release name is not a positional argument —
+it defaults to the package name and is overridden with `--release-name`.
+
 ## Flags
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--api-versions` | stringArray | — | Kubernetes API version available for capability checks (repeatable) |
-| `--env` | string | "" | environment name declared in `keramos.yaml`'s `environments:` section |
-| `-h, --help` | bool | false | help for template |
-| `--include-crds` | bool | false | include CRDs from `crds/` in the output |
-| `--is-upgrade` | bool | false | render with `.Release.IsUpgrade = true` |
-| `--kube-version` | string | "" | override Kubernetes version reported in capabilities |
-| `--name-template` | string | "" | name-template (currently equivalent to `--release-name`) |
-| `--post-renderer` | string | "" | command piped the rendered manifests on stdin |
-| `--profile` | string | "" | profile name to apply |
-| `--release-name` | string | "" | override release name (default: package name) |
-| `--set` | stringArray | — | set key=value overrides (repeatable) |
-| `--set-file` | stringArray | — | set key=path; value read from path (repeatable) |
-| `--set-json` | stringArray | — | set key=<json>; value parsed as JSON (repeatable) |
-| `--set-string` | stringArray | — | force string interpretation (repeatable) |
-| `-s, --show-only` | stringArray | — | render only the named template file (repeatable) |
-| `--validate` | bool | false | validate against the cluster after rendering (server-side dry-run) |
-| `-f, --values` | stringArray | — | values file overrides (repeatable) |
+| `-f, --values` | stringArray | — | read a values file and merge it over the defaults (repeatable, later wins) |
+| `--set` | stringArray | — | override one `key=value`, type-inferred (repeatable) |
+| `--set-string` | stringArray | — | override `key=value` forcing a string, so `1.27` stays a string |
+| `--set-file` | stringArray | — | set `key=path`; the file's contents become the value (repeatable) |
+| `--set-json` | stringArray | — | set `key=<json>`; the value is parsed as a JSON literal (repeatable) |
+| `--profile` | string | — | apply the `profiles/<name>` overlay before rendering |
+| `-s, --show-only` | stringArray | — | render only these template files (by name or basename); everything else is dropped |
+| `--release-name` | string | (package name) | set `${release.name}` in the render instead of the package name |
+| `--is-upgrade` | — | false | render with `${release.isUpgrade}` true and `isInstall` false, to exercise upgrade-only branches |
+| `--validate` | — | false | after rendering, send a server-side dry-run to the cluster and fail on rejection |
+| `--include-crds` | — | false | prepend the manifests in `crds/` to the output |
+| `--api-versions` | stringArray | — | mark an API version as available for `${capabilities...}` checks (repeatable) |
+| `--kube-version` | string | — | override the Kubernetes version reported to capability checks |
+| `--name-template` | string | — | alias for `--release-name` (currently equivalent) |
+| `--post-renderer` | string | — | pipe the rendered manifests through this command's stdin and use its stdout |
+| `--env` | string | — | apply the environment declared under `environments:` in `keramos.yaml` |
 
 ## Persistent flags inherited from `keramos`
 
+Consulted only with `--validate`, the sole step that reaches a cluster.
+
 | Flag | Type | Description |
 |---|---|---|
-| `--debug` | bool | enable debug output |
 | `--kube-context` | string | Kubernetes context to use |
 | `--kubeconfig` | string | path to kubeconfig file |
 | `-n, --namespace` | string | Kubernetes namespace |
+| `--debug` | — | enable debug output |
 
-## Examples
+## Worked example
 
-Render with the package's default values:
+**INPUT — the package `./web`.** Two files. `values.yaml` holds the inputs:
 
-```sh
-keramos template ./my-app
+```yaml
+# web/values.yaml
+name: web
+replicas: 2
+image:
+  repository: nginx
+  tag: "1.27"
 ```
 
-Render with overrides and capture to a file:
+`templates/deployment.yaml` reads those values through `${...}` expressions:
 
-```sh
-keramos template ./my-app -f overrides.yaml --set replicas=3 > rendered.yaml
+```yaml
+# web/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "${values.name}"
+spec:
+  replicas: ${values.replicas}
+  template:
+    spec:
+      containers:
+        - name: web
+          image: "${values.image.repository}:${values.image.tag}"
 ```
 
-Render simulating a specific Kubernetes version and an installed API:
+**Run it:**
 
 ```sh
-keramos template ./my-app \
-  --kube-version 1.28.0 \
-  --api-versions networking.k8s.io/v1/Ingress \
-  --api-versions monitoring.coreos.com/v1/ServiceMonitor
+keramos template ./web
 ```
 
-Render only one template file (useful for quick author-time iteration):
+**OUTPUT:**
 
-```sh
-keramos template ./my-app -s templates/deployment.yaml
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - image: nginx:1.27
+          name: web
 ```
 
-Render with --include-crds and validate against the cluster:
+**Tracing every value from input to output:**
+
+| Output line | Expression | Value it read |
+|---|---|---|
+| `name: web` | `${values.name}` | `name: web` |
+| `replicas: 2` | `${values.replicas}` | `replicas: 2` |
+| `image: nginx:1.27` | `${values.image.repository}:${values.image.tag}` | `repository: nginx` + `tag: "1.27"` |
+
+Override an input on the command line and only the matching output line moves —
+`--set` wins over the file default:
 
 ```sh
-keramos template ./my-app --include-crds --validate
+keramos template ./web --set replicas=5
 ```
 
-Render the prod-environment view of the package:
-
-```sh
-keramos template ./my-app --env prod
+```yaml
+  replicas: 5
 ```
 
 ## See also
 
-- [`debug`](debug.md)
-- [`lint`](lint.md)
-- [`install`](install.md)
-- [Template expressions](../templates/expressions.md)
-- [Control flow](../templates/control-flow.md)
+- [`lint`](lint.md) — validate a package without printing manifests
+- [`plan`](plan.md) — render and diff against the recorded state
+- [`diff`](diff.md) — compare two renders (no cluster)
+- [`install`](install.md) — render and apply as a tracked release

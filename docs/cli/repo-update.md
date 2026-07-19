@@ -1,19 +1,26 @@
 # keramos repo update
 
-## Synopsis
-
-`keramos repo update` re-fetches the `index.yaml` for every registered repository and writes the result into the local index cache (`~/.cache/keramos/indexes/<name>.yaml`). After this command, `keramos search` and dependency-resolution paths see the freshest list of available packages. By default, an unreachable repo is logged but does not fail the whole operation; with `--fail-on-repo-update-fail`, any failure produces a non-zero exit.
+Re-fetch the index of every registered repository.
 
 ## When to use it
 
-Run periodically (and always immediately before `keramos search` or `keramos pull` for a precise version pick) to refresh the local view of upstream catalogues.
+- After [`keramos repo add`](repo-add.md), so the new repository's charts become
+  searchable and pullable.
+- Before searching or pulling, to pick up newly published chart versions.
 
-## What happens when you run it
+## What happens
 
-1. Reads `~/.config/keramos/repositories.yaml`.
-2. For each registered repo, performs `GET <url>/index.yaml` with the stored credentials and TLS material.
-3. Writes the response to `~/.cache/keramos/indexes/<name>.yaml`.
-4. Reports per-repo success or failure on stdout.
+Keramos walks your repository list and, for each entry, fetches its `index.yaml`
+into the local cache under `~/.cache/keramos/indexes/`, using the credentials and
+TLS material recorded for that repository. It prints one line per repository
+and a final `Update complete.` Once the cache is fresh,
+[`keramos search`](search.md) and [`keramos pull`](pull.md) see the current set of
+charts.
+
+A repository that cannot be reached is reported on its own line but does not
+stop the others; pass `--fail-on-repo-update-fail` to make any failure exit
+non-zero (useful in CI). With no repositories registered, keramos prints
+`No repositories configured.`
 
 ## Usage
 
@@ -23,44 +30,33 @@ keramos repo update [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `--fail-on-repo-update-fail` | bool | false | exit non-zero if any repository update fails |
-| `-h, --help` | bool | false | help for update |
+| Flag | Effect |
+|---|---|
+| `--fail-on-repo-update-fail` | Exit non-zero if any repository fails to update. |
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Refresh every registered repo's index:
-
-```sh
-keramos repo update
+```
+$ keramos repo update
+...successfully got an update from "my-charts"
+...successfully got an update from "private"
+Update complete.
 ```
 
-In CI, fail the build if any repo can't be refreshed:
+Refresh, then search the freshly updated catalogues:
 
-```sh
-keramos repo update --fail-on-repo-update-fail
 ```
+$ keramos repo update
+...successfully got an update from "my-charts"
+Update complete.
 
-Refresh, then search across the freshly-updated catalogues:
-
-```sh
-keramos repo update
-keramos search repo redis
+$ keramos search repo redis
+NAME              CHART VERSION   APP VERSION   DESCRIPTION
+my-charts/redis   1.4.0           7.2.4         In-memory data store
 ```
 
 ## See also
 
-- [`repo`](repo.md)
-- [`repo list`](repo-list.md)
-- [`search repo`](search-repo.md)
-- [Repositories guide](../guides/repositories.md)
+- [`repo add`](repo-add.md) — register a repository first
+- [`search`](search.md) — search the updated indexes
+- [`pull`](pull.md) — download a chart

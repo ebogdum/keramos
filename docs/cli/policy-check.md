@@ -2,19 +2,29 @@
 
 ## Synopsis
 
-`keramos policy check` evaluates every policy under `<package-path>/policies/` against a rendered Kubernetes manifest, returning a non-zero exit code when any rule reports a violation. The manifest comes from stdin (the typical pattern is `keramos template ... | keramos policy check ./pkg`) or from `--manifest <file>`. Policies are declarative keramos-policy YAML (match-and-require rules).
+`keramos policy check` reads a rendered manifest and evaluates every rule under
+`<package-path>/policies/` against it. It prints one line per violation and
+exits non-zero when any `deny`-severity rule is broken, so you can wire it
+straight into CI.
 
 ## When to use it
 
-Use as a deny-gate in CI: render the package, pipe through policy check, and fail the build on any violation. Also useful locally before committing — catch missing-resource-limits or missing-security-context issues without leaving your editor.
+- As a deny-gate in CI: render the package, pipe it through `policy check`,
+  and fail the build on a violation.
+- Locally before you commit or apply, to catch a bad image tag or a missing
+  resource limit without touching a cluster.
 
-## What happens when you run it
+## What happens
 
-1. Loads every `.yaml` policy file under `<package-path>/policies/`.
-2. Reads the manifest from stdin (or from `--manifest <file>`).
-3. Evaluates each policy rule against each resource in the manifest.
-4. Prints a summary of pass/fail per rule.
-5. Exits 0 on no violations, non-zero on any violation.
+1. Loads every rule from `<package-path>/policies/*.yaml`. If the package has
+   no policies, it prints `no policies/ rules found` and exits 0.
+2. Reads the manifest from `--manifest <file>`, or from stdin when the flag is
+   absent. An empty manifest is an error.
+3. Evaluates each rule against each resource in the manifest.
+4. If nothing is violated, prints `ok — N rule(s) passed` and exits 0.
+5. Otherwise prints each violation as `[SEVERITY] rule — apiVersion/Kind/name
+   in ns namespace: detail`, then exits non-zero if any violation is `deny`
+   (a `warn`-only run still exits 0).
 
 ## Usage
 
@@ -24,44 +34,75 @@ keramos policy check <package-path> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for check |
-| `--manifest` | string | "" | rendered manifest file (default: stdin) |
+| Flag | Cause → effect |
+|---|---|
+| `--manifest <file>` | Read the manifest from this file instead of stdin. |
 
-## Persistent flags inherited from `keramos`
+Also inherits the global flags.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
+**INPUT — the rule** in `mychart/policies/images.yaml`:
 
-Pipe a freshly-rendered manifest through policy check:
-
-```sh
-keramos template hello ./my-app | keramos policy check ./my-app
+```yaml
+name: no-latest-tag
+severity: deny
+match:
+  kinds: [Deployment]
+require:
+  imageNotTagged: true
+message: pin images to an explicit tag
 ```
 
-Run against a saved manifest file:
+**INPUT — the rendered manifest.** The package still points at a floating tag:
 
-```sh
-keramos template hello ./my-app > rendered.yaml
-keramos policy check ./my-app --manifest rendered.yaml
+```yaml
+# keramos template ./mychart  →  the Deployment it produces
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          image: nginx:latest        # ← floating tag, forbidden by the rule
 ```
 
-CI gate — fail the build on any violation:
+**Run it:**
 
 ```sh
-keramos template hello ./my-app | keramos policy check ./my-app || exit 1
+keramos template ./mychart | keramos policy check ./mychart
 ```
+
+**OUTPUT — it fails, naming the rule and the offending resource:**
+
+```
+[DENY] no-latest-tag — apps/v1/Deployment/web in ns default: pin images to an explicit tag (container image "nginx:latest" uses :latest or no tag)
+Error: policy violations exist
+```
+
+The command exits non-zero, so the pipeline stops.
+
+**Now pin the image** (`image: nginx:1.27.1`) and run it again:
+
+```sh
+keramos template ./mychart | keramos policy check ./mychart
+```
+
+**OUTPUT — it passes:**
+
+```
+ok — 1 rule(s) passed
+```
+
+Now the command exits 0 and the build proceeds.
 
 ## See also
 
-- [`policy`](policy.md)
-- [`policy list`](policy-list.md) — show what rules are declared
-- [`lint`](lint.md) — broader package validation
-- [Package anatomy: policies](../guides/packages.md)
+- [`policy`](policy.md) — the parent command
+- [`policy list`](policy-list.md) — show what rules would run
+- [`template`](template.md) — render the manifest to pipe in
+- [`install`](install.md) — apply the package once it passes

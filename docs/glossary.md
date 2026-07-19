@@ -1,186 +1,298 @@
-# Keramos Glossary — Terminology Reference for Kubernetes Packaging, Templating, and Releases
+# Keramos glossary — terminology reference
 
-A reference for every term keramos uses, alphabetised, with cross-links to the relevant guides. This is also the place where Google indexes "what is X in keramos" definitional searches.
+Every term keramos uses, alphabetised, with links to the relevant guides.
 
 ## Apply
 
-The action of sending a rendered manifest to the Kubernetes API. Keramos uses **server-side apply** with the field manager `keramos`, so two keramos invocations against the same release manage the same fields without spurious conflicts. `keramos apply <plan>` executes a previously-rendered plan; `keramos install` and `keramos upgrade` apply directly. → [Apply](cli/apply.md).
+The action of sending a rendered manifest to the Kubernetes API. Keramos uses
+**server-side apply** with field manager `keramos`, so repeated invocations
+against the same release manage the same fields without spurious conflicts.
+`keramos apply --plan <file>` executes a plan produced by `keramos plan`; `keramos
+install` and `keramos upgrade` apply directly. → [Apply](cli/apply.md).
 
 ## Audit trail
 
-The chronological record of every install, upgrade, rollback, and uninstall against a release. Keramos stores audit data in the release record: action, user, hostname, keramos binary version, kubeconfig context, CLI flags as passed, and value files supplied. `keramos audit <release>` prints it. → [Audit](cli/audit.md).
+The chronological record of every install, upgrade, rollback, and uninstall
+against a release: action, user, hostname, keramos version, kubeconfig context,
+CLI flags supplied, and value files referenced. `keramos audit <release>` prints
+it. → [Audit](cli/audit.md).
 
 ## Canary
 
-A staged upgrade that ramps a release through a series of replica counts with a bake period at each step. `keramos canary <release> <pkg> --stages 1,3,5 --bake 5m` upgrades to 1 replica, waits 5 minutes for health, advances to 3, etc. Failure at any stage rolls back. → [Canary](cli/canary.md).
+A staged upgrade that steps a release through a series of replica counts (or
+percentages) with a bake-and-verify pause at each step. `keramos canary <release>
+<pkg> --stages 1,3,5 --bake 60s` upgrades to 1 replica, waits, advances to 3,
+and so on. Failure at any stage rolls back to the prior revision.
+→ [Canary](cli/canary.md).
 
 ## Capabilities
 
-The cluster-info namespace exposed to templates as `${capabilities.kubeVersion.Major}` etc. Used to gate version-specific Kubernetes fields. → [Capabilities](templates/capabilities.md).
+The cluster-info namespace exposed to templates as
+`${capabilities.kubeVersion.Version}`, `${capabilities.apiVersions}`, etc. Used
+to gate version-specific Kubernetes fields. → [Capabilities](templates/capabilities.md).
 
 ## ConfigMap-backed storage
 
-An alternative release-storage driver (`KERAMOS_DRIVER=configmap`) for clusters where Secret access is restricted by RBAC. Mirrors the Secret driver's semantics. → [Drivers](cli/README.md#environment-variables).
+An alternative release-storage driver (`KERAMOS_DRIVER=configmap`) for clusters
+where Secret access is restricted by RBAC. It mirrors the Secret driver's
+semantics, including the same 1 MiB size cap.
+→ [Environment variables](cli/README.md#environment-variables).
 
 ## Controller
 
-`keramos controller` is the in-cluster reconciler that watches `KeramosRelease` CRs and runs `keramos install` / `keramos upgrade` to converge declared state. The Kubernetes-native deployment pattern for keramos packages, comparable to Flux's helm-controller for HelmRelease CRs. → [`keramos controller`](cli/controller.md).
+`keramos controller` is the in-cluster reconciler that watches `KeramosRelease` CRs
+and converges declared state — the Kubernetes-native deployment pattern for
+keramos packages, comparable to Flux's helm-controller for HelmRelease CRs.
+→ [`keramos controller`](cli/controller.md).
 
 ## Cosign
 
-Sigstore's container-signing tool. Keramos doesn't bundle cosign signing but works with the standard cosign workflow: `keramos registry push` to OCI, `cosign sign` the artifact, then `cosign verify` before `keramos install`. → [Signing guide](guides/signing.md).
+Sigstore's container-signing tool. Keramos doesn't bundle cosign signing but works
+with the standard workflow: `keramos registry push` to OCI, `cosign sign` the
+artifact, then `cosign verify` before `keramos install`.
+→ [Signing guide](guides/signing.md).
 
 ## Cross-release dependencies
 
-Releases that depend on other releases being installed first, declared in `keramos-releases.yaml`. Distinct from layers (which compose into one release) and workspace members (which are sibling releases from one repo). → [Cross-release dependencies guide](guides/releases.md).
+Releases that depend on other releases being installed first, declared in
+`keramos-releases.yaml`. Distinct from layers (which compose into one release) and
+workspace members (sibling releases from one repo).
+→ [Cross-release dependencies](guides/releases.md).
 
 ## CRD (Custom Resource Definition)
 
-Kubernetes' extensibility mechanism. Keramos packages can ship CRDs in `crds/` (applied first, with keramos waiting for `Established=true` before continuing) or in `templates/` (applied in normal install order, with CRDs sorted before all other kinds in the install graph).
+Kubernetes' extensibility mechanism. Keramos packages can ship CRDs in `crds/`
+(applied first, keramos waiting for `Established=true` before continuing) or in
+`templates/` (sorted before other kinds in the install graph).
 
 ## Drift
 
-Divergence between the manifest keramos stored at install time and the current live cluster state. Drift can be caused by `kubectl edit`, other operators' reconcilers, manual API patches, or admission-webhook mutations. `keramos drift <release>` reports per-field differences. → [Drift](cli/drift.md).
+Divergence between what keramos recorded and the live cluster. Caused by `kubectl
+edit`, other operators' reconcilers, manual patches, or webhook mutations.
+`keramos drift ./pkg` renders the package and reports, per field, where the
+package, recorded state, and running cluster disagree. → [Drift](cli/drift.md).
 
 ## Dry run
 
-A render that does not contact the cluster (`--dry-run client`) or that does contact but doesn't persist (`--dry-run server`, validates against admission webhooks). Available on install, upgrade, plan, apply, diff. → [Dry run flags](cli/install.md).
+A render that does not persist. `--dry-run client` renders locally without
+contacting the cluster; `--dry-run server` submits to the API for admission
+validation without applying. Available on install, upgrade, plan, apply.
+→ [`keramos install`](cli/install.md).
 
 ## Environment
 
-A named deployment target (`dev`, `staging`, `prod`) declared inside `keramos.yaml` with its own value overrides, namespace, and kubeconfig context. Inheritance is supported (`prod` inherits from `staging` inherits from `dev`). → [Environments](guides/values.md#environments).
+A named deployment target (`dev`, `staging`, `prod`) declared inside `keramos.yaml`
+with its own value overrides. Selected with `--env <name>`. Inheritance is
+supported (`inherits:` chains one environment onto another; cycles are
+rejected). → [Environments](guides/values.md#environments).
 
 ## Fingerprint
 
-A PGP key's hex-encoded fingerprint. Used by `keramos keyring list` to identify keys uniquely.
+A PGP key's hex-encoded fingerprint, shown by `keramos keyring list` to identify
+keys uniquely.
 
 ## GitOps
 
-A workflow where desired state lives in git and a reconciler in the cluster converges actual state to declared state. Keramos integrates with Argo CD and Flux as a packaging/templating tool that produces deterministic manifests they can sync; or via `keramos controller` as the reconciler itself. → [Use cases — GitOps](use-cases.md#for-gitops-teams-argo-cd-flux).
+A workflow where desired state lives in git and a reconciler converges actual
+state to it. Keramos integrates with Argo CD and Flux as a packaging/templating
+tool that produces deterministic manifests they sync, or via `keramos controller`
+as the reconciler itself.
+→ [Use cases — GitOps](use-cases.md#for-gitops-teams-argo-cd-flux).
 
 ## Hook
 
-A Job- or Pod-shaped resource that keramos runs at a specific lifecycle point (`pre-install`, `post-install`, `pre-upgrade`, `post-upgrade`, `pre-rollback`, `post-rollback`, `pre-delete`, `post-delete`, `test`). Each revision's hooks are persisted with the release so rollback re-runs the hooks that revision originally shipped. → [Hooks guide](guides/hooks.md).
+A Job- or Pod-shaped resource keramos runs at a lifecycle point (`pre-install`,
+`post-install`, `pre-upgrade`, `post-upgrade`, `pre-rollback`, `post-rollback`,
+`pre-delete`, `post-delete`, `test`). Each revision's hooks are persisted with
+the release, so rollback re-runs the hooks that revision originally shipped.
+→ [Hooks guide](guides/hooks.md).
 
 ## Keramos package
 
-A directory with `keramos.yaml`, `values.yaml`, and `templates/` (and optional `crds/`, `hooks/`, `tests/`, `files/`, `notes.yaml`, `profiles/`, `policies/`, `README.md`, `LICENSE`, `keramos.lock`). The unit keramos packages, distributes, installs, and tracks. → [Package anatomy](guides/packages.md).
+A directory with `keramos.yaml`, `values.yaml`, and `templates/` (plus optional
+`crds/`, `hooks/`, `tests/`, `files/`, `notes.yaml`, `profiles/`, `policies/`,
+`README.md`, `LICENSE`, `keramos.lock`). The unit keramos packages, distributes,
+installs, and tracks. → [Package anatomy](guides/packages.md).
 
 ## keramos.lock
 
-Auto-generated by `keramos dependency update`. Pins the resolved version, ref, and digest of every layer and required package. Commit it. Without it, two builds of the same package can pull different layer versions even with the same constraint.
+The lockfile that pins the resolved version, ref, and digest of every layer and
+required package. Regenerated by `keramos dependency update`. Commit it — without
+it, two builds of the same package can resolve different layer versions under
+the same constraint.
 
 ## keramos.yaml
 
-The package manifest at the root of every keramos package. Declares `name`, `version`, `apiVersion`, layers, requires, environments, immutables, and metadata. → [`keramos.yaml` reference](reference/keramos-yaml.md).
+The package manifest at the root of every keramos package. Declares `name`,
+`version`, `apiVersion`, `layers`, `requires`, `environments`, `immutable`, and
+metadata. → [`keramos.yaml` reference](reference/keramos-yaml.md).
 
 ## keramos-releases.yaml
 
-The manifest for cross-source release orchestration. Declares releases (each with a package source — local, OCI, HTTPS, git) plus optional `dependsOn` for ordering. Operated via `keramos releases plan/install/upgrade/uninstall/status`. → [`keramos-releases.yaml` reference](reference/keramos-releases-yaml.md).
+The manifest for cross-source release orchestration. Declares releases (each
+with a package source — local, OCI, HTTPS, git) plus optional `dependsOn`.
+Operated via `keramos releases plan/install/upgrade/uninstall/status`.
+→ [`keramos-releases.yaml` reference](reference/keramos-releases-yaml.md).
 
 ## keramos-workspace.yaml
 
-The manifest for multi-package orchestration in one repo. Declares members (sibling packages) plus `dependsOn`, `atomic`, `wait`, and per-member overrides. Operated via `keramos workspace plan/install/upgrade/uninstall/diff/status`. → [`keramos-workspace.yaml` reference](reference/keramos-workspace-yaml.md).
+The manifest for multi-package orchestration in one repo. Declares members
+(sibling packages) plus `dependsOn` and per-member overrides. Operated via
+`keramos workspace plan/install/upgrade/uninstall/diff/status`.
+→ [`keramos-workspace.yaml` reference](reference/keramos-workspace-yaml.md).
 
-## Immutable values
+## Immutable
 
-Keys declared in `keramos.yaml`'s `immutable:` list that cannot change between revisions of a release once initially set. Enforced at `keramos upgrade` time before any cluster-side admission runs. → [`keramos.yaml`](reference/keramos-yaml.md).
+A `keramos.yaml` field (`immutable:`) listing resource identifiers a package marks
+as immutable. It's a declarative annotation on the manifest and is accepted by
+the package format; it is not enforced by any current command. To force through
+immutable-field changes at apply time, use `keramos upgrade --force` (delete and
+recreate). → [`keramos.yaml` reference](reference/keramos-yaml.md).
 
 ## Install
 
-The action of creating a new release in the cluster. `keramos install <release-name> <package-path>` renders, validates, applies, and stores. → [`keramos install`](cli/install.md).
+Creating a new release in the cluster. `keramos install <release-name>
+<package-path>` renders, validates, applies, and stores.
+→ [`keramos install`](cli/install.md).
 
 ## Layer
 
-Another keramos package whose templates and values are composed into the current package, producing a single rendered manifest belonging to one release. Distinct from a workspace member (separate release). → [Layers](guides/layers.md).
+Another keramos package whose templates and values are merged into the current
+package, producing a single rendered manifest belonging to one release.
+Distinct from a workspace member (a separate release). → [Layers](guides/layers.md).
 
 ## managedBy=keramos label
 
-The canonical label keramos applies to every Kubernetes resource it creates and every namespace it provisions. The single source of truth for "did keramos do this?". One selector finds everything: `kubectl get all -A -l managedBy=keramos`.
+The canonical label keramos applies to every resource it creates and every
+namespace it provisions — the single source of truth for "did keramos do this?".
+One selector finds everything: `kubectl get all -A -l managedBy=keramos`. The
+legacy `owner=keramos` label is also honoured.
 
 ## Manifest
 
-The rendered YAML output of templating a keramos package — what keramos applies to the cluster. Stored gzip+base64-encoded inside the release record so rollback can re-apply exactly what was applied originally.
+The rendered YAML output of templating a keramos package — what keramos applies to
+the cluster. Stored gzip+base64-encoded inside the release record so rollback
+can re-apply exactly what was applied originally.
 
 ## OCI / OCI distribution
 
-The container-image distribution spec, also used for non-image artifacts. Keramos packages push and pull as OCI artifacts with media type `application/vnd.keramos.package.v1.tar+gzip`. → [OCI guide](guides/oci.md).
+The container-image distribution spec, reused for non-image artifacts. Keramos
+packages push and pull as OCI artifacts. Version identifiers go in the tag:
+`oci://host/path:1.2.3`. → [OCI guide](guides/oci.md).
 
 ## Partial
 
-A named block in `_helpers.yaml` (or any `_*.yaml` file in `templates/`) that other templates can `${include}` into themselves. Keramos's reusability primitive within a package. → [Partials](guides/packages.md#partials-and-includes).
+A named block in `_helpers.yaml` (or any `_*.yaml` file in `templates/`) that
+other templates `${include}` into themselves — keramos's reusability primitive
+within a package. → [Partials](guides/packages.md#partials-and-includes).
 
 ## Plan
 
-A persisted, apply-able snapshot of a keramos operation: rendered manifest, parameters, and a SHA-256 integrity hash. `keramos plan` creates, `keramos apply` executes. The integrity hash detects drift between the plan and any subsequent re-render. → [`keramos plan`](cli/plan.md), [`keramos apply`](cli/apply.md).
+An apply-able JSON artifact of a keramos operation: the rendered manifest plus a
+SHA-256 integrity digest. `keramos plan -o <file>` creates it; `keramos apply --plan
+<file>` re-renders, verifies the digest, and applies. The digest detects any
+change between planning and applying.
+→ [`keramos plan`](cli/plan.md), [`keramos apply`](cli/apply.md).
 
 ## Plugin
 
-An external command that integrates with keramos's CLI. Plugins live in `~/.config/keramos/plugins/`. Discovered via `keramos plugin list`, installed via `keramos plugin install <url>`. → [`keramos plugin`](cli/plugin.md).
+An external command that extends keramos's CLI. Discovered via `keramos plugin list`,
+installed via `keramos plugin install <url>`. → [`keramos plugin`](cli/plugin.md).
 
 ## Policy
 
-A rule that runs against a rendered manifest. Keramos packages can carry `policies/` (keramos-native declarative YAML). `keramos policy run <pkg>` evaluates them. → [Policies](cli/policy.md).
+A rule evaluated against a rendered manifest. Packages carry declarative rules
+in `policies/`. `keramos policy check <pkg>` evaluates them; `keramos policy list`
+shows them. → [Policies](cli/policy.md).
 
 ## .prov file
 
-A PGP cleartext-signed sidecar that travels alongside a `*.keramos.tgz` archive. Contains the package name, version, and SHA-256 digest, signed by the publisher's key. `keramos install --verify` fetches and validates it.
+A PGP cleartext-signed sidecar that travels alongside a `*.keramos.tgz` archive.
+It carries the package name, version, and SHA-256 digest, signed by the
+publisher's key. `keramos install --verify` and `keramos pull --verify` validate it
+against the local keyring.
 
 ## Profile
 
-A named values overlay file in `profiles/<name>.yaml`. Activated by `--profile <name>` on the CLI or `profile: <name>` on a workspace member or environment. Orthogonal to environments. → [Profiles](guides/values.md#profiles).
+A named values overlay file in `profiles/<name>.yaml`, activated by `--profile
+<name>` on the CLI or `profile:` on a workspace member or environment.
+Orthogonal to environments. → [Profiles](guides/values.md#profiles).
 
 ## Provenance
 
-The data that proves where a release came from: the PGP signature on the source archive, the cosign signature on the OCI artifact, and the audit data keramos records on each install (user, time, source path, keramos version, kubeconfig context, CLI flags). → [Audit](cli/audit.md), [Signing guide](guides/signing.md).
+The data proving where a release came from: the PGP signature on the source
+archive, an optional cosign signature on the OCI artifact, and the audit data
+keramos records on each install. `keramos get provenance <release>` also traces where
+each merged value was resolved from. → [Audit](cli/audit.md),
+[Signing guide](guides/signing.md).
 
 ## Reconcile
 
-The action of re-applying a release's stored manifest to converge any drifted fields. `keramos reconcile <release>`. → [`keramos reconcile`](cli/reconcile.md).
+Re-applying a release's stored manifest to converge drifted fields.
+`keramos reconcile <release>` — addressed by release name, so it needs no package
+source. → [`keramos reconcile`](cli/reconcile.md).
 
 ## Release
 
-A named instance of a keramos package installed in a cluster. Identified by `name + namespace`. Versioned across revisions: every install/upgrade increments a revision counter and stores a new release record. → [Release storage](glossary.md#secret-backed-storage).
+A named instance of a keramos package installed in a cluster, identified by
+`name + namespace`. Every install/upgrade/rollback increments a revision
+counter and stores a new release record. → [Secret-backed storage](#secret-backed-storage).
 
 ## Render
 
-The action of templating a package's `templates/` (and `crds/` and `hooks/` and `notes.yaml`) against merged values. Produces a rendered manifest. `keramos template <pkg>` does this offline.
+Templating a package's `templates/` (and `crds/`, `hooks/`, `notes.yaml`)
+against merged values to produce a rendered manifest. `keramos template <pkg>`
+does this offline, no cluster contact.
 
 ## Required package
 
-A separate release that the current package depends on. Declared in `keramos.yaml` under `requires:`. Distinct from `layers:` (which compose into the same release). The `requires:` list does not auto-install — operators install required packages first.
+A separate package the current one must be co-deployed with, declared in
+`keramos.yaml` under `requires:`. Distinct from `layers:` (which merge into the
+same release) — each requirement stays its own release. Keramos installs
+requirements automatically; pass `--skip-requires` to skip them.
 
 ## Revision
 
-A monotonically increasing integer per release. Each install/upgrade/rollback creates a new revision. The "current" revision has `status=deployed`; older revisions have `status=superseded`. `keramos history <release>` lists them all.
+A monotonically increasing integer per release. Each install/upgrade/rollback
+creates a new revision. The current revision has `status=deployed`; older ones
+are `superseded`. `keramos history <release>` lists them.
 
 ## Secret-backed storage
 
-The default release-storage driver. Each revision is stored as a labelled Secret named `keramos.v1.<release>.v<revision>` in the install namespace. Switch via `KERAMOS_DRIVER=configmap|memory|sql`. → [Drivers](cli/README.md#environment-variables).
+The default release-storage driver. Each revision is a labelled Secret named
+`keramos.v1.<release>.v<revision>` in the install namespace. Switch with
+`KERAMOS_DRIVER=configmap|memory|sql`.
+→ [Environment variables](cli/README.md#environment-variables).
 
 ## Server-side apply
 
-Kubernetes' patch mode where the API server tracks per-field ownership by `fieldManager`. Keramos uses `fieldManager=keramos`. Two keramos invocations against the same release manage the same fields without spurious conflicts; an external operator's edits show as "drift" because their fieldManager is different.
+Kubernetes' patch mode where the API server tracks per-field ownership by
+`fieldManager`. Keramos uses `fieldManager=keramos`, so its own repeated applies
+don't conflict, while an external operator's edits — owned by a different field
+manager — surface as drift.
 
 ## Tag
 
-In OCI distribution, a string label on an artifact (e.g. `1.2.3`, `latest`, `stable`). Keramos uses tags to identify package versions: `oci://host/path:1.2.3`. The version goes in the URI tag, not as a separate `--version` flag.
+In OCI distribution, a string label on an artifact (`1.2.3`, `latest`,
+`stable`). Keramos identifies package versions by tag: `oci://host/path:1.2.3`.
+The version goes in the tag, not a separate `--version` flag.
 
 ## Topological order
 
-The dependency-respecting order in which workspace members or cross-release dependencies install. Computed from `dependsOn` declarations using Kahn's algorithm. Members within the same level have no inter-dependencies among themselves and are eligible to run in parallel.
-
-## VersionSet
-
-The data type behind `${capabilities.apiVersions}`. A map of GroupVersion strings the cluster has registered, populated from the API server's discovery (or from `--api-versions` in offline mode).
+The dependency-respecting order in which workspace members or cross-release
+dependencies install, computed from `dependsOn`. Members in the same level have
+no inter-dependencies and are eligible to run in parallel.
 
 ## Workspace
 
-A `keramos-workspace.yaml` plus a tree of member packages from one repo. Operated as a single unit via `keramos workspace install/upgrade/uninstall/plan/diff/status`. Members are separate releases with a topological install order. → [Workspaces](guides/workspaces.md).
+A `keramos-workspace.yaml` plus a tree of member packages from one repo. Operated
+as a unit via `keramos workspace install/upgrade/uninstall/plan/diff/status`.
+Members are separate releases installed in topological order.
+→ [Workspaces](guides/workspaces.md).
 
 ## Where next
 
 - [FAQ](faq.md) — common questions
-- [Use cases](use-cases.md) — for SREs, platform engineers, GitOps teams
-- [Comparison with other Kubernetes packaging tools](comparison.md)
+- [Use cases](use-cases.md) — by role
+- [Comparison with other tools](comparison.md)
 - [Documentation map](../README.md#documentation-map)

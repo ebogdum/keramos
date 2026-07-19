@@ -1,23 +1,30 @@
 # Schema validation
 
-`values.schema.json` is keramos's mechanism for asserting that a package's effective values are well-formed before render. The schema document is authored alongside `values.yaml`; keramos validates the merged values (after every layer, environment, profile, and CLI override has been applied) and aborts the operation with a precise error if validation fails.
+`values.schema.json` asserts that a package's merged values are well-formed
+before render. Keramos validates the values — after every layer, environment,
+profile, and CLI override has been applied — and aborts with a precise error if
+validation fails. It runs during `keramos template`, `keramos install`, and
+`keramos upgrade`.
 
-This guide covers patterns and idioms. The reference for the supported subset is at [`values.schema.json` reference](../reference/values-schema-json.md).
+This guide covers authoring patterns. The supported keyword subset is in the
+[`values.schema.json` reference](../reference/values-schema-json.md).
 
-## Why schema validation pays off
+## Why it pays off
 
-Without a schema, the only thing that catches a misconfigured `replicas: "three"` is the cluster's API server — which means the install reaches the apply stage, possibly half-applies a manifest, and rolls back. With a schema:
+Without a schema, a misconfigured `replicas: "three"` is caught only by the API
+server — after the install has already started applying. With a schema:
 
 - Typos (`replicaa: 3`) are rejected before render.
-- Type mismatches (`replicas: "three"`) are rejected with a precise path and reason.
+- Type mismatches (`replicas: "three"`) are rejected with a path and reason.
 - Missing required fields are listed by full path.
-- Out-of-range numbers, malformed hostnames, invalid regex patterns are all caught.
+- Out-of-range numbers, bad patterns, and unknown keys are all caught.
 
-The schema also doubles as **documentation**. `keramos config <pkg>` walks it interactively, and `description` fields surface in `keramos show schema <pkg>`.
+The schema also documents the package: `keramos config <pkg>` walks it
+interactively, using `description` and `default` for its prompts.
 
 ## Authoring a schema
 
-A pragmatic schema for a typical web app looks like this:
+A pragmatic schema for a web app:
 
 ```json
 {
@@ -34,38 +41,13 @@ A pragmatic schema for a typical web app looks like this:
       "default": 1,
       "description": "Replica count for the main Deployment."
     },
-    "image": {
-      "$ref": "#/$defs/image"
-    },
+    "image": { "$ref": "#/$defs/image" },
     "service": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": {
-          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
-          "default": "ClusterIP"
-        },
+        "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"], "default": "ClusterIP" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
-      }
-    },
-    "ingress": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean", "default": false },
-        "host":    { "type": "string", "format": "hostname" },
-        "tls":     { "type": "boolean", "default": false }
-      },
-      "dependentRequired": {
-        "tls": ["host"]
-      }
-    },
-    "resources": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "requests": { "$ref": "#/$defs/resourceQuantities" },
-        "limits":   { "$ref": "#/$defs/resourceQuantities" }
       }
     }
   },
@@ -79,205 +61,141 @@ A pragmatic schema for a typical web app looks like this:
         "tag":        { "type": "string", "default": "latest" },
         "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"], "default": "IfNotPresent" }
       }
-    },
-    "resourceQuantities": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "cpu":    { "type": "string", "pattern": "^[0-9]+(m|\\.[0-9]+)?$" },
-        "memory": { "type": "string", "pattern": "^[0-9]+(Ki|Mi|Gi|Ti|Pi|Ei|K|M|G|T|P|E)?$" }
-      }
     }
   }
 }
 ```
 
-Note the patterns:
+Note the moves:
 
-- `additionalProperties: false` on every object — typos are caught.
-- `$ref` to factor out repeated shapes (`image`, `resourceQuantities`).
-- `dependentRequired` on `ingress.tls` — turning on TLS demands a `host`.
-- `default` values surface in `keramos config` and `keramos show schema`.
+- `additionalProperties: false` on every object catches typos.
+- `$ref` factors out repeated shapes.
+- `default` values surface in `keramos config`.
 
 ## Patterns
 
 ### Either / or
 
-A user must supply *either* an existing Secret name *or* an inline password — not both, not neither.
+A user must supply *either* an existing Secret name *or* an inline password:
 
 ```json
 {
   "auth": {
     "oneOf": [
-      {
-        "type": "object",
-        "required": ["existingSecret"],
-        "additionalProperties": false,
-        "properties": {
-          "existingSecret": { "type": "string", "minLength": 1 }
-        }
-      },
-      {
-        "type": "object",
-        "required": ["password"],
-        "additionalProperties": false,
-        "properties": {
-          "password": { "type": "string", "minLength": 8 }
-        }
-      }
+      { "type": "object", "required": ["existingSecret"], "additionalProperties": false,
+        "properties": { "existingSecret": { "type": "string", "minLength": 1 } } },
+      { "type": "object", "required": ["password"], "additionalProperties": false,
+        "properties": { "password": { "type": "string", "minLength": 8 } } }
     ]
   }
 }
 ```
 
-A user supplying `auth: { existingSecret: my-creds, password: hunter2 }` is rejected: the value matches both branches and `oneOf` requires exactly one.
+Supplying both is rejected — the value matches both branches and `oneOf`
+requires exactly one.
 
 ### Discriminated union
 
-When a single key (`type`) selects between several alternative bodies:
+A `const` key selects between alternative bodies:
 
 ```json
 {
   "storage": {
     "oneOf": [
-      {
-        "type": "object",
-        "required": ["type", "size"],
-        "additionalProperties": false,
-        "properties": {
-          "type":  { "const": "pvc" },
-          "size":  { "type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$" },
-          "class": { "type": "string" }
-        }
-      },
-      {
-        "type": "object",
-        "required": ["type", "bucket"],
-        "additionalProperties": false,
-        "properties": {
-          "type":   { "const": "s3" },
-          "bucket": { "type": "string", "minLength": 3 },
-          "region": { "type": "string", "default": "us-east-1" }
-        }
-      }
+      { "type": "object", "required": ["type", "size"], "additionalProperties": false,
+        "properties": { "type": { "const": "pvc" }, "size": { "type": "string" } } },
+      { "type": "object", "required": ["type", "bucket"], "additionalProperties": false,
+        "properties": { "type": { "const": "s3" }, "bucket": { "type": "string" } } }
     ]
   }
 }
 ```
 
-`keramos config` recognises this pattern and prompts for `type` first, then offers fields specific to the chosen branch.
+### Cross-field constraint
 
-### Constrained enum with a fallback
-
-For an open enum where you want to permit unknown values too:
+`dependentRequired` reads as "if `tls` is set, also require `host`":
 
 ```json
 {
-  "deploymentStrategy": {
-    "anyOf": [
-      { "enum": ["RollingUpdate", "Recreate"] },
-      { "type": "string", "minLength": 1 }
-    ]
-  }
+  "tls":  { "type": "boolean", "default": false },
+  "host": { "type": "string" },
+  "dependentRequired": { "tls": ["host"] }
 }
 ```
 
-`anyOf` accepts the well-known values *or* any non-empty string. The first branch surfaces in `keramos config` as a dropdown; the second is the escape hatch.
-
-### Pattern validation for image refs
+### Pattern validation
 
 ```json
 {
-  "image": {
-    "type": "object",
-    "properties": {
-      "repository": {
-        "type": "string",
-        "pattern": "^[a-z0-9]+([._\\-/a-z0-9]+)*$"
-      },
-      "tag": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9_][A-Za-z0-9._\\-]{0,127}$"
-      },
-      "digest": {
-        "type": "string",
-        "pattern": "^sha256:[a-f0-9]{64}$"
-      }
-    }
-  }
+  "tag":    { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9._\\-]{0,127}$" },
+  "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
 }
 ```
-
-Three patterns: a Docker repo path, a valid tag, and a SHA-256 content digest.
-
-### Cross-field constraint via `dependentRequired`
-
-```json
-{
-  "tls": { "type": "boolean", "default": false },
-  "tlsCert": { "type": "string" },
-  "tlsKey":  { "type": "string" },
-  "dependentRequired": {
-    "tls": ["tlsCert", "tlsKey"]
-  }
-}
-```
-
-Reads as "if `tls` is set, also require `tlsCert` and `tlsKey`". `dependentRequired` is much simpler than `if/then/else` for the common patterns.
 
 ## What schemas can't enforce
 
-Some constraints are out of scope. Examples:
-
-- **Cross-package references**: "this value must be a Service that exists in the cluster". For these, use a `pre-install` hook that validates at run time.
-- **Mutual exclusion across distant fields**: schemas can express it via `oneOf` but it's verbose. For complex cross-field rules, write a keramos policy rule under `policies/`.
-- **Conditional defaults**: schemas express *valid shapes*, not *derived values*. For derived defaults, use template expressions (`${values.image.tag | default .Chart.AppVersion}`).
+- **Cluster references** ("this must name a Service that exists") — use a
+  `pre-install` hook that checks at run time.
+- **Complex cross-field rules** beyond `oneOf` / `dependentRequired` — write a
+  [policy rule](../cli/policy-check.md) under `policies/`.
+- **Derived defaults** — schemas express valid *shapes*, not computed values.
+  Use template expressions (`${values.image.tag | default package.version}`).
 
 ## Composition with layers
 
-When a parent package has layers, every layer's `values.schema.json` is loaded and the parent's schema's `properties` are merged with each layer's namespaced properties. So:
-
-```
-parent/
-├── keramos.yaml      # layers: [shared-base]
-├── values.schema.json
-│   {
-│     "type": "object",
-│     "properties": {
-│       "replicas": { "type": "integer" }
-│     }
-│   }
-└── ...
-
-shared-base/
-├── keramos.yaml
-└── values.schema.json
-    {
-      "type": "object",
-      "properties": {
-        "image": { "type": "object", ... }
-      }
-    }
-```
-
-The effective parent schema treats `shared-base.image` as a valid path because the layer's schema is namespaced under the layer name.
-
-## Inspecting
-
-```sh
-keramos show schema <pkg>             # print the (composed) schema
-keramos lint <pkg>                    # validates package values + schema
-keramos config <pkg>                  # interactive walker; uses schema for prompts
-```
+When a parent has layers, each layer's `values.schema.json` is loaded and merged
+into the parent's schema under the layer's namespace, so a layer's `image`
+becomes a valid path at `<layer-name>.image`.
 
 ## Errors
 
-```
-$ keramos install my-app . --set replicas=100
-Error: schema validation failed:
-  replicas: 100 exceeds maximum 50
-  service.type: "Anycast" is not one of [ClusterIP, NodePort, LoadBalancer]
-  ingress.tls: required when ingress.tls is set, but ingress.host is missing
+Validation errors carry the full JSON-pointer path, the violating value, and the
+keyword, one per line:
+
+```sh
+keramos template . --set replicas=100 --set service.type=Bad
 ```
 
-Errors include the full dotted path, the violating value, and the violated keyword. Use `keramos lint` in CI to catch these before they reach a cluster.
+```
+Error: values failed schema validation:
+  - $.service.type: value not in enum
+  - $.replicas: 100 greater than maximum 50
+```
+
+Other typical messages:
+
+```
+  - $.image.repository: required property missing
+  - $.replicas: expected integer, got string
+  - $.replicaa: additional property not allowed
+  - $.tag: string does not match pattern "^[a-z0-9.]+$"
+  - $: property "tls" requires "host" to be set
+  - $.storage: value matches 0 of oneOf (expected exactly 1)
+```
+
+## Inspecting and gating
+
+```sh
+keramos config .        # interactive walker that builds a values file from the schema
+```
+
+```
+Walking schema. Press <enter> to keep defaults.
+image.repository (string) *: ...
+```
+
+`keramos lint` does **not** run schema validation — it only checks that the schema
+file is valid JSON. To gate values in CI, render them so the check runs:
+
+```sh
+keramos template . -f ci-values.yaml     # non-zero exit on any violation
+```
+
+`keramos install --dry-run server` does the same against a live API server.
+
+## See also
+
+- [`values.schema.json` reference](../reference/values-schema-json.md) — the
+  supported keyword subset.
+- [Values](values.md) — how the values being validated are assembled.
+- [`keramos config`](../cli/config.md) and [`keramos lint`](../cli/lint.md).

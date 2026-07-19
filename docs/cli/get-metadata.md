@@ -1,66 +1,93 @@
 # keramos get metadata
 
-## Synopsis
-
-`keramos get metadata` prints the high-level descriptor of a release: name, namespace, revision number, status (deployed / pending-upgrade / superseded / failed / uninstalled), the package reference (name, version, app version), first-deployed and last-deployed timestamps, and any labels attached to the release record. The manifest, values, hooks, and notes are NOT included — for those, use the dedicated subcommands (or `get all` for everything in one document).
+`keramos get metadata` prints a release's high-level metadata only — name,
+namespace, revision, status, package, info, and labels — without the manifest,
+values, hooks, or notes.
 
 ## When to use it
 
-Use for fast lookups when you just need to know which package version is behind a release, when it was last touched, or whether a previous operation completed cleanly. Cheaper than `get all` because it skips decoding the (potentially large) gzipped manifest.
+- You just need the package version, status, or timestamps for a release.
+- You want a cheap lookup that skips the large manifest and values payloads.
 
-## What happens when you run it
+## What happens
 
-1. Reads the release-storage Secret for `<release-name>` at the requested revision.
-2. Extracts the metadata fields (skipping manifest/values/hooks/notes).
-3. Prints them as YAML or JSON.
+It loads the stored release record for `<release>` (latest, or `--revision`) and
+prints only its metadata fields: `name`, `namespace`, `revision`, `status`,
+`package`, `info` (timestamps and description), and `labels`. The manifest,
+values, hooks, and notes are omitted — use [`get all`](get-all.md) for those.
+
+## Flags
+
+| Flag | Cause | Effect |
+|---|---|---|
+| `--revision <n>` | you name a stored revision | reads that revision instead of the latest |
+| `-o, --output <fmt>` | you pass `json` or `yaml` (default `yaml`) | prints in that format |
+
+Inherits the global flags (`-n/--namespace`, `--kube-context`, `--kubeconfig`,
+`--debug`).
 
 ## Usage
 
 ```
-keramos get metadata <release-name> [flags]
+keramos get metadata <release> [flags]
 ```
 
-## Flags
+## Worked example
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for metadata |
-| `-o, --output` | string | yaml | output format: json, yaml |
-| `--revision` | int | 0 | get metadata from a specific revision (0 = current) |
+Stored record for `hello` (revision 4). Only the metadata fields matter here:
 
-## Persistent flags inherited from `keramos`
+```yaml
+name: hello
+namespace: prod
+revision: 4
+status: deployed
+package:
+  name: hello
+  version: 1.5.0
+info:
+  firstDeployed: "2026-06-01T09:00:00Z"
+  lastDeployed:  "2026-07-18T14:22:00Z"
+labels:
+  team: platform
+# ...plus manifest, values, hooks, notes (not printed by this command)
+```
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Quick status read for the current revision:
+Run it:
 
 ```sh
 keramos get metadata hello -n prod
 ```
 
-JSON for scripting (e.g. extract the package version):
+Output — metadata only:
+
+```yaml
+info:
+  firstDeployed: "2026-06-01T09:00:00Z"
+  lastDeployed: "2026-07-18T14:22:00Z"
+labels:
+  team: platform
+name: hello
+namespace: prod
+package:
+  name: hello
+  version: 1.5.0
+revision: 4
+status: deployed
+```
+
+Extract just the package version:
 
 ```sh
 keramos get metadata hello -n prod -o json | jq -r '.package.version'
 ```
 
-Look back at revision 3's metadata to confirm what was running before the last upgrade:
-
-```sh
-keramos get metadata hello --revision 3 -n prod
+```
+1.5.0
 ```
 
 ## See also
 
-- [`get`](get.md)
-- [`get all`](get-all.md)
+- [`get`](get.md) — the parent command
+- [`get all`](get-all.md) — metadata plus the full record
 - [`status`](status.md) — current revision plus per-resource readiness
 - [`history`](history.md) — every revision's metadata in one table
-- [`keramos.yaml` reference](../reference/keramos-yaml.md)

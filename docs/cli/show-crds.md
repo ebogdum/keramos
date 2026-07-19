@@ -1,64 +1,65 @@
 # keramos show crds
 
-## Synopsis
-
-`keramos show crds` prints every `CustomResourceDefinition` YAML the package ships under its `crds/` directory. CRDs in this directory are applied **before** the rest of the manifest at install time and waited for `Established=true`; this command lets you inspect what cluster-API extensions you'd be granting before doing so.
+`keramos show crds` prints the CRD YAML files a package ships under its `crds/`
+directory.
 
 ## When to use it
 
-Use to audit a package's CRD footprint before installing — particularly important for packages that introduce new operators, custom resources, or admission-webhook configurations. CRDs are cluster-scoped and outlive their installing release, so installing one is a higher-stakes commitment than installing a regular workload.
+- Audit the cluster-scoped CustomResourceDefinitions a package would install
+  before you commit to them.
+- Pipe the CRDs into a validator or linter without installing the package.
 
-## What happens when you run it
+## What happens
 
-1. Reads every YAML file under `<package-path>/crds/`.
-2. Concatenates them with `---` separators.
-3. Prints to stdout.
-4. No layer resolution, no template rendering — CRDs are passed through verbatim.
+1. Looks for a `crds/` directory under `<package-path>`. If none exists, prints
+   `(no crds/ directory)` and stops.
+2. Walks `crds/` for `.yaml` / `.yml` files, skipping symlinks, and sorts them
+   by path.
+3. Prints each file verbatim, joining them with a `---` separator.
+
+No templating or merging is applied; the files pass through unchanged.
 
 ## Usage
 
 ```
-keramos show crds <package-path> [flags]
+keramos show crds <package-path>
 ```
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for crds |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+**INPUT** — a package whose `crds/` holds two files:
 
-## Examples
-
-Print the CRDs a package would install:
-
-```sh
-keramos show crds ./my-app
+```
+webapp/crds/gadgets.yaml
+webapp/crds/widgets.yaml
 ```
 
-Lint a package's CRDs with `kubectl`'s offline validator:
+**OUTPUT** (`keramos show crds webapp`) — files sorted by name (`gadgets` before
+`widgets`) and separated by `---`:
 
-```sh
-keramos show crds ./my-app | kubectl apply --dry-run=client -f -
+```yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gadgets.example.com
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.example.com
+spec:
+  group: example.com
+  scope: Namespaced
 ```
 
-Pipe to `kube-linter` for a security review:
-
-```sh
-keramos show crds ./my-app | kube-linter lint -
-```
+A package with no `crds/` directory instead prints `(no crds/ directory)`.
 
 ## See also
 
-- [`show`](show.md)
-- [`show all`](show-all.md)
-- [`show chart`](show-chart.md)
-- [Package anatomy: crds](../guides/packages.md)
+- [`show`](show.md) — the show command index
+- [`show chart`](show-chart.md) — the package metadata
+- [`template`](template.md) — render the package's non-CRD manifests

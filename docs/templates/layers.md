@@ -1,34 +1,36 @@
 # Layers in templates
 
-When a package has layers, every layer's `values.yaml` is deep-merged with the parent's `values.yaml` into a single flat values map. **Both the parent's templates and the layer's templates see the same merged map** at `${values.*}` — there is no per-layer namespace separation. What the parent can do is *override* a layer's contribution via the `layers.<layer-name>.<key>` block in its own values.yaml; the merger consumes that block and applies the overrides before producing the final flat map.
+When a package pulls in layers, every layer's `values.yaml` is deep-merged with
+the parent's into a single **flat** values map. Both the parent's templates and
+the layers' templates read that same map at `${values.*}` — there is no
+per-layer namespace. What the parent controls is which values win, using the
+`layers.<name>` block in its own `values.yaml`.
 
-For composition mechanics (how templates merge, how to declare layers), see the [Layers guide](../guides/layers.md).
+For how you declare and compose layers, see the [Layers guide](../guides/layers.md).
 
 ## How layer values reach the merged map
 
-Imagine a parent that pulls in a `redis` layer:
+A parent that pulls in a `redis` layer:
 
-**Layer (`redis/values.yaml`):**
+**Layer — `redis/values.yaml`:**
 
 ```yaml
 password: from-layer
 port: 6379
-maxConnections: 1000
 ```
 
-**Parent (`my-app/keramos.yaml`):**
+**Parent — `my-app/keramos.yaml`:**
 
 ```yaml
 apiVersion: keramos/v1
 name: my-app
 version: 1.0.0
-
 layers:
   - name: redis
     source: ../redis
 ```
 
-**Parent (`my-app/values.yaml`):**
+**Parent — `my-app/values.yaml`:**
 
 ```yaml
 replicas: 3
@@ -37,75 +39,73 @@ layers:
     password: from-parent
 ```
 
-After merge, the values context every template sees is:
+After the merge, every template sees:
 
 ```yaml
 replicas: 3
-password: from-parent          # parent's `layers.redis.password` overrode the layer's value
-port: 6379                     # from the layer
-maxConnections: 1000           # from the layer
+password: from-parent   # parent's layers.redis.password overrode the layer
+port: 6379              # from the layer
 ```
 
-Both `my-app/templates/...` and `redis/templates/...` resolve `${values.password}` to `from-parent`, `${values.port}` to `6379`, and `${values.replicas}` to `3`. The `layers` key in the parent's `values.yaml` is consumed by the merger and is not present in the resulting context.
+Both `my-app/templates/*` and `redis/templates/*` resolve `${values.password}`
+to `from-parent`, `${values.port}` to `6379`, and `${values.replicas}` to `3`.
+The `layers` key is consumed by the merger and is **not** present in the values
+templates see.
 
-## Forcing precedence with the `!` prefix
+Precedence: deeper layers merge first, shallower layers next, and the parent
+last (highest). A parent key therefore wins over a layer key of the same name.
 
-Sometimes the parent's `values.yaml` has a section that should win over a child layer's value, regardless of merge order. Prefix the key with `!`:
+## Overriding a layer's values
+
+Put overrides for a layer under `layers.<name>` in the parent's `values.yaml`;
+the merger applies them to that layer's values before flattening. In the example
+above, `layers.redis.password` replaced the layer's `password`.
+
+## Forcing precedence with `!`
+
+To make a key win regardless of merge order — even over a profile that would
+otherwise re-override it — prefix it with `!`:
 
 ```yaml
 # parent values.yaml
 layers:
   redis:
-    "!password": forced-by-parent     # always wins, even if a profile re-overrides
+    "!password": forced-by-parent
 ```
 
-The `!` marker is stripped from the key during merge; the value is applied at the highest precedence level. Use it sparingly — most overrides don't need it.
+The `!` is stripped during merge and the value is applied at the highest
+precedence. Use it sparingly.
 
-## What does NOT exist
+## What does not exist
 
-A few patterns that look reasonable but aren't supported:
+- No `${layer.name}` / `${.Layer.Path}` namespace exposing the current layer's
+  identity to its templates.
+- No `${.Layers.<name>.<key>}` accessor to reach a layer's pre-merge values.
+  Read `${values.<merged-key>}` after the merge.
+- No per-layer value scoping at render time. Every layer's keys land in the same
+  flat map.
 
-- There is no `${.Layer.Name}` / `${layer.name}` / `${.Layer.Path}` namespace exposing the current layer's identity to its templates.
-- There is no `${.Layers.<name>.<key>}` / `${.Subcharts.<name>.<key>}` accessor letting the parent reach into a layer's pre-merged values. Use `${values.<merged-key>}` after the merger has produced the flat map.
-- There is no per-layer value scoping at template time. Layers do not see "their own" values separately from siblings — every key from every layer's `values.yaml` ends up in the same flat map, with parent overrides applied.
-
-If you need a layer to see only its own keys without collisions from siblings, namespace them inside the layer's own values:
-
-```yaml
-# redis/values.yaml
-redis:
-  password: from-layer
-  port: 6379
-```
-
-Then templates inside the layer access `${values.redis.password}`. The parent overrides via:
-
-```yaml
-# parent/values.yaml
-layers:
-  redis:
-    redis:
-      password: from-parent
-```
-
-This is just a YAML naming convention, not a special engine feature.
+If a layer needs keys that won't collide with siblings, namespace them inside
+the layer's own values (`redis: { password: ... }`, read as
+`${values.redis.password}`) and override via `layers.redis.redis.password`. This
+is a YAML convention, not an engine feature.
 
 ## The `global` convention
 
-A frequently-used convention is to put cluster-wide settings under `values.global`:
+Cluster-wide settings conventionally live under `values.global`:
 
 ```yaml
 # parent values.yaml
 global:
   imageRegistry: registry.example.com
-  domain: example.com
 ```
 
-Layer templates read them as `${values.global.imageRegistry}`. Because all values merge flat, `values.global` is automatically visible everywhere — no special scoping rules needed.
+Because everything merges flat, `values.global` is visible everywhere — layer
+templates read `${values.global.imageRegistry}` with no special scoping.
 
 ## A complete example
 
-**Layer template (`redis/templates/serviceaccount.yaml`):**
+**Layer — `redis/templates/serviceaccount.yaml`:**
 
 ```yaml
 apiVersion: v1
@@ -117,7 +117,7 @@ metadata:
     app.kubernetes.io/instance: ${release.name}
 ```
 
-**Parent template (`my-app/templates/deployment.yaml`):**
+**Parent — `my-app/templates/deployment.yaml`:**
 
 ```yaml
 apiVersion: apps/v1
@@ -133,21 +133,18 @@ spec:
           image: ${values.global.imageRegistry}/${values.image.name}:${values.image.tag}
           env:
             - name: REDIS_PASSWORD
-              value: ${values.password | quote}
+              value: ${values.password}
 ```
 
-**Parent values (`my-app/values.yaml`):**
+**Parent — `my-app/values.yaml`:**
 
 ```yaml
 replicas: 3
-
 global:
   imageRegistry: registry.example.com
-
 image:
   name: my-app
   tag: 1.4.2
-
 layers:
   redis:
     password: hunter2
@@ -156,14 +153,6 @@ layers:
 **Output of `keramos template ./my-app --release-name hello`:**
 
 ```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: hello-redis
-  labels:
-    app.kubernetes.io/name: redis
-    app.kubernetes.io/instance: hello
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -177,15 +166,25 @@ spec:
           image: registry.example.com/my-app:1.4.2
           env:
             - name: REDIS_PASSWORD
-              value: "hunter2"
+              value: hunter2
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hello-redis
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: hello
 ```
 
-## Library layers (no installable templates)
+## Library layers
 
-A package with `type: library` in its `keramos.yaml` cannot be installed standalone. Library packages typically ship only partials in `_helpers.yaml` that consuming packages `${include}`. This is the right place to put organisation-wide partials (common labels, common pod-spec scaffolding, common ingress wiring) so every consuming package gets the same shape with the same updates.
+A package with `type: library` in its `keramos.yaml` can't be installed standalone.
+A library ships partials in `_helpers.yaml` that consuming packages `$include`,
+so every consumer gets the same shape:
 
 ```yaml
-# library keramos.yaml
+# org-base/keramos.yaml
 apiVersion: keramos/v1
 name: org-base
 version: 1.0.0
@@ -193,17 +192,17 @@ type: library
 ```
 
 ```yaml
-# org-base/templates/_helpers.yaml — partials only
+# org-base/templates/_helpers.yaml
 common.labels:
   app.kubernetes.io/name: ${package.name}
   app.kubernetes.io/instance: ${release.name}
-  app.kubernetes.io/version: ${package.version}
   app.kubernetes.io/managed-by: keramos
 ```
 
-Consumers:
+Consumers add it as a layer and include the partial:
 
 ```yaml
+# consumer keramos.yaml
 layers:
   - name: org-base
     source: oci://ghcr.io/example/org-base
@@ -216,3 +215,9 @@ metadata:
   labels:
     $include: common.labels
 ```
+
+## See also
+
+- [Layers guide](../guides/layers.md) — declaring layers, sources, conditions
+- [Control flow](control-flow.md) — `$include` and the directives
+- [Expressions](expressions.md) — reading merged values with `${values.*}`

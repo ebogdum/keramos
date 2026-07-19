@@ -1,21 +1,32 @@
-# Cross-release dependencies
+# Orchestrate cross-release dependencies
 
-`keramos-releases.yaml` orchestrates **multiple separate releases** with an explicit dependency graph between them. Where a workspace expects member packages to live in one repository, `keramos-releases.yaml` happily mixes local paths, OCI registries, HTTPS chart URLs, and git references — useful when you need to roll out a platform composed of unrelated upstream packages with strict ordering between them.
+`keramos-releases.yaml` rolls out **several separate releases** with one
+command, in dependency order. Unlike a workspace, the member packages can come
+from anywhere — local paths, OCI registries, HTTPS chart URLs, or git — which
+makes this the right file for standing up a platform built from unrelated
+upstream packages that must come up in a strict order.
 
-The full file-format reference is at [`keramos-releases.yaml`](../reference/keramos-releases-yaml.md). This guide covers the workflow.
+The file-format reference is
+[`keramos-releases.yaml`](../reference/keramos-releases-yaml.md); the command
+reference is [`keramos releases`](../cli/releases.md). This guide covers the
+workflow.
 
 ## When to use it
 
-Reach for `keramos-releases.yaml` when **all** of these are true:
+Reach for `keramos-releases.yaml` when all of these hold:
 
-- The releases come from **different sources** (some local, some OCI, some HTTPS).
+- The releases come from **different sources** (some local, some OCI, some
+  HTTPS).
 - They have **dependency ordering** between them.
 - Each is its own **independent release** with its own lifecycle.
-- You want to roll them out and tear them down with **single commands**.
+- You want to bring them up and tear them down with **single commands**.
 
-If they're sibling packages in one repo, prefer `keramos-workspace.yaml`. If they're independently rolled out by different teams on different schedules, don't put them in one file at all — use a controller or a CI pipeline.
+If they are sibling packages in one repo, prefer
+[`keramos-workspace.yaml`](workspaces.md) — it adds parallelism, health gating,
+and whole-set rollback. If they roll out on different schedules, keep them in
+separate pipelines.
 
-## Layout
+## Lay out the directory
 
 ```
 my-platform-deploy/
@@ -24,16 +35,17 @@ my-platform-deploy/
 │   ├── cert-manager.yaml
 │   ├── external-dns.yaml
 │   └── monitoring.yaml
-├── pulled/                     # optional: locally-cached pulled packages
 └── packages/                   # optional: locally-developed packages
     └── ingress-nginx/
         ├── keramos.yaml
         └── ...
 ```
 
-The directory contains the file, value overrides for each release, and any locally-developed packages.
+The directory holds the spec file, the value overrides for each release, and
+any locally-developed packages. `values:` paths resolve relative to the
+directory containing `keramos-releases.yaml`.
 
-## Example: platform bootstrap
+## Write the spec
 
 ```yaml
 # keramos-releases.yaml
@@ -65,112 +77,138 @@ releases:
     dependsOn: [ingress]
 ```
 
-## Commands
+Each entry carries a `name`, a `package` source, and optionally `namespace`,
+`profile`, `values`, `set`, and `dependsOn`. A release without its own
+`namespace` falls back to `-n/--namespace`. Every `dependsOn` name must match
+another entry; an unknown name or a cycle is an error and nothing is applied.
 
-```
-keramos releases plan       # show topological order, no changes
-keramos releases install    # install all releases in order
-keramos releases upgrade    # upgrade existing, install missing
-keramos releases uninstall  # reverse-order uninstall
-keramos releases status     # current state of every release
-```
-
-The `--file` flag selects the manifest path; default is `keramos-releases.yaml` in the current directory.
+## Preview the order
 
 ```sh
-keramos releases install --file ./platform.releases.yaml
+keramos releases plan
 ```
 
-## Plan output
-
 ```
-$ keramos releases plan
-Level 0:
-  - cert-manager       ← oci://quay.io/jetstack/cert-manager
-Level 1:
-  - external-dns       ← oci://ghcr.io/kubernetes-sigs/external-dns
-  - ingress            ← ./packages/ingress-nginx
-Level 2:
-  - monitoring         ← oci://ghcr.io/example/kube-prometheus-stack
+1. cert-manager (oci://quay.io/jetstack/cert-manager) ns=cert-manager
+2. external-dns (oci://ghcr.io/kubernetes-sigs/external-dns) ns=external-dns
+3. ingress (./packages/ingress-nginx) ns=ingress
+4. monitoring (oci://ghcr.io/example/kube-prometheus-stack) ns=monitoring
 ```
 
-Same Kahn-level grouping as workspaces: members within a level have no inter-dependencies among themselves.
+`plan` prints a flat, numbered list — dependencies before dependents. Releases
+that do not depend on each other are ordered alphabetically by name. It
+contacts no cluster, so it is safe as a CI sanity check: a cycle or an unknown
+`dependsOn` fails it before anything runs.
 
-## Install ordering
+## Install
 
 ```sh
 keramos releases install
 ```
 
-Keramos installs level-by-level. Releases at the same level are issued sequentially (in the order they appear in the file); every release in level N must complete before level N+1 begins. Each individual release goes through the standard `keramos install` pipeline — including hooks, schema validation, server-side apply, and readiness wait — so by the time a release is reported as installed, its workloads are Ready. There's no need for an explicit health-gate flag because the per-release `--wait` is the default.
-
-For finer-grained parallelism within a level (say you have 5 cert-manager-style releases that can all install at once), prefer `keramos workspace`, which exposes `--parallel`, `--health-gate`, and `--atomic-workspace` flags.
-
-## Upgrade vs install
-
-`keramos releases upgrade` is a hybrid: each release is upgraded if it already exists, installed if it doesn't. The behaviour matches running `keramos upgrade --install`-style logic per release. Useful in CI: the same command brings the platform up the first time and keeps it up-to-date thereafter.
-
-## Per-release values and set
-
-Each release entry can carry its own `values:` and `set:`:
-
-```yaml
-releases:
-  - name: monitoring
-    package: oci://ghcr.io/example/kube-prometheus-stack
-    namespace: monitoring
-    values:
-      - ./values/monitoring-base.yaml
-      - ./values/monitoring-${ENVIRONMENT}.yaml    # variable expansion against env
-    set:
-      - "alertmanager.config.global.resolve_timeout=5m"
-      - "grafana.adminPassword=${GRAFANA_ADMIN_PASSWORD}"
+```
+[cert-manager] installed (revision 1, ns cert-manager)
+[external-dns] installed (revision 1, ns external-dns)
+[ingress] installed (revision 1, ns ingress)
+[monitoring] installed (revision 1, ns monitoring)
 ```
 
-`values:` paths are resolved relative to the directory containing `keramos-releases.yaml`. Variable expansion (`${ENVIRONMENT}`, `${GRAFANA_ADMIN_PASSWORD}`) happens against the calling shell's environment, so secrets stay in env vars rather than the file.
+Keramos applies the releases strictly in order — one at a time, each after
+everything it depends on. Every release is atomic: if one fails to install, it
+rolls **itself** back, the command stops, and the releases already installed
+stay in place. Re-running install picks up where it left off.
 
-## Differences from workspaces
+`install` does **not** wait for a release's pods to become Ready before moving
+to the next one. If a dependent must not start until its dependency is actually
+serving traffic, use [`keramos workspace`](workspaces.md) with `--health-gate`.
 
-| | `keramos-workspace.yaml` | `keramos-releases.yaml` |
-|---|---|---|
-| Member packages from | sibling directories of one repo | anywhere — local, OCI, HTTPS, git |
-| Field name | `members[].path` | `releases[].package` |
-| Per-member overrides | values come from the member's own `values.yaml` and the workspace's selected environment | `values:` and `set:` directly on the entry |
-| `atomic` / `wait` per-member | yes (`atomic`, `wait` on member) | per-release behaviour matches `keramos install` defaults |
-| Profiles | per-member `profile:` | per-release `profile:` |
-| Parallel within a level | `--parallel` flag | sequential within a level |
-| Health-gate | `--health-gate` flag | per-release `--wait` is the default |
-| Atomic / continue-on-error | `--atomic-workspace` / `--continue-on-error` flags | not exposed |
+## Keep the platform current
 
-Both files are first-class — and a project can use both: a workspace for tightly-coupled packages from one repo, and a `keramos-releases.yaml` to orchestrate the workspace plus a few external releases together.
-
-## Patterns
-
-### Bootstrap a fresh cluster
-
-A `keramos-releases.yaml` is the natural unit to commit alongside cluster-bootstrap automation. The first cluster operator runs:
+`keramos releases upgrade` is the one command you re-run to converge the set: it
+upgrades every release that exists and installs any that do not.
 
 ```sh
-git clone https://github.com/example/platform.git
-cd platform
-keramos releases install
+keramos releases upgrade
 ```
 
-All operators of every cluster in the fleet end up with the same set of releases at the same versions.
+```
+[cert-manager] upgraded (revision 2)
+[external-dns] upgraded (revision 2)
+[ingress] upgraded (revision 2)
+[monitoring] upgraded (revision 2)
+```
 
-### Drift detection across the platform
+A release that was missing prints `[name] installed (revision 1, ns ...)`
+instead. This works the first time and every time after, so it is safe as your
+repeatable CI deploy command.
+
+## Check status
 
 ```sh
-keramos releases status                    # any release not at expected status?
-for r in $(keramos releases plan -q); do keramos drift $r; done
+keramos releases status
 ```
 
-The first checks release status; the second runs drift on every release named in the plan.
+```
+cert-manager: revision 1 status=deployed
+external-dns: revision 1 status=deployed
+ingress: revision 1 status=deployed
+monitoring: not deployed
+```
 
-### Tearing down
+Status reads each release's latest revision from the cluster and prints one
+line per entry, in file order. A release with no record shows `not deployed` —
+a signal to run `install` or `upgrade`. A reachable cluster is required.
+
+## Tear down
 
 ```sh
 keramos releases uninstall
 ```
 
-Reverse-level order. Members of the last level uninstalled first, levels above wait for theirs to complete.
+```
+[monitoring] uninstalled
+[ingress] uninstalled
+[external-dns] uninstalled
+[cert-manager] uninstalled
+```
+
+Uninstall runs in **reverse** order, so nothing is removed while a still-present
+release depends on it. A release that is already gone is treated as success.
+Unlike install, uninstall keeps going past a failure — one bad release does not
+strand the rest.
+
+## Point at a different file
+
+Every subcommand reads `keramos-releases.yaml` in the current directory. Use
+`--file` to select another path:
+
+```sh
+keramos releases install --file ./platform.releases.yaml
+```
+
+## How it differs from workspaces
+
+| | `keramos releases` | [`keramos workspace`](workspaces.md) |
+|---|---|---|
+| Spec file | `keramos-releases.yaml` | `keramos-workspace.yaml` |
+| Member packages from | anywhere — local, OCI, HTTPS, git | sibling directories of one repo |
+| Field for the package | `releases[].package` | `members[].path` |
+| Per-member overrides | `values:` and `set:` on the entry | member's own `values.yaml` + `profile` |
+| Ordering | topological, **sequential** | topological, **parallel** within a level (`--parallel`) |
+| Wait for pods to be Ready | no | optional (`--health-gate`) |
+| Roll back the whole set | no (each release is atomic on its own) | optional (`--atomic-workspace`) |
+| Continue past a failure | install/upgrade stop; uninstall continues | optional (`--continue-on-error`) |
+| Whole-set dry run / diff | no | yes (`--dry-run`, `keramos workspace diff`) |
+
+Both files are first-class, and a project can use both: a workspace for the
+tightly-coupled packages from one repo, and a `keramos-releases.yaml` to roll out
+that workspace alongside a few external releases.
+
+## See also
+
+- [`keramos releases`](../cli/releases.md) — command reference
+- [`keramos-releases.yaml`](../reference/keramos-releases-yaml.md) — file-format
+  reference
+- [Workspaces](workspaces.md) — richer orchestration for one repo of packages
+- [`keramos install`](../cli/install.md) · [`keramos upgrade`](../cli/upgrade.md) —
+  the single-release commands each entry runs

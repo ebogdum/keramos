@@ -1,20 +1,29 @@
 # keramos search hub
 
-## Synopsis
-
-`keramos search hub` queries Artifact Hub (or another Artifact-Hub-compatible endpoint) for package archives matching a keyword. Results include package name, repository, version, and a short description; clicking through to the listed repository lets you `keramos repo add` and `keramos pull` to actually fetch the package. With `--regexp`, the keyword is treated as a regular expression rather than a substring.
+`keramos search hub` queries Artifact Hub (or another compatible endpoint) for
+packages matching a keyword, without you having to add any repository first.
 
 ## When to use it
 
-Use to discover community-published packages without first adding any repository to keramos. The default endpoint is `https://artifacthub.io`; point at an internal hub mirror with `--endpoint`.
+Use it to discover community-published packages. Once you find one, add its
+repository with [`repo add`](repo-add.md) and fetch it with [`pull`](pull.md).
+To search only repositories you already trust, use
+[`search repo`](search-repo.md).
 
-## What happens when you run it
+## What happens
 
-1. Constructs a search request to `<endpoint>/api/v1/packages/search?ts_query_web=<keyword>`.
-2. Filters by `--kind` if set.
-3. Truncates to `--max-results`.
-4. Renders a tabular view with columns capped at `--max-col-width`.
-5. No cluster contact, no repo additions.
+1. keramos sends your keyword to `<endpoint>/api/v1/packages/search`. The
+   endpoint must be `https://` — a plain-HTTP endpoint is refused.
+2. The hub returns up to `--max-results` packages of the `--kind` you asked
+   for.
+3. With `--regexp`, keramos additionally keeps only the packages whose name or
+   description matches your keyword as a regular expression.
+4. It prints one row per package — repository-qualified name, version, app
+   version, repository URL, and description — under a header, with each column
+   truncated to `--max-col-width`. With no matches it prints `No results found
+   for "<keyword>"`.
+
+No cluster is contacted and nothing is added to your repository list.
 
 ## Usage
 
@@ -24,53 +33,49 @@ keramos search hub <keyword> [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
+| Flag | Type | Default | Effect |
 |---|---|---|---|
-| `--endpoint` | string | https://artifacthub.io | Artifact Hub-compatible endpoint |
-| `-h, --help` | bool | false | help for hub |
-| `--kind` | int | 0 | package kind code per the index endpoint (e.g. 1=Falco, 14=OCI) |
-| `--max-col-width` | int | 50 | maximum column width for output |
-| `--max-results` | int | 20 | maximum results to display |
-| `--regexp` | bool | false | treat the keyword as a regular expression |
+| `--endpoint` | string | `https://artifacthub.io` | query this Artifact Hub-compatible host instead of the default; must be `https://` |
+| `--kind` | int | `0` | restrict to a package kind code from the index (e.g. `1`=Falco, `14`=OCI); `0` is the index default |
+| `--max-results` | int | `20` | cap how many packages the hub returns |
+| `--max-col-width` | int | `50` | truncate each output column to this many characters |
+| `--regexp` | — | off | treat the keyword as a regular expression and drop rows whose name and description both fail to match |
 
-## Persistent flags inherited from `keramos`
+Also inherits the global flags.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
-
-Search the default Artifact Hub for an MQTT broker:
+Search the default hub for an MQTT broker:
 
 ```sh
 keramos search hub mqtt
 ```
 
-Use a regular expression to find any database-related package:
+Output:
 
-```sh
-keramos search hub '^(postgres|mysql|mariadb)' --regexp
+```
+NAME                         VERSION  APP VERSION  REPO URL                          DESCRIPTION
+mosquitto/mosquitto          0.3.1    2.0.18       https://charts.example.io/mqtt    Eclipse Mosquitto MQTT broker
+t3n/mosquitto                2.4.1    2.0.15       https://storage.googleapis.com/…  Mosquitto is a message broker
 ```
 
-Cap output to a top-5 view:
+Each row is a hub hit for `mqtt`. The `REPO URL` column is the repository to
+add next:
 
 ```sh
-keramos search hub redis --max-results 5
+keramos repo add mosquitto https://charts.example.io/mqtt
+keramos pull mosquitto/mosquitto
 ```
 
-Search an internal Artifact Hub mirror:
+Narrow a noisy search to database charts with a regular expression:
 
 ```sh
-keramos search hub redis --endpoint https://hub.example.internal
+keramos search hub '^(postgres|mysql|mariadb)' --regexp --max-results 5
 ```
 
 ## See also
 
 - [`search`](search.md)
 - [`search repo`](search-repo.md) — search added repositories instead
-- [`repo add`](repo-add.md)
-- [`pull`](pull.md)
+- [`repo add`](repo-add.md) — add a repository you found
+- [`pull`](pull.md) — download a matched chart

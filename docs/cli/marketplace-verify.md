@@ -2,19 +2,32 @@
 
 ## Synopsis
 
-`keramos marketplace verify` checks that a downloaded plugin archive matches the entry recorded in the marketplace index — same SHA-256 digest, valid signature against the index's published trusted keys. Verification is recommended before any `keramos plugin install`, especially for plugins downloaded out-of-band (e.g. from a release page rather than via `keramos plugin install` directly, which performs verification automatically).
+`keramos marketplace verify` checks a plugin archive you downloaded against a
+marketplace index: it confirms the archive's SHA-256 digest matches the one in
+the index and that the index's signature for that plugin was made by a key you
+trust. It succeeds only when both checks pass.
 
 ## When to use it
 
-Use to confirm a plugin archive on disk has not been tampered with and was signed by the marketplace's trusted keys. A non-zero exit means the archive is suspect — do not install it.
+Run it before installing a plugin you downloaded out of band, so you know the
+archive hasn't been altered and comes from a signer you pinned. Verify passing is
+your cue to run [`keramos plugin install`](plugin-install.md).
 
-## What happens when you run it
+## What happens
 
-1. Fetches the marketplace index at `--index`.
-2. Locates the entry for `--name`.
-3. Hashes the archive at `--archive` and compares against the index's recorded digest.
-4. Validates the index's signature against the marketplace's trusted keys.
-5. Exits 0 on success, non-zero with a precise reason on failure (digest mismatch, missing signature, untrusted key).
+1. keramos fetches the marketplace index from `--index` (default
+   `https://plugins.keramos.dev/index.json`).
+2. keramos reads the archive at `--archive` and computes its SHA-256, then compares
+   it to the digest the index records for `--name`. A mismatch fails.
+3. keramos loads your pinned trusted keys from
+   `~/.config/keramos/marketplace_trusted_keys.json` (override with the
+   `KERAMOS_TRUSTED_KEYS` environment variable). The index's own key list is never
+   used, so a hostile index can't supply its own root of trust.
+4. keramos checks the index's Ed25519 signature for `--name` against the pinned key
+   that matches the plugin's signer. A missing signature, an unknown signer, or a
+   bad signature fails.
+5. On success keramos prints `<name>: signature OK` and exits 0. On any failure it
+   prints the reason and exits non-zero.
 
 ## Usage
 
@@ -24,49 +37,40 @@ keramos marketplace verify [flags]
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `--archive` | string | "" | path to the plugin archive to verify |
-| `-h, --help` | bool | false | help for verify |
-| `--index` | string | https://plugins.keramos.dev/index.json | marketplace index URL |
-| `--name` | string | "" | plugin name (must match an index entry) |
+| Flag | Cause → effect |
+|---|---|
+| `--archive <path>` | Verify this archive file. Required. |
+| `--name <name>` | Match against this plugin's entry in the index. Required; must match an index entry. |
+| `--index <url>` | Fetch the index from this URL instead of the default `https://plugins.keramos.dev/index.json`. |
 
-## Persistent flags inherited from `keramos`
+Also inherits the global flags.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
-
-Verify a downloaded archive against the default marketplace:
+Verify a downloaded archive, then install it once it passes:
 
 ```sh
-keramos marketplace verify --archive ./backup-plugin-1.0.tgz --name backup
+keramos marketplace verify --archive ./backup-restore.tar.gz --name backup-restore
 ```
 
-Verify against a self-hosted marketplace index:
+```
+backup-restore: signature OK
+```
+
+```sh
+keramos plugin install ./backup-restore
+```
+
+Verify against a private marketplace:
 
 ```sh
 keramos marketplace verify \
-  --archive ./internal-plugin-2.1.tgz \
-  --name internal-plugin \
+  --archive ./internal-tool.tar.gz \
+  --name internal-tool \
   --index https://plugins.example.internal/index.json
-```
-
-Use as a CI gate — exit 0 means safe to proceed:
-
-```sh
-keramos marketplace verify --archive ./plugin.tgz --name backup && \
-  keramos plugin install ./plugin.tgz
 ```
 
 ## See also
 
-- [`marketplace`](marketplace.md)
-- [`marketplace search`](marketplace-search.md)
+- [`marketplace search`](marketplace-search.md) — find a plugin and its signer
 - [`plugin install`](plugin-install.md)
-- [Signing guide](../guides/signing.md)

@@ -1,74 +1,81 @@
 # keramos get manifest
 
-## Synopsis
-
-`keramos get manifest` prints the rendered Kubernetes manifest keramos stored at install/upgrade time for a release. The output is the exact, fully-resolved YAML that keramos applied to the cluster at the named revision — every `${...}` expression has been evaluated, every layer has been composed, every value has been merged. This is the source of truth for what keramos thinks should be running.
+`keramos get manifest` prints the rendered Kubernetes manifest that keramos stored for
+a release — the exact YAML it applied at that revision.
 
 ## When to use it
 
-Use to inspect what keramos actually applied (versus what's currently in the cluster, which may have drifted), to compare two revisions of a release with `diff`, or to feed the manifest into another tool like `kubeval`, `kube-linter`, or `kubectl apply`. The `--revision` flag lets you pull a historical revision's manifest, useful for "what was deployed last Tuesday" forensics.
+- You want to see what keramos applied, to diff it against the live cluster.
+- You want to capture a revision's manifest to a file for offline comparison.
 
-## What happens when you run it
+## What happens
 
-1. Connects to the cluster using the active kubeconfig.
-2. Reads the release-storage Secret for `<release-name>` at the requested revision.
-3. Decodes the gzipped + base64 payload in-memory and extracts the `manifest` field.
-4. Prints it: raw YAML stream by default, or wrapped in a JSON / YAML envelope with `-o json` / `-o yaml`.
+It loads the stored release record for `<release>` (the latest revision, or the
+one named by `--revision`) and prints the record's `manifest` field verbatim to
+stdout. The manifest is the fully-resolved YAML from the last install or
+upgrade; nothing is re-rendered and the cluster's live objects are not read.
+
+## Flags
+
+| Flag | Cause | Effect |
+|---|---|---|
+| `--revision <n>` | you name a stored revision | prints that revision's manifest instead of the latest |
+| `-o, --output <fmt>` | you pass `raw`, `json`, or `yaml` | accepted for parity with sibling commands, but ignored — the manifest is always printed raw |
+
+Inherits the global flags (`-n/--namespace`, `--kube-context`, `--kubeconfig`,
+`--debug`).
 
 ## Usage
 
 ```
-keramos get manifest <release-name> [flags]
+keramos get manifest <release> [flags]
 ```
 
-## Flags
+## Worked example
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for manifest |
-| `-o, --output` | string | raw | output format: raw, json, yaml |
-| `--revision` | int | 0 | get manifest from a specific revision (0 = current) |
+Stored record for `hello` (revision 4), its `manifest` field:
 
-## Persistent flags inherited from `keramos`
+```yaml
+# what keramos recorded at the last upgrade
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: prod
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: hello
+          image: registry/hello:1.5.0
+```
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-The current revision's stored manifest:
+Run it:
 
 ```sh
 keramos get manifest hello -n prod
 ```
 
-Capture revision 3's manifest to a file for offline diffing:
+Output — the stored manifest, printed raw and unchanged:
 
-```sh
-keramos get manifest hello --revision 3 -n prod > rev3.yaml
-```
-
-Diff what keramos stored against what's currently live in the cluster (catches drift):
-
-```sh
-keramos get manifest hello -n prod | kubectl diff -f -
-```
-
-Compare two revisions of the same release:
-
-```sh
-diff <(keramos get manifest hello --revision 4 -n prod) \
-     <(keramos get manifest hello --revision 5 -n prod)
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: prod
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: hello
+          image: registry/hello:1.5.0
 ```
 
 ## See also
 
-- [`get`](get.md)
-- [`get all`](get-all.md)
-- [`drift`](drift.md) — automated stored-vs-live comparison
-- [`reconcile`](reconcile.md) — re-apply the stored manifest
-- [`history`](history.md)
+- [`get`](get.md) — the parent command
+- [`get all`](get-all.md) — the full record, not just the manifest
+- [`drift`](drift.md) — compare the stored manifest against the live cluster

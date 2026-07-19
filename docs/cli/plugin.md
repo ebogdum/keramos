@@ -2,11 +2,22 @@
 
 ## Synopsis
 
-`keramos plugin` manages the local plugin set. Plugins are external commands keramos invokes when an unknown top-level command is given (`keramos foo` becomes `keramos-plugin-foo args...` if `foo` is an installed plugin). Subcommands install, list, remove, and update plugins.
+`keramos plugin` manages the extra commands you bolt onto keramos. A plugin is a small
+program plus a `plugin.yaml` that names it; once installed, you run it as if it
+were built in — `keramos <plugin-name> [args]`.
 
-## When to use it
+Plugins live in `~/.config/keramos/plugins/`, one directory per plugin. Everything
+here is local to your machine and your user account — managing plugins never
+touches a cluster.
 
-Use to extend keramos with site-specific or organisation-wide commands without modifying keramos itself.
+## Subcommands
+
+| Command | What it does |
+|---|---|
+| [`install`](plugin-install.md) | Install a plugin from a git URL or a local directory |
+| [`list`](plugin-list.md) | Show the plugins you have installed |
+| [`update`](plugin-update.md) | Pull the newest version of an installed plugin |
+| [`remove`](plugin-remove.md) | Uninstall a plugin |
 
 ## Usage
 
@@ -14,47 +25,16 @@ Use to extend keramos with site-specific or organisation-wide commands without m
 keramos plugin [command]
 ```
 
-## Subcommands
-
-- [`keramos plugin list`](plugin-list.md) — List installed plugins
-- [`keramos plugin remove`](plugin-remove.md) — Remove an installed plugin
-- [`keramos plugin update`](plugin-update.md) — Update an installed plugin
-
-## Flags
-
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | — | — | help for plugin |
-
-## Persistent flags inherited from `keramos`
-
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Install a plugin from a local archive:
+Once a plugin is installed you invoke it directly — keramos treats an unknown
+command as a plugin name:
 
 ```sh
-keramos plugin install ./my-plugin-1.0.tgz
-```
-
-List installed plugins:
-
-```sh
-keramos plugin list
-```
-
-Update every installed plugin:
-
-```sh
-keramos plugin update
+keramos plugin install https://github.com/acme/keramos-backup.git
+keramos backup --release web        # "backup" now runs as a keramos command
 ```
 
 ## See also
 
-- [`marketplace`](marketplace.md)
+- [`marketplace`](marketplace.md) — find and verify signed plugins to install
+- [`plugin install`](plugin-install.md)
+- [`plugin list`](plugin-list.md)

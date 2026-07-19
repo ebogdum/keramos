@@ -1,12 +1,18 @@
 # keramos registry
 
-## Synopsis
+Push and pull keramos package archives to and from OCI-compliant registries.
 
-`keramos registry` is the OCI counterpart of `keramos repo`. Subcommands log in/out of registries, push and pull artifacts, and list available tags. Distinct from `keramos repo` which targets HTTP repositories.
+`keramos registry` groups the OCI transport commands. Use it to move a packaged
+`.keramos.tgz` archive into a container registry (GHCR, ECR, Docker Hub, Harbor,
+Zot, …) and to fetch one back. Credentials come from `keramos login`; the artifact
+is stored as a standard OCI blob under the reference you name.
 
-## When to use it
+## Subcommands
 
-Use when distributing packages via OCI registries.
+| Command | What it does |
+|---|---|
+| [`registry push`](registry-push.md) | Upload a local `.keramos.tgz` archive to an OCI reference. |
+| [`registry pull`](registry-pull.md) | Download a package from an OCI reference, optionally verifying its cosign signature first. |
 
 ## Usage
 
@@ -14,43 +20,18 @@ Use when distributing packages via OCI registries.
 keramos registry [command]
 ```
 
-## Subcommands
-
-- [`keramos registry push`](registry-push.md) — push a `.keramos.tgz` archive to an OCI registry
-- [`keramos registry pull`](registry-pull.md) — pull a package from an OCI registry
-
-## Flags
-
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | — | — | help for registry |
-
-## Persistent flags inherited from `keramos`
-
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | — | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
-
-## Examples
-
-Push a packaged archive to OCI:
+Log in once per host, then push or pull:
 
 ```sh
-keramos registry push ./build/my-app-1.0.0.keramos.tgz oci://ghcr.io/example/charts/my-app
-```
-
-Pull a package from OCI:
-
-```sh
-keramos registry pull oci://ghcr.io/example/charts/my-app:1.0.0 -d ./pulled
+keramos login ghcr.io -u USER --password-stdin
+keramos registry push ./my-app-1.0.0.keramos.tgz oci://ghcr.io/example/charts/my-app:1.0.0
+keramos registry pull  oci://ghcr.io/example/charts/my-app:1.0.0 -d ./pulled
 ```
 
 ## See also
 
-- [`pull`](pull.md)
-- [`registry push`](registry-push.md)
-- [`login`](login.md)
-- [OCI guide](../guides/oci.md)
+- [`login`](login.md) — store registry credentials
+- [`logout`](logout.md) — remove stored credentials
+- [`package`](package.md) — build the `.keramos.tgz` archive you push
+- [`publish`](publish.md) — publish to an HTTP API registry instead of OCI
+- [`pull`](pull.md) — fetch from OCI or an HTTP repository by chart name

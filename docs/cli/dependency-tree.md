@@ -1,64 +1,87 @@
 # keramos dependency tree
 
-## Synopsis
-
-`keramos dependency tree` prints an indented, ASCII-art view of a package's composition chain: each layer and required package, plus their own layers and requires recursively. It's the visual companion to `keramos dependency list` — useful when a package is more than two levels deep and you need to see at a glance who's pulling what.
+`keramos dependency tree` prints the composition chain of a package: every layer
+and required package, and recursively their own layers and requires.
 
 ## When to use it
 
-Use when the package has nested layers (a layer that itself depends on layers) and you want to confirm the full composition resolves the way you expect. Also handy for documenting a package — pasting the tree output into a README gives readers the dependency picture in one block.
+- To see the full shape of a package that is more than one level deep — which
+  layer pulls in which.
+- To tell layers (`[layer]`, merged into your package) apart from requires
+  (`[requires]`, installed alongside) at a glance.
 
-## What happens when you run it
+## What happens
 
-1. Reads `keramos.yaml` from `<package-path>` and any locked layer metadata in `keramos.lock`.
-2. For each layer / require, recursively reads the layer's own `keramos.yaml` (from cache if materialised, otherwise warns).
-3. Prints an indented tree to stdout.
-4. Read-only; no cluster contact, no network access, no file writes.
+keramos resolves each `source` to its package, reads that package's version and
+its own dependencies, and prints an indented tree rooted at your package.
+Every node shows `[kind] name@version (source)`:
+
+- `[layer]` — merged into the parent at render time.
+- `[requires]` — a co-deployed package.
+
+The tree descends into each resolved package, so a layer that itself declares
+layers appears with its children nested beneath it. Resolving remote sources
+(`git::`, registry) fetches them into keramos's local cache; local paths are read
+in place.
 
 ## Usage
 
 ```
-keramos dependency tree <package-path> [flags]
+keramos dependency tree <package-path>
 ```
 
 ## Flags
 
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `-h, --help` | bool | false | help for tree |
+Inherits the global flags.
 
-## Persistent flags inherited from `keramos`
+## Worked example
 
-| Flag | Type | Description |
+**INPUT — `./web/keramos.yaml`** with two layers and one required package:
+
+```yaml
+apiVersion: keramos/v1
+name: web
+version: 0.3.0
+layers:
+  - name: base-layer
+    source: ../base-layer     # base-layer/keramos.yaml → version 1.0.0
+  - name: common
+    source: ../common-layer   # common-layer/keramos.yaml → version 1.4.0
+requires:
+  - name: redis
+    source: ../redis-req      # redis-req/keramos.yaml → version 7.2.0
+```
+
+**Command:**
+
+```sh
+keramos dependency tree ./web
+```
+
+**OUTPUT:**
+
+```
+web@0.3.0
+├── [layer] base-layer@1.0.0 (/abs/path/to/base-layer)
+├── [layer] common@1.4.0 (/abs/path/to/common-layer)
+└── [requires] redis@7.2.0 (/abs/path/to/redis-req)
+```
+
+**Tracing each input to its output line:**
+
+| `keramos.yaml` entry | Output line | Why |
 |---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| root package | `web@0.3.0` | the tree root is your package's `name@version` |
+| `layers[0]` `base-layer` | `[layer] base-layer@1.0.0` | resolved `../base-layer`, read version `1.0.0` from its `keramos.yaml` |
+| `layers[1]` `common` | `[layer] common@1.4.0` | resolved `../common-layer`, version `1.4.0` |
+| `requires[0]` `redis` | `[requires] redis@7.2.0` | a `requires:` entry → `[requires]` label; version `7.2.0` |
 
-## Examples
-
-Render the composition tree of a package:
-
-```sh
-keramos dependency tree ./my-app
-```
-
-Render and capture in a file for documentation:
-
-```sh
-keramos dependency tree ./my-app > docs/composition.txt
-```
-
-Run from inside the package directory:
-
-```sh
-cd ./my-app && keramos dependency tree .
-```
+Each version comes from the *resolved* package's `keramos.yaml`, not from
+`keramos.yaml`'s source line — that is how the tree confirms what a source
+actually points at.
 
 ## See also
 
-- [`dependency`](dependency.md)
-- [`dependency list`](dependency-list.md) — flat tabular view
-- [`dependency update`](dependency-update.md) — refresh the lock before drawing the tree
-- [Layers guide](../guides/layers.md)
+- [`dependency list`](dependency-list.md) — the flat table view with lock status
+- [`dependency build`](dependency-build.md) — download the packages in this tree
+- [`template`](template.md) — render the package with its layers merged in

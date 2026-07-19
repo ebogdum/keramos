@@ -2,18 +2,26 @@
 
 ## Synopsis
 
-`keramos workspace status` queries the cluster for the current state of every member declared in `keramos-workspace.yaml`. For each member, it reports the current revision, status, package, namespace, and last-deployed time — the same data `keramos status <release>` produces for individual releases, in one tabular view.
+`keramos workspace status` reads `keramos-workspace.yaml`, looks up each member in the
+cluster, and prints one table row per member showing its namespace, current
+revision, and status. It is the quickest way to see whether every part of a
+workspace is deployed and at which revision.
 
 ## When to use it
 
-Use after `keramos workspace install` / `upgrade` to confirm every member converged, or as a routine health check on a workspace-managed platform. Members declared but not installed show as `not installed`.
+- After an install or upgrade, to confirm every member converged.
+- As a routine health check on a workspace-managed platform.
+- To spot members that are declared but not yet deployed — they show as
+  `not deployed`.
 
-## What happens when you run it
+## What happens
 
-1. Reads `<dir>/keramos-workspace.yaml` (default: current directory).
-2. For each member, queries the cluster for the corresponding release record (in the member's namespace).
-3. Composes a tabular view with revision, status, package, and last-deployed timestamp.
-4. Prints to stdout. Exits 0 if all are deployed; non-zero if any are missing or failed.
+1. Reads `keramos-workspace.yaml` from `--dir` (default `.`) and orders the members
+   by dependency.
+2. For each member, queries its namespace for the current release.
+3. Prints a table: member name, namespace, revision, and status.
+4. A member with no release shows `-` and `not deployed`; if its namespace
+   cannot be reached, the row shows `(client error)`.
 
 ## Usage
 
@@ -25,42 +33,49 @@ keramos workspace status [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--dir` | string | . | directory containing `keramos-workspace.yaml` |
-| `-h, --help` | bool | false | help for status |
+| `--dir` | string | `.` | Directory containing `keramos-workspace.yaml`. Point it elsewhere to check a workspace in another directory. |
 
-## Persistent flags inherited from `keramos`
+Inherits the global flags.
 
-| Flag | Type | Description |
-|---|---|---|
-| `--debug` | bool | enable debug output |
-| `--kube-context` | string | Kubernetes context to use |
-| `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+## Worked example
 
-## Examples
+**INPUT — `keramos-workspace.yaml` with two members**, where `api` depends on
+`postgres`. `postgres` is deployed; `api` has not been installed yet:
 
-Status of every member in the current-directory workspace:
+```yaml
+apiVersion: keramos/v1
+defaults:
+  namespace: apps
+members:
+  - name: postgres
+    path: ./postgres
+  - name: api
+    path: ./api
+    dependsOn: [postgres]
+```
+
+**Run it:**
 
 ```sh
 keramos workspace status
 ```
 
-Status of a workspace at a custom path:
+**OUTPUT:**
 
-```sh
-keramos workspace status --dir ./platform
+```
+MEMBER                         NAMESPACE            REVISION   STATUS
+postgres                       apps                 3          deployed
+api                            apps                 -          not deployed
 ```
 
-CI health check — fail when a member is missing or failed:
-
-```sh
-keramos workspace status || { echo "workspace not fully up"; exit 1; }
-```
+`postgres` is listed first (dependencies before dependents) and reports
+revision `3`, `deployed`. `api` has no release, so its revision is `-` and its
+status is `not deployed`. Both rows show `apps`, inherited from
+`defaults.namespace`.
 
 ## See also
 
-- [`workspace`](workspace.md)
-- [`workspace install`](workspace-install.md)
-- [`workspace upgrade`](workspace-upgrade.md)
-- [`status`](status.md) — single-release status
-- [`keramos-workspace.yaml` reference](../reference/keramos-workspace-yaml.md)
+- [`workspace`](workspace.md) — the workspace index
+- [`workspace install`](workspace-install.md), [`workspace upgrade`](workspace-upgrade.md)
+  — bring members up to a deployed state
+- [`status`](status.md) — the single-release analogue

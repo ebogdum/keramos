@@ -1,20 +1,25 @@
 # keramos history
 
-## Synopsis
-
-`keramos history` prints every revision of a release with its timestamp, status, package version, action (`install` / `upgrade` / `rollback`), and the audit user who initiated it. Each row is a point-in-time snapshot of the release; `keramos get manifest <release> --revision N` retrieves the manifest as it stood at revision N.
+`keramos history` prints every stored revision of one release, oldest first, so
+you can see how it reached its current state.
 
 ## When to use it
 
-Use to answer "how did we get to this state?" and to find the right revision number to roll back to. The default sort is oldest-first; the most recent revision is the bottom row.
+- To find the revision number to hand to [`rollback`](rollback.md).
+- To review what changed across a release's life — package versions, statuses,
+  and the description recorded on each revision.
 
-## What happens when you run it
+## What happens
 
-1. Lists every release-storage Secret for `<release-name>` in the namespace.
-2. Decodes each revision's metadata.
-3. Sorts by revision number ascending.
-4. Truncates to `--max` if set.
-5. Renders in the requested format.
+1. Loads every stored revision of `<release-name>` in the target namespace.
+2. Sorts them by revision number, ascending — the newest revision is the last
+   row.
+3. Keeps only the most recent `--max` revisions when that flag is set.
+4. Prints the result as a table, `json`, or `yaml`.
+
+This reads stored records only; it does not query live resources. It requires a
+reachable cluster to read those records. If the release has no history, it
+prints `no history found for release <name>`.
 
 ## Usage
 
@@ -26,35 +31,59 @@ keramos history <release-name> [flags]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-h, --help` | — | — | help for history |
-| `--max` | int | — | maximum number of revisions to show (0 = all) |
-| `-o, --output` | string | "table" | output format: table, json, yaml |
+| `--max` | int | 0 | keep only the most recent N revisions; 0 shows all of them |
+| `-o, --output` | string | "table" | render as `table`, `json`, or `yaml` |
 
 ## Persistent flags inherited from `keramos`
 
 | Flag | Type | Description |
 |---|---|---|
-| `--debug` | — | enable debug output |
+| `--debug` | bool | enable debug output |
 | `--kube-context` | string | Kubernetes context to use |
 | `--kubeconfig` | string | path to kubeconfig file |
-| `-n, --namespace` | string | Kubernetes namespace |
+| `-n, --namespace` | string | namespace of the release |
 
-## Examples
+## Worked example
 
-Print the history of a release:
+**INPUT — the four stored revisions of release `web` in namespace `apps`.** It
+was installed, upgraded twice, then rolled back:
 
-```sh
-keramos history my-app -n my-app-prod
+```
+revision 1   deployed as web-1.4.0   at 2026-07-18 09:00:00   "Install complete"
+revision 2   deployed as web-1.5.0   at 2026-07-18 11:30:00   "Upgrade complete"
+revision 3   deployed as web-1.6.0   at 2026-07-18 11:55:00   "Upgrade complete"
+revision 4   deployed as web-1.4.0   at 2026-07-18 12:05:00   "Rollback to 1"
 ```
 
-History plus full audit data per revision:
+**Show the last two revisions:**
 
 ```sh
-keramos history my-app --max 50 -n my-app-prod -o yaml
+keramos history web -n apps --max 2
 ```
+
+**OUTPUT:**
+
+```
+REVISION    STATUS        PACKAGE      UPDATED                DESCRIPTION
+3           superseded    web-1.6.0    2026-07-18 11:55:00    Upgrade complete
+4           deployed      web-1.4.0    2026-07-18 12:05:00    Rollback to 1
+```
+
+**Tracing the output back to the input:**
+
+| Output | Which input it read | Why |
+|---|---|---|
+| revisions 1 and 2 absent | `--max 2` | only the two most recent revisions are kept |
+| row 4 last, not first | ascending sort | newest revision is the bottom row |
+| revision 3 `superseded` | it is no longer current | only the newest revision stays `deployed` |
+| revision 4 `PACKAGE web-1.4.0` | the rollback's manifest | rev 4 re-applied revision 1, so it carries `web-1.4.0` |
+| `DESCRIPTION Rollback to 1` | the description on rev 4 | recorded when the rollback ran |
+
+Drop `--max` and all four revisions print, revision 1 first.
 
 ## See also
 
-- [`audit`](audit.md)
-- [`rollback`](rollback.md)
-- [`get`](get.md)
+- [`rollback`](rollback.md) — re-apply one of these revisions
+- [`status`](status.md) — the current revision on its own
+- [`audit`](audit.md) — who ran each revision and with which flags
+- [`get`](get.md) — the manifest or values at a specific revision
