@@ -4,6 +4,32 @@ All notable changes to keramos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] — 2026-07-19
+
+### Added
+
+- **`sortNumeric` template function** — sorts a list by numeric value
+  (ascending) while preserving each element and its type, so `[10, 2, 1]`
+  sorts to `[1, 2, 10]` rather than `sortAlpha`'s lexical `["1", "10", "2"]`.
+  Non-numeric elements produce a clear error.
+
+### Documentation
+
+- Rewrote the entire `docs/` tree to a consistent **input → output** standard
+  (Diátaxis structure, Google/Microsoft style). Every CLI command and template
+  function now shows what you type and what keramos actually emits, with worked
+  examples verified against the binary.
+- Added a **plugin developer guide** (`docs/guides/plugins.md`) explaining the
+  exec-based plugin model, the `plugin.yaml` contract, the arguments and
+  environment keramos passes, lifecycle hooks, and custom downloaders.
+- Added a top-level docs landing page and refreshed the CLI index.
+- Fixed the template-function reference so example outputs are the **real
+  rendered values** (no JSON-escaped strings), and corrected non-working
+  list-literal syntax to the real `tuple` constructor.
+- Corrected numerous inaccuracies surfaced by re-verifying every page against
+  the v2.0.0 binary (phantom flags/columns, wrong defaults, fabricated
+  outputs, wrong hook directives, and `apiVersion` normalization).
+
 ## [2.0.0] — 2026-07-18
 
 ### Breaking changes
