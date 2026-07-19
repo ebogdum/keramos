@@ -70,9 +70,18 @@ ${cipher | decryptAES "hunter2"} → "topsecret"
 
 Errors: `RSA key size N is below the 2048-bit minimum` / `exceeds the 8192-bit maximum` / `unsupported type "…"`.
 ```
-${"rsa" | genPrivateKey}      → "-----BEGIN RSA PRIVATE KEY-----\n…" (shape; varies)
-${"ed25519" | genPrivateKey}  → "-----BEGIN PRIVATE KEY-----\n…" (shape; varies)
-${"rsa" | genPrivateKey 1024} → error (below 2048-bit minimum)
+${"rsa" | genPrivateKey}
+# → (multi-line PEM; shape, value varies)
+# -----BEGIN RSA PRIVATE KEY-----
+# MIIEowIBAAKCAQEAn9xH4zxZRB7o+VGD0FHjIXoO2D3bAsgMt9FpYHjLJ1UEaG+x
+# …
+# -----END RSA PRIVATE KEY-----
+${"ed25519" | genPrivateKey}
+# → (multi-line PEM; shape, value varies)
+# -----BEGIN PRIVATE KEY-----
+# MC4CAQAwBQYDK2VwBCIEIEIciMvRpAMmWfkmaq9opPSfpNEnSA2DbU0nQzoqhct+
+# -----END PRIVATE KEY-----
+${"rsa" | genPrivateKey 1024} → error (RSA key size 1024 is below the 2048-bit minimum)
 ```
 
 ### `genCA`
@@ -113,7 +122,10 @@ ${"" | uuidv4} → "3f2504e0-4f89-41d3-9a0c-0305e82c3301" (shape; varies)
 ### `sops`
 `sops(path)` → string — runs `sops --decrypt <path>`, returns the plaintext (one trailing newline trimmed).
 ```
-${"secrets/db.enc.yaml" | sops} → "username: admin\npassword: hunter2"
+${"secrets/db.enc.yaml" | sops}
+# → (decrypted plaintext, trailing newline trimmed)
+# username: admin
+# password: hunter2
 ```
 
 ### `sopsKey`

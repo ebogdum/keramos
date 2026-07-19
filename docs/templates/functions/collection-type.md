@@ -2,7 +2,7 @@
 
 > Pipeline convention: `${value | f x}` is evaluated as `f(value, x)`.
 
-Collection functions operate on the engine's native containers: a list is `[]any`, a map is `map[string]any`. Passing the wrong container type raises a function error.
+Collection functions operate on the engine's native containers: a list is `[]any`, a map is `map[string]any`. Passing the wrong container type raises a function error. The inline list constructor is `tuple` (e.g. `${tuple 10 2 1}` is the list `[10,2,1]`); note that `tuple` coerces numeric-looking strings to numbers.
 
 ## Collection functions
 
@@ -13,8 +13,8 @@ Returns the map's keys as a list, sorted alphabetically. Errors `keys: expected 
 
 **Examples**
 ```
-${dict "b" 2 "a" 1 | keys}   → ["a","b"]
-${dict | keys}               → []
+${dict "b" 2 "a" 1 | keys}       → ["a","b"]
+${dict "x" 1 | omit "x" | keys}  → []
 ```
 
 ### `values`
@@ -34,8 +34,8 @@ First element of a list; `null` on an empty list. Errors for non-lists.
 
 **Examples**
 ```
-${list 1 2 3 | first}   → 1
-${list | first}         → null
+${tuple 1 2 3 | first}   → 1
+${until 0 | first}       → null
 ```
 
 ### `last`
@@ -45,7 +45,7 @@ Last element of a list; `null` on an empty list. Errors for non-lists.
 
 **Examples**
 ```
-${list 1 2 3 | last}   → 3
+${tuple 1 2 3 | last}   → 3
 ```
 
 ### `join`
@@ -60,19 +60,30 @@ Joins list elements (each stringified with `%v`); `sep` defaults to `,`. Errors 
 
 **Examples**
 ```
-${list "a" "b" "c" | join}   → "a,b,c"
-${list 1 2 3 | join "-"}     → "1-2-3"
+${tuple "a" "b" "c" | join}   → "a,b,c"
+${tuple 1 2 3 | join "-"}     → "1-2-3"
 ```
 
 ### `sortAlpha`
 `sortAlpha(coll)` → list
 
-Stringifies every element and sorts alphabetically (lexicographic — `"10"` before `"2"`); output elements are strings. Errors for non-lists.
+Stringifies every element and sorts alphabetically (lexicographic — `"10"` before `"2"`); output elements are strings. Errors for non-lists. For numeric order (10 after 2), use [`sortNumeric`](#sortnumeric).
 
 **Examples**
 ```
-${list "banana" "apple" | sortAlpha}   → ["apple","banana"]
-${list 10 2 1 | sortAlpha}             → ["1","10","2"]
+${tuple "banana" "apple" | sortAlpha}   → ["apple","banana"]
+${tuple 10 2 1 | sortAlpha}             → ["1","10","2"]
+```
+
+### `sortNumeric`
+`sortNumeric(value)` → list
+
+Sorts a list by numeric value (ascending), preserving each element and its type. Every element must be numeric or a numeric string, otherwise it errors (`sortNumeric: element N (…) is not numeric`). Errors for non-lists. Contrast with [`sortAlpha`](#sortalpha), which sorts lexically after stringifying (so `"10"` sorts before `"2"`).
+
+**Examples**
+```
+${tuple 10 2 1 | sortNumeric}              → [1,2,10]
+${"10,2,1" | split "," | sortNumeric}      → ["1","2","10"]
 ```
 
 ### `uniq`
@@ -82,7 +93,7 @@ Removes duplicates (dedup key is the `%v` string form), preserving first-seen or
 
 **Examples**
 ```
-${list 1 2 2 3 1 | uniq}   → [1,2,3]
+${tuple 1 2 2 3 1 | uniq}   → [1,2,3]
 ```
 
 ### `compact`
@@ -92,7 +103,7 @@ Drops "empty" elements (`nil`, `""`, `false`, numeric `0`, empty list/map), pres
 
 **Examples**
 ```
-${list 1 0 2 "" 3 | compact}   → [1,2,3]
+${tuple 1 0 2 "" 3 | compact}   → [1,2,3]
 ```
 
 ### `has`
@@ -103,8 +114,8 @@ Reports whether a map contains the key, or a list contains the item (compared vi
 **Examples**
 ```
 ${dict "a" 1 | has "a"}   → true
-${list 1 2 3 | has 2}     → true
-${list 1 2 3 | has 9}     → false
+${tuple 1 2 3 | has 2}    → true
+${tuple 1 2 3 | has 9}    → false
 ```
 
 ## Type functions
@@ -116,8 +127,17 @@ Marshals any value to YAML (trailing newline stripped).
 
 **Examples**
 ```
-${dict "a" 1 "b" 2 | toYaml}   → "a: 1\nb: 2"
-${list 1 2 3 | toYaml}         → "- 1\n- 2\n- 3"
+${dict "a" 1 "b" 2 | toYaml}
+# →
+a: 1
+b: 2
+```
+```
+${tuple 1 2 3 | toYaml}
+# →
+- 1
+- 2
+- 3
 ```
 
 ### `toJson`
@@ -127,7 +147,7 @@ Marshals any value to compact JSON.
 
 **Examples**
 ```
-${dict "a" 1 | toJson}   → "{\"a\":1}"
+${dict "a" 1 | toJson}   → {"a":1}
 ${nil | toJson}          → "null"
 ```
 
@@ -138,8 +158,8 @@ Converts any value to `%v` form. Never errors. `nil` → `<nil>`; a list renders
 
 **Examples**
 ```
-${42 | toString}       → "42"
-${list 1 2 | toString} → "[1 2]"
+${42 | toString}        → "42"
+${tuple 1 2 | toString} → "[1 2]"
 ```
 
 ### `toInt`

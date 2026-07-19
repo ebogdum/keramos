@@ -29,12 +29,42 @@ is the function's **first** argument, so it calls `f(value, x, y)`. For example
 
 One-line description of what it does.
 
-${"input" | funcName "arg"}   → "output"
+${"input" | funcName "arg"}   → output
 ```
 
-The expression is on the left of the `→`, the result on the right. When a result
-varies between runs (timestamps, random keys, network responses), the example
-shows its *shape* and is marked `(shape; value varies)`.
+The expression is on the left of the `→`, the **real rendered result** on the
+right — exactly what keramos emits, not an escaped string. So `toJson` shows
+`{"a":1}`, never `"{\"a\":1}"`.
+
+- **Scalars** (string, number, bool) are shown as the literal value.
+- **Lists and maps** are shown in their real serialized form, e.g. `[1,2,10]`
+  or `{"a":1,"b":2}`.
+- **Multi-line results** (like `toYaml`) are shown as the actual lines beneath
+  a `# →` marker:
+
+  ```
+  ${dict "a" 1 "b" 2 | toYaml}
+  # →
+  a: 1
+  b: 2
+  ```
+
+When a result varies between runs (timestamps, random keys, network responses),
+the example shows its *shape* and is marked `(shape; value varies)`.
+
+## Building lists and maps in an example
+
+keramos has **no list literal** — `${[1,2,3]}` renders as `null`. Construct a list
+with `tuple`, and a map with `dict`:
+
+```
+${tuple 10 2 1 | sortNumeric}     → [1,2,10]
+${dict "a" 1 "b" 2 | keys}        → ["a","b"]
+```
+
+In real templates you more often pipe a list straight from your values
+(`${values.ports | toYaml}`) or from a list-producing function like `split`,
+`until`, or `keys`.
 
 ## See also
 

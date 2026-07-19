@@ -122,7 +122,7 @@ ${dict "a" 1 "b" 2 | unset "a"}   → {"b":2}
 `get(value, key)` → any — value at `key`, or `nil`.
 ```
 ${dict "a" 1 | get "a"}   → 1
-${dict "a" 1 | get "z"}   → nil
+${dict "a" 1 | get "z"}   → null
 ```
 
 ### `hasKey`
@@ -134,14 +134,14 @@ ${dict "a" 1 | hasKey "a"}   → true
 ### `merge`
 `merge(value, ...jsonSources)` → map — deep-merge JSON-string sources; **destination wins** on a conflict unless the destination's value is a zero value.
 ```
-${dict "a" 1 | merge "{\"a\":9}"}   → {"a":1}   (dest non-zero kept)
-${dict "a" 0 | merge "{\"a\":9}"}   → {"a":9}   (dest zero filled)
+${dict "a" 1 | merge '{"a":9}'}   → {"a":1}   (dest non-zero kept)
+${dict "a" 0 | merge '{"a":9}'}   → {"a":9}   (dest zero filled)
 ```
 
 ### `mergeOverwrite`
 `mergeOverwrite(value, ...jsonSources)` → map — like `merge` but the **source always wins**.
 ```
-${dict "a" 1 | mergeOverwrite "{\"a\":9}"}   → {"a":9}
+${dict "a" 1 | mergeOverwrite '{"a":9}'}   → {"a":9}
 ```
 
 ### `pick`
@@ -159,7 +159,7 @@ ${dict "a" 1 "b" 2 "c" 3 | omit "b"}   → {"a":1,"c":3}
 ### `fail`
 `fail(value, ...args)` → error — aborts rendering with the joined message.
 ```
-${"config invalid" | fail}   → error: "fail: config invalid"
+${"config invalid" | fail}   → error: fail: config invalid
 ```
 
 ### `kindOf` / `typeOf`
@@ -199,8 +199,8 @@ ${0 | coalesce "" "z"}        → "z"
 ### `toJson` / `toYAML`
 `toJson(value)` → string (compact JSON) · `toYAML(value)` → string (YAML, trailing newline trimmed).
 ```
-${dict "a" 1 | toJson}   → "{\"a\":1}"
-${dict "a" 1 | toYAML}   → "a: 1"
+${dict "a" 1 | toJson}   → {"a":1}
+${dict "a" 1 | toYAML}   → a: 1
 ```
 
 ### `len`

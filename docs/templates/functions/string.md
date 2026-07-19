@@ -135,8 +135,13 @@ Prepends `width` spaces to the beginning of every line. Errors if `width` is mis
 
 **Examples**
 ```
-${"a\nb" | indent 2}   → "  a\n  b"
-${"x" | indent 0}      → "x"
+${"a
+b" | indent 2}
+# →
+  a
+  b
+
+${"x" | indent 0}   → "x"
 ```
 
 ### `nindent`
@@ -149,10 +154,19 @@ Like `indent`, but also prepends a leading newline before the first indented lin
 | `value` | string | The (possibly multi-line) string to indent. |
 | `width` | int | Number of leading spaces per line; `0..65536`. |
 
-**Examples**
+**Examples** (`nindent` prepends a leading newline, shown here as the blank first line)
 ```
-${"a\nb" | nindent 2}   → "\n  a\n  b"
-${"x" | nindent 4}      → "\n    x"
+${"a
+b" | nindent 2}
+# →
+
+  a
+  b
+
+${"x" | nindent 4}
+# →
+
+    x
 ```
 
 ### `trunc`

@@ -15,6 +15,7 @@ func registerCollectionFuncs(r *FuncRegistry) {
 	r.Register("last", fnLast)
 	r.Register("join", fnJoin)
 	r.Register("sortAlpha", fnSortAlpha)
+	r.Register("sortNumeric", fnSortNumeric)
 	r.Register("uniq", fnUniq)
 	r.Register("compact", fnCompact)
 	r.Register("has", fnHas)
@@ -104,6 +105,37 @@ func fnSortAlpha(value any, args ...any) (any, error) {
 	result := make([]any, len(strs))
 	for i, s := range strs {
 		result[i] = s
+	}
+	return result, nil
+}
+
+// fnSortNumeric sorts a list by the numeric value of each element (ascending),
+// preserving the original element and its type. Unlike sortAlpha it compares
+// numbers, so [10, 2, 1] sorts to [1, 2, 10] rather than ["1", "10", "2"].
+// Every element must be numeric or a numeric string; otherwise it errors.
+func fnSortNumeric(value any, args ...any) (any, error) {
+	list, ok := value.([]any)
+	if !ok {
+		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "sortNumeric: expected list, got %T", value)
+	}
+	type numbered struct {
+		orig any
+		num  float64
+	}
+	items := make([]numbered, len(list))
+	for i, v := range list {
+		f, okNum := coerceFloat(v)
+		if !okNum {
+			return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "sortNumeric: element %d (%v) is not numeric", i, v)
+		}
+		items[i] = numbered{orig: v, num: f}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].num < items[j].num
+	})
+	result := make([]any, len(items))
+	for i, it := range items {
+		result[i] = it.orig
 	}
 	return result, nil
 }

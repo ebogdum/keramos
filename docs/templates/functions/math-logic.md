@@ -145,7 +145,7 @@ ${"" | required "name is required"} → error: name is required
 **Examples**
 ```
 ${empty ""}       → true
-${empty "false"}  → false
+${"false" | empty} → false
 ${0 | empty}      → true
 ```
 

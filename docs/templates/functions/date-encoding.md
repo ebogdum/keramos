@@ -28,11 +28,11 @@ Date formatting accepts either a **Go reference layout** (e.g. `2006-01-02`) or 
 ### `now`
 `now(value)` → time.Time
 
-Returns the current local time. Ignores `value`; typically used as a pipeline source.
+Returns the current local time. Ignores `value`, but must be *called* with an argument (a bare `now` identifier evaluates to null); pass any value, e.g. `now ""`.
 
 **Examples**
 ```
-${now | date "2006-01-02"}   → "2026-07-18" (shape; value is the current date)
+${now "" | date "2006-01-02"}   → 2026-07-19 (shape; value is the current date)
 ```
 
 ### `date`
@@ -47,9 +47,9 @@ Formats time `value` using `fmt` (Go layout or strftime). Errors `date requires 
 
 **Examples**
 ```
-${now | date "%Y-%m-%d %H:%M"}                → "2026-07-18 14:22" (shape; varies)
-${"2026-07-18T09:30:00Z" | date "Mon Jan 2"} → "Sat Jul 18"
-${"2026-07-18" | date "%A"}                   → "Saturday"
+${now "" | date "%Y-%m-%d %H:%M"}             → 2026-07-19 03:29 (shape; varies)
+${"2026-07-18T09:30:00Z" | date "Mon Jan 2"} → Sat Jul 18
+${"2026-07-18" | date "%A"}                   → Saturday
 ```
 
 ### `dateInZone`
@@ -66,7 +66,7 @@ Like `date` but converts to IANA `zone` first. Errors without both args, or `dat
 **Examples**
 ```
 ${"2026-07-18T12:00:00Z" | dateInZone "2006-01-02 15:04 MST" "America/New_York"}
-    → "2026-07-18 08:00 EDT"
+    → 2026-07-18 08:00 EDT
 ```
 
 ### `toDate`
@@ -81,7 +81,7 @@ Parses string `value` into a time using layout `fmt`. Errors `toDate: failed to 
 
 **Examples**
 ```
-${"18/07/2026" | toDate "%d/%m/%Y" | date "%A"}   → "Saturday"
+${"18/07/2026" | toDate "%d/%m/%Y" | date "%A"}   → Saturday
 ```
 
 ### `ago`
@@ -91,7 +91,7 @@ Elapsed duration since `value` (`time.Since` in Go duration form, e.g. `1h30m0s`
 
 **Examples**
 ```
-${someTimestamp | ago}   → "1h30m0s" (shape; varies)
+${"2026-07-18T12:00:00Z" | ago}   → 13h29m59.8s (shape; varies)
 ```
 
 ## Encoding functions
@@ -105,8 +105,8 @@ Base64-encodes with standard encoding (`=` padding).
 
 **Examples**
 ```
-${"hello" | b64encode}               → "aGVsbG8="
-${"hello" | b64encode | b64decode}   → "hello"
+${"hello" | b64encode}               → aGVsbG8=
+${"hello" | b64encode | b64decode}   → hello
 ```
 
 ### `b64decode`
@@ -116,8 +116,8 @@ Base64-decodes standard encoding. Errors `b64decode: invalid base64` on bad inpu
 
 **Examples**
 ```
-${"aGVsbG8=" | b64decode}   → "hello"
-${"not base64!" | b64decode} → error: b64decode: invalid base64
+${"aGVsbG8=" | b64decode}   → hello
+${"not base64!" | b64decode} → error: b64decode: invalid base64: illegal base64 data at input byte 3
 ```
 
 ### `sha256`
@@ -128,5 +128,5 @@ SHA-256 digest as a lowercase 64-char hex string.
 **Examples**
 ```
 ${"hello" | sha256}
-    → "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    → 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
 ```

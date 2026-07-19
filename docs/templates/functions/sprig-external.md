@@ -1,28 +1,57 @@
 # Sequence, Sprig-parity, and External functions
 
 > **Pipeline note.** `${value | f x}` = `f(value, x)`. Ranges are capped at 65536 items.
+>
+> **List inputs.** keramos has no `[…]` list literal (`${[1,2,3]}` → `null`) and no `list` function. Build ad-hoc lists with `tuple`, `until`, or `split`. Lists and maps render as block YAML, shown below as `# →` blocks.
 
 ## Sequence functions
 
 ### `until`
 `until(n)` → list — integers `[0, n)` (counts down if `n` is negative).
 ```
-${5 | until}    → [0,1,2,3,4]
-${-3 | until}   → [0,-1,-2]
+${5 | until}
+# → - 0
+#   - 1
+#   - 2
+#   - 3
+#   - 4
+${-3 | until}
+# → - 0
+#   - -1
+#   - -2
 ```
 
 ### `untilStep`
 `untilStep(start, stop, step)` → list — from `start` toward `stop` (exclusive) by `step`.
 ```
-${1 | untilStep 10 2}   → [1,3,5,7,9]
-${10 | untilStep 0 -3}  → [10,7,4,1]
+${1 | untilStep 10 2}
+# → - 1
+#   - 3
+#   - 5
+#   - 7
+#   - 9
+${10 | untilStep 0 -3}
+# → - 10
+#   - 7
+#   - 4
+#   - 1
 ```
 
 ### `seq`
 `seq([start,] [step,] end)` → list — Unix `seq` (endpoint inclusive).
 ```
-${5 | seq}       → [1,2,3,4,5]
-${1 | seq 2 9}   → [1,3,5,7,9]
+${5 | seq}
+# → - 1
+#   - 2
+#   - 3
+#   - 4
+#   - 5
+${1 | seq 2 9}
+# → - 1
+#   - 3
+#   - 5
+#   - 7
+#   - 9
 ```
 
 ## List functions
@@ -30,57 +59,91 @@ ${1 | seq 2 9}   → [1,3,5,7,9]
 ### `slice`
 `slice(list, start?, end?)` → list — sub-slice `[start, end)`.
 ```
-${[10,20,30,40] | slice 1 3}   → [20,30]
+${10 | tuple 20 30 40 | slice 1 3}
+# → - 20
+#   - 30
 ```
 
 ### `append` / `prepend`
 `append(list, ...items)` / `prepend(list, ...items)` → list.
 ```
-${[1,2] | append 3 4}    → [1,2,3,4]
-${[2,3] | prepend 0 1}   → [0,1,2,3]
+${1 | tuple 2 | append 3 4}
+# → - 1
+#   - 2
+#   - 3
+#   - 4
+${2 | tuple 3 | prepend 0 1}
+# → - 0
+#   - 1
+#   - 2
+#   - 3
 ```
 
 ### `concat`
-`concat(list, ...lists)` → list — flatten one level.
+`concat(list, ...items)` → list — extend the list; any list argument is flattened one level.
 ```
-${[1,2] | concat [3,4] 5}   → [1,2,3,4,5]
+${1 | tuple 2 | concat 3 4 5}
+# → - 1
+#   - 2
+#   - 3
+#   - 4
+#   - 5
 ```
 
 ### `reverse`
 `reverse(list)` → list.
 ```
-${[1,2,3] | reverse}   → [3,2,1]
+${1 | tuple 2 3 | reverse}
+# → - 3
+#   - 2
+#   - 1
 ```
 
 ### `first` / `last` / `initial` / `rest`
 Head / tail / all-but-last / all-but-first.
 ```
-${[1,2,3] | initial}   → [1,2]
-${[1,2,3] | rest}      → [2,3]
+${1 | tuple 2 3 | initial}
+# → - 1
+#   - 2
+${1 | tuple 2 3 | rest}
+# → - 2
+#   - 3
 ```
 
 ### `without`
 `without(list, ...items)` → list — remove matching elements.
 ```
-${[1,2,3,2] | without 2}   → [1,3]
+${1 | tuple 2 3 2 | without 2}
+# → - 1
+#   - 3
 ```
 
 ### `pluck`
 `pluck(list, key)` → list — collect `key` from each map.
 ```
-${[{"name":"a"},{"name":"b"}] | pluck "name"}   → ["a","b"]
+${'[{name: a}, {name: b}]' | fromYaml | pluck "name"}
+# → - a
+#   - b
 ```
 
 ### `chunk`
 `chunk(list, size)` → list of lists.
 ```
-${[1,2,3,4,5] | chunk 2}   → [[1,2],[3,4],[5]]
+${1 | tuple 2 3 4 5 | chunk 2}
+# → - - 1
+#     - 2
+#   - - 3
+#     - 4
+#   - - 5
 ```
 
 ### `tuple`
-`tuple(value, ...items)` → list — ad-hoc list (value prepended).
+`tuple(value, ...items)` → list — the inline list constructor (`value` prepended to the items).
 ```
-${1 | tuple 2 3}   → [1,2,3]
+${1 | tuple 2 3}
+# → - 1
+#   - 2
+#   - 3
 ```
 
 ## Map functions
@@ -88,8 +151,8 @@ ${1 | tuple 2 3}   → [1,2,3]
 ### `dig`
 `dig(map, ...path, default)` → any — walk a nested map; last arg is the default.
 ```
-${{"a":{"b":{"c":7}}} | dig "a" "b" "c" 0}   → 7
-${{"a":{}} | dig "a" "x" "y" "none"}         → "none"
+${'a: {b: {c: 7}}' | fromYaml | dig "a" "b" "c" 0}   → 7
+${'a: {}' | fromYaml | dig "a" "x" "y" "none"}        → "none"
 ```
 
 ### `deepCopy`
@@ -98,7 +161,7 @@ ${{"a":{}} | dig "a" "x" "y" "none"}         → "none"
 ### `deepEqual`
 `deepEqual(value, other)` → bool — deep structural equality.
 ```
-${[1,2] | deepEqual [1,2]}   → true
+${5 | deepEqual 5}   → true
 ```
 
 ## Encoding / conversion
@@ -113,20 +176,20 @@ ${"NBUQ====" | b32dec} → "hi"
 ### `fromJson` / `fromYaml` / `fromYamlArray`
 Parse a JSON string, one YAML doc, or a multi-doc YAML stream into a value.
 ```
-${"{\"a\":1}" | fromJson}   → {"a":1}
-${"a: 1" | fromYaml}        → {"a":1}
+${'{"a":1}' | fromJson}   → a: 1
+${"a: 1" | fromYaml}      → a: 1
 ```
 
 ### `toRawJson`
 `toRawJson(value)` → string — JSON without HTML-escaping.
 ```
-${{"u":"a&b"} | toRawJson}   → {"u":"a&b"}
+${'u: a&b' | fromYaml | toRawJson}   → {"u":"a&b"}
 ```
 
 ### `int` / `int64` / `float64`
 Numeric coercion.
 ```
-${"42" | int}      → 42
+${"42" | int}       → 42
 ${"3.14" | float64} → 3.14
 ```
 
@@ -139,7 +202,9 @@ ${"a b&c" | urlquery}   → "a+b%26c"
 ### `splitn`
 `splitn(value, sep, n)` → list — split into at most `n` parts.
 ```
-${"a,b,c,d" | splitn "," 2}   → ["a","b,c,d"]
+${"a,b,c,d" | splitn "," 2}
+# → - a
+#   - b,c,d
 ```
 
 ### `regexQuoteMeta`
@@ -151,22 +216,22 @@ ${"a.b*c" | regexQuoteMeta}   → "a\.b\*c"
 ## Number & date extras
 
 ### `addf` / `subf` / `mulf` / `divf`
-Float arithmetic (always `float64`).
+Float arithmetic (computed as `float64`; whole results serialize without a trailing `.0`).
 ```
-${1 | addf 2 3}    → 6.0
-${100 | divf 2 5}  → 10.0
+${1 | addf 2 3}    → 6
+${100 | divf 2 5}  → 10
 ```
 
 ### `randInt`
 `randInt(min, max)` → int — random in `[min, max)`.
 ```
-${5 | randInt 10}   → 7 (varies, in [5,10))
+${5 | randInt 10}   → (int in [5,10); value varies)
 ```
 
 ### `dateModify`
 `dateModify(value, duration)` → time — shift by a Go duration.
 ```
-${$t | dateModify "24h"}   → time 24h later
+${'2026-01-01T00:00:00Z' | dateModify "24h"}   → 2026-01-02T00:00:00Z
 ```
 
 ### `htmlDate` / `htmlDateInZone`
@@ -183,7 +248,7 @@ Word-wrap at a column width (optionally with a custom break string).
 ### `nospace`
 `nospace(value)` → string — remove all whitespace.
 ```
-${"a b\tc" | nospace}   → "abc"
+${"a b c" | nospace}   → "abc"
 ```
 
 ## Text helpers
@@ -205,25 +270,25 @@ These make render-time network calls. They are **disabled by default** and requi
 ### `http`
 `http(url, headers?)` → string — HTTP GET body.
 ```
-${"https://api.example.com/health" | http}   → "ok" (requires KERAMOS_RENDER_NETWORK=1)
+${"https://api.example.com/health" | http}   → (response body; requires KERAMOS_RENDER_NETWORK=1)
 ```
 
 ### `httpJSON`
 `httpJSON(url, headers?)` → any — GET and parse JSON.
 ```
-${"https://api.example.com/user" | httpJSON}   → {"id":1,"name":"…"}
+${"https://api.example.com/user" | httpJSON}   → (parsed JSON; requires KERAMOS_RENDER_NETWORK=1)
 ```
 
 ### `vault`
 `vault(path, field?)` → any — read a Vault KV-v2 secret (uses `VAULT_ADDR`/`VAULT_TOKEN`).
 ```
-${"secret/data/db" | vault "password"}   → "s3cr3t"
+${"secret/data/db" | vault "password"}   → (secret value; uses VAULT_ADDR/VAULT_TOKEN)
 ```
 
 ### `env` / `expandenv`
 Read a process env var / expand `$VAR` references. Gated behind `KERAMOS_RENDER_ENV=1` (off by default — reading the operator's environment from an untrusted chart is a secret-exfiltration risk).
 ```
-${"PATH" | env}   → "/usr/bin:…" (requires KERAMOS_RENDER_ENV=1)
+${"PATH" | env}   → (env var value; requires KERAMOS_RENDER_ENV=1)
 ```
 
 ### `getHostByName`

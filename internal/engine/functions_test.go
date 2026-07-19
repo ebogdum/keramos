@@ -417,6 +417,32 @@ func TestCollectionFunctions(t *testing.T) {
 		}
 	})
 
+	t.Run("sortNumeric", func(t *testing.T) {
+		fn, _ := r.Get("sortNumeric")
+		// numeric sort, not lexical: 10 comes after 2, and types are preserved.
+		result, err := fn([]any{10, 2, 1})
+		if nil != err {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		list := result.([]any)
+		if 1 != list[0] || 2 != list[1] || 10 != list[2] {
+			t.Errorf("expected [1, 2, 10], got %v", list)
+		}
+		// numeric strings coerce and sort by value.
+		result, err = fn([]any{"10", "2", "1"})
+		if nil != err {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		list = result.([]any)
+		if "1" != list[0] || "2" != list[1] || "10" != list[2] {
+			t.Errorf("expected [1, 2, 10] (strings), got %v", list)
+		}
+		// a non-numeric element is an error.
+		if _, err := fn([]any{1, "abc"}); nil == err {
+			t.Errorf("expected error on non-numeric element, got nil")
+		}
+	})
+
 	t.Run("uniq", func(t *testing.T) {
 		fn, _ := r.Get("uniq")
 		result, err := fn([]any{"a", "b", "a", "c"})
