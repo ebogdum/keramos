@@ -26,6 +26,7 @@ Task-focused walkthroughs for getting real work done.
 | [Repositories](guides/repositories.md) | Publish and consume package repositories |
 | [OCI](guides/oci.md) | Push and pull packages via OCI registries |
 | [Signing](guides/signing.md) | Sign packages and verify provenance |
+| [Plugins](guides/plugins.md) | Build a plugin that adds a `keramos` command |
 | [Migration](guides/migration.md) | Convert a Helm chart to a keramos package |
 
 ## Reference

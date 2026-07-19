@@ -82,6 +82,7 @@ Installed plugin: backup v0.4.0
 
 ## See also
 
+- [Plugins guide](../guides/plugins.md) — build a plugin from scratch
 - [`plugin list`](plugin-list.md)
 - [`plugin update`](plugin-update.md)
 - [`plugin remove`](plugin-remove.md)

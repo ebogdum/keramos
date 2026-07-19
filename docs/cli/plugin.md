@@ -10,6 +10,9 @@ Plugins live in `~/.config/keramos/plugins/`, one directory per plugin. Everythi
 here is local to your machine and your user account — managing plugins never
 touches a cluster.
 
+Want to **build** one? See the [Plugins guide](../guides/plugins.md) — a plugin
+is any executable (not just Go) that keramos runs as a subprocess.
+
 ## Subcommands
 
 | Command | What it does |
@@ -35,6 +38,7 @@ keramos backup --release web        # "backup" now runs as a keramos command
 
 ## See also
 
+- [Plugins guide](../guides/plugins.md) — how to build and distribute a plugin
 - [`marketplace`](marketplace.md) — find and verify signed plugins to install
 - [`plugin install`](plugin-install.md)
 - [`plugin list`](plugin-list.md)
