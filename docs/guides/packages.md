@@ -1,3 +1,8 @@
+---
+title: "Package anatomy"
+parent: "Guides"
+---
+{% raw %}
 # Package anatomy
 
 A keramos package is a directory containing a package manifest (`keramos.yaml`), a
@@ -267,3 +272,4 @@ keramos install my-app ./pulled/my-pkg -n prod --create-namespace
 See [`keramos package`](../cli/package.md), [`keramos publish`](../cli/publish.md),
 and [`keramos pull`](../cli/pull.md). The per-command reference lives under
 [`docs/cli/`](../cli/README.md).
+{% endraw %}

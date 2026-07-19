@@ -1,0 +1,36 @@
+// Keramos — custom just-the-docs color scheme (light).
+// Loaded before the theme's !default variables, so these win.
+
+$color-scheme: light;
+
+// Brand — deep indigo with a violet accent.
+$purple-000: #f4f2ff;
+$purple-100: #e9e5ff;
+$purple-200: #cfc6ff;
+$purple-300: #a897ff;
+
+$link-color:            #4f46e5; // indigo-600
+$btn-primary-color:     #4f46e5;
+$base-button-color:     #f7f7fb;
+
+// Surfaces.
+$body-background-color:   #ffffff;
+$sidebar-color:           #fbfaff;
+$search-background-color:  #ffffff;
+$table-background-color:   #ffffff;
+$code-background-color:    #f6f6fc;
+$feedback-color:          darken($sidebar-color, 3%);
+
+// Text.
+$body-text-color:         #3b3f4a;
+$body-heading-color:      #12141c;
+$nav-child-link-color:    #57606a;
+$search-result-preview-color: #5b6270;
+$link-hover-color:        #3730a3;
+
+// Lines.
+$border-color:            #ecebf5;
+
+// Layout — a hair wider sidebar for long CLI command titles.
+$nav-width: 268px;
+$content-width: 820px;

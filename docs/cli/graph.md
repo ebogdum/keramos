@@ -1,3 +1,8 @@
+---
+title: "keramos graph"
+parent: "CLI"
+---
+{% raw %}
 # keramos graph
 
 `keramos graph` emits a dependency graph of a release's resources and lifecycle
@@ -107,3 +112,4 @@ edges:
 
 - [`get manifest`](get-manifest.md) — the resources the graph is built from
 - [`get hooks`](get-hooks.md) — hook manifests and their execution results
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "keramos canary"
+parent: "CLI"
+---
+{% raw %}
 # keramos canary
 
 `keramos canary` runs a staged upgrade, stepping the replica count up through a
@@ -112,3 +117,4 @@ Error: …
 - [`upgrade`](upgrade.md) — the single-shot upgrade each stage performs
 - [`rollback`](rollback.md) — manually revert a release to a prior revision
 - [`status`](status.md) — check the release revision before and after
+{% endraw %}

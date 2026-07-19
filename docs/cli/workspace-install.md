@@ -1,3 +1,8 @@
+---
+title: "keramos workspace install"
+parent: "CLI"
+---
+{% raw %}
 # keramos workspace install
 
 ## Synopsis
@@ -101,3 +106,4 @@ successful run prints nothing; failures are always reported.
 - [`workspace plan`](workspace-plan.md) — preview the order first
 - [`workspace uninstall`](workspace-uninstall.md) — tear the workspace back down
 - [`install`](install.md) — the single-release analogue
+{% endraw %}

@@ -1,3 +1,9 @@
+---
+title: "String functions"
+parent: "Functions"
+grand_parent: "Templates"
+---
+{% raw %}
 # String functions
 
 Pipeline convention: in `${value | f x y}` the left side is the FIRST argument, so this calls `f(value, x, y)`. For example `${"hi" | upper}` calls `upper("hi")`.
@@ -261,3 +267,4 @@ Returns the first character of each whitespace-separated field, concatenated.
 ${"Hello World Foo" | initials}     → "HWF"
 ${"john ronald tolkien" | initials} → "jrt"
 ```
+{% endraw %}

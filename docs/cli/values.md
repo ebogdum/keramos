@@ -1,3 +1,8 @@
+---
+title: "keramos values"
+parent: "CLI"
+---
+{% raw %}
 # keramos values
 
 `keramos values` resolves a package's values exactly as `install` would and prints
@@ -82,3 +87,4 @@ Drop `--trace` and the merged tree now shows `replicas: 5`.
 - [`config`](config.md) — build a values file interactively from the schema
 - [`show values`](show-values.md) — print the raw default `values.yaml`
 - [`template`](template.md) — render manifests using the resolved values
+{% endraw %}

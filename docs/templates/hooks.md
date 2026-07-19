@@ -1,3 +1,8 @@
+---
+title: "Hooks in templates"
+parent: "Templates"
+---
+{% raw %}
 # Hooks in templates
 
 A hook is a Job- or Pod-shaped manifest that keramos runs at a specific lifecycle
@@ -235,3 +240,4 @@ keramos status <release>              # current hook section
 - [Hooks guide](../guides/hooks.md) — event ordering, delete policies at runtime
 - [Control flow](control-flow.md) — the directives hook bodies use
 - [Expressions](expressions.md) — `${...}` inside hook manifests
+{% endraw %}

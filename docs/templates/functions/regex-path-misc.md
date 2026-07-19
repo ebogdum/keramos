@@ -1,3 +1,9 @@
+---
+title: "Regex, Path, and Misc functions"
+parent: "Functions"
+grand_parent: "Templates"
+---
+{% raw %}
 # Regex, Path, and Misc functions
 
 > **Pipeline note.** `${value | f x}` = `f(value, x)`. Regex helpers compile `args[0]` as an RE2 pattern and match against the stringified `value`; a bad pattern or missing pattern errors.
@@ -249,3 +255,4 @@ ${"hello" | substr 3 1}   → ""
 ```
 ${"a" | cat "b" "c"}   → "a b c"
 ```
+{% endraw %}

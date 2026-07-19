@@ -1,3 +1,9 @@
+---
+title: "Crypto and Secrets functions"
+parent: "Functions"
+grand_parent: "Templates"
+---
+{% raw %}
 # Crypto and Secrets functions
 
 > **Pipeline note.** `${value | f x}` = `f(value, x)`. Non-string inputs are stringified with `%v` for hashes; `rand*` length functions parse the value as a number.
@@ -182,3 +188,4 @@ spec:
 ${"api-key" | sealedSecret "prod" (dict "token" "AgB2f…")}
   → the SealedSecret above with the sealed token under spec.encryptedData
 ```
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "Capabilities"
+parent: "Templates"
+---
+{% raw %}
 # Capabilities
 
 The `capabilities` namespace exposes what the template knows about the cluster
@@ -168,3 +173,4 @@ or `keramos plan`, which read live capabilities and lookups.
 - [Expressions](expressions.md) — why `semverCompare` needs the pipeline form
 - [Function reference](functions.md) — `semverCompare`, `fail`, `get`, `dig`
 - [Control flow](control-flow.md) — `$if` gating on capabilities and `lookup`
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "Docs home"
+nav_exclude: true
+---
+{% raw %}
 # keramos documentation
 
 keramos is a Kubernetes package manager built around expression-based templating,
@@ -67,3 +72,4 @@ command you run, and the exact result it produces. When a command reads hidden
 state (a stored release, the live cluster), the docs show that state and trace
 each output line back to its cause. See [`keramos drift`](cli/drift.md) for the
 fullest example of this style.
+{% endraw %}

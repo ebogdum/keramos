@@ -1,3 +1,8 @@
+---
+title: "Plugins"
+parent: "Guides"
+---
+{% raw %}
 # Plugins
 
 A plugin adds a new top-level command to keramos. Once installed, `keramos greet` or
@@ -225,3 +230,4 @@ and prefer [signed marketplace plugins](../cli/marketplace-verify.md).
 - [`keramos plugin`](../cli/plugin.md) — the plugin management commands
 - [`keramos plugin install`](../cli/plugin-install.md) · [`list`](../cli/plugin-list.md) · [`update`](../cli/plugin-update.md) · [`remove`](../cli/plugin-remove.md)
 - [`keramos marketplace`](../cli/marketplace.md) — discover and verify signed plugins
+{% endraw %}

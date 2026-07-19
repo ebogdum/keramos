@@ -1,3 +1,8 @@
+---
+title: "keramos package"
+parent: "CLI"
+---
+{% raw %}
 # keramos package
 
 Package a keramos package directory into a versioned `.keramos.tgz` archive.
@@ -72,3 +77,4 @@ Now the archive and its provenance file are ready to
 - [`package verify`](package-verify.md) — check a signature
 - [`publish`](publish.md) — upload the archive
 - [`pull`](pull.md) · [`install`](install.md)
+{% endraw %}

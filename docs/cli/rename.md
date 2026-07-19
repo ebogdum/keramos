@@ -1,3 +1,8 @@
+---
+title: "keramos rename"
+parent: "CLI"
+---
+{% raw %}
 # keramos rename
 
 Give an existing release a new name, carrying its full revision history across.
@@ -102,3 +107,4 @@ yourself once you are satisfied the rename is correct.
 - [`list`](list.md) — confirm the release appears under its new name
 - [`history`](history.md) — verify every revision came across
 - [`upgrade`](upgrade.md) — re-render so resource names follow the new name
+{% endraw %}

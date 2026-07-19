@@ -1,3 +1,8 @@
+---
+title: "keramos controller run"
+parent: "CLI"
+---
+{% raw %}
 # keramos controller run
 
 ## Synopsis
@@ -121,3 +126,4 @@ keramos controller run --interval 5s --debug
 - [`controller crd`](controller-crd.md) — inspect the CRD schema
 - [`install`](install.md) / [`upgrade`](upgrade.md) — the operations each reconcile runs
 - [`controller`](controller.md) — operator overview
+{% endraw %}

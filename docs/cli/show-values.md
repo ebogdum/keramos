@@ -1,3 +1,8 @@
+---
+title: "keramos show values"
+parent: "CLI"
+---
+{% raw %}
 # keramos show values
 
 `keramos show values` prints a package's default `values.yaml` unchanged.
@@ -53,3 +58,4 @@ use [`keramos values`](values.md) instead.
 - [`show`](show.md) — the show command index
 - [`values`](values.md) — merged, override-aware values
 - [`show all`](show-all.md) — chart, values, and README together
+{% endraw %}

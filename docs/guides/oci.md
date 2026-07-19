@@ -1,3 +1,8 @@
+---
+title: "Distribute packages via an OCI registry"
+parent: "Guides"
+---
+{% raw %}
 # Distribute packages via an OCI registry
 
 Keramos packages push to and pull from any OCI distribution-spec registry — GHCR,
@@ -197,3 +202,4 @@ Sending basic-auth credentials over plaintext HTTP additionally requires
 - [`keramos login`](../cli/login.md) — store registry credentials
 - [Repositories](repositories.md) — static HTTP distribution
 - [Signing](signing.md) — PGP and cosign verification
+{% endraw %}

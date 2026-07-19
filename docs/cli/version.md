@@ -1,3 +1,8 @@
+---
+title: "keramos version"
+parent: "CLI"
+---
+{% raw %}
 # keramos version
 
 `keramos version` prints the version, git commit, and build date of the `keramos`
@@ -48,3 +53,4 @@ keramos version dev (commit unknown, built unknown)
 ## See also
 
 - [`env`](env.md) — the resolved paths and environment keramos is using
+{% endraw %}

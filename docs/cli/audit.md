@@ -1,3 +1,8 @@
+---
+title: "keramos audit"
+parent: "CLI"
+---
+{% raw %}
 # keramos audit
 
 `keramos audit` prints the chronological change log for one release — every
@@ -98,3 +103,4 @@ no history for web-api
 - [`history`](history.md) — shorter revision list for a release
 - [`get`](get.md) — inspect the values, manifest, and notes of a revision
 - [`rollback`](rollback.md) — return a release to an earlier revision
+{% endraw %}

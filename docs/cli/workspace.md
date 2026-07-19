@@ -1,3 +1,8 @@
+---
+title: "keramos workspace"
+parent: "CLI"
+---
+{% raw %}
 # keramos workspace
 
 ## Synopsis
@@ -59,3 +64,4 @@ Every command reads `keramos-workspace.yaml` from the directory given by `--dir`
   — the single-release commands the workspace runs once per member
 - [`plan`](plan.md), [`status`](status.md), [`diff`](diff.md) — the
   single-release analogues of the workspace subcommands
+{% endraw %}

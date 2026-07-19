@@ -1,3 +1,8 @@
+---
+title: "keramos migrate"
+parent: "CLI"
+---
+{% raw %}
 # keramos migrate
 
 Convert a Helm chart directory on disk into an equivalent keramos package
@@ -113,3 +118,4 @@ keramos lint ./redis-keramos
 - [`helm-compat`](helm-compat.md) — run an unmodified Helm chart without converting it
 - [`adopt`](adopt.md) — bring existing in-cluster resources under keramos management
 - [`lint`](lint.md) — validate the converted package
+{% endraw %}

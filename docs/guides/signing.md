@@ -1,3 +1,8 @@
+---
+title: "Sign and verify packages"
+parent: "Guides"
+---
+{% raw %}
 # Sign and verify packages
 
 Keramos signs packages two ways: a detached PGP `.prov` provenance file that keramos
@@ -209,3 +214,4 @@ keramos sbom my-app -n prod > my-app.cdx.json
 - [`keramos registry pull`](../cli/registry-pull.md) — cosign verification on pull
 - [`keramos audit`](../cli/audit.md) · [`keramos sbom`](../cli/sbom.md)
 - [OCI](oci.md) · [Repositories](repositories.md)
+{% endraw %}

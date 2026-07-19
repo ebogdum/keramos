@@ -1,3 +1,8 @@
+---
+title: "keramos template"
+parent: "CLI"
+---
+{% raw %}
 # keramos template
 
 `keramos template` renders a package to Kubernetes YAML locally and prints it to
@@ -142,3 +147,4 @@ keramos template ./web --set replicas=5
 - [`plan`](plan.md) — render and diff against the recorded state
 - [`diff`](diff.md) — compare two renders (no cluster)
 - [`install`](install.md) — render and apply as a tracked release
+{% endraw %}

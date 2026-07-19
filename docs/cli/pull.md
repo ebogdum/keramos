@@ -1,3 +1,8 @@
+---
+title: "keramos pull"
+parent: "CLI"
+---
+{% raw %}
 # keramos pull
 
 Download a package from an OCI registry or an HTTP repository, and optionally
@@ -93,3 +98,4 @@ Pulled oci://ghcr.io/example/charts/my-app:1.2.3 to ./pulled/my-app-1.2.3.keramo
 - [`install`](install.md) — install the pulled package
 - [`package`](package.md) — build an archive
 - [`login`](login.md) — credentials for a private source
+{% endraw %}

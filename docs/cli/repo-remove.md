@@ -1,3 +1,8 @@
+---
+title: "keramos repo remove"
+parent: "CLI"
+---
+{% raw %}
 # keramos repo remove
 
 Drop a repository from your list.
@@ -41,3 +46,4 @@ No repositories configured.
 - [`repo add`](repo-add.md) — register a repository
 - [`repo list`](repo-list.md) — see what is registered
 - [`logout`](logout.md) — remove stored credentials for a host
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "Quickstart"
+parent: "Guides"
+---
+{% raw %}
 # Quickstart
 
 By the end of this guide you will have scaffolded a package, installed it as a
@@ -397,3 +402,4 @@ See [`keramos uninstall`](../cli/uninstall.md).
 - [Template expressions](../templates/expressions.md) and
   [function reference](../templates/functions.md) — the `${...}` language.
 - [CLI reference](../cli/README.md) — every command and flag.
+{% endraw %}

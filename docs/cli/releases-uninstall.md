@@ -1,3 +1,8 @@
+---
+title: "keramos releases uninstall"
+parent: "CLI"
+---
+{% raw %}
 # keramos releases uninstall
 
 ## Synopsis
@@ -85,3 +90,4 @@ are removed; `postgres` and `redis` follow. This is the install order from
 - [`plan`](releases-plan.md) — see the install order this reverses
 - [`install`](releases-install.md) — bring the set back up
 - [`uninstall`](uninstall.md) — uninstall a single release
+{% endraw %}

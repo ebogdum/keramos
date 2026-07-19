@@ -1,3 +1,8 @@
+---
+title: "keramos releases upgrade"
+parent: "CLI"
+---
+{% raw %}
 # keramos releases upgrade
 
 ## Synopsis
@@ -93,3 +98,4 @@ Every release moves up one revision, in dependency order — `postgres` and
 - [`plan`](releases-plan.md) — preview the order first
 - [`install`](releases-install.md) — first-time install of the set
 - [`upgrade`](upgrade.md) — upgrade a single release
+{% endraw %}

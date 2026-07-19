@@ -1,3 +1,8 @@
+---
+title: "keramos helm-compat report"
+parent: "CLI"
+---
+{% raw %}
 # keramos helm-compat report
 
 `keramos helm-compat report` analyses a Helm chart and reports how much
@@ -70,3 +75,4 @@ run next.
 - [`helm-compat export`](helm-compat-export.md)
 - [`migrate`](migrate.md) — actually translate the chart to a keramos package
 - [`template`](template.md) — render a keramos package to manifests
+{% endraw %}

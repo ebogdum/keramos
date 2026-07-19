@@ -1,3 +1,8 @@
+---
+title: "keramos lint"
+parent: "CLI"
+---
+{% raw %}
 # keramos lint
 
 `keramos lint` validates a package for correctness — metadata, values, schema,
@@ -112,3 +117,4 @@ lint passed
 - [`policy`](policy.md) — check rendered manifests against package policies
 - [`test`](test.md) — run a deployed release's tests
 - [`plan`](plan.md) — preview changes against the recorded state
+{% endraw %}

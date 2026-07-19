@@ -1,3 +1,8 @@
+---
+title: "keramos-releases.yaml"
+parent: "Reference"
+---
+{% raw %}
 # keramos-releases.yaml
 
 Declares a set of separate releases and the order they must be applied in. The
@@ -91,3 +96,4 @@ removes them in reverse.
 - [`keramos releases status`](../cli/releases-status.md) — show each release's revision.
 - [keramos-workspace.yaml](keramos-workspace-yaml.md) — related packages from one repo.
 - [Releases guide](../guides/releases.md).
+{% endraw %}

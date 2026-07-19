@@ -1,3 +1,8 @@
+---
+title: "keramos releases install"
+parent: "CLI"
+---
+{% raw %}
 # keramos releases install
 
 ## Synopsis
@@ -91,3 +96,4 @@ dependencies. Every release is new, so each is at revision 1.
 - [`plan`](releases-plan.md) — preview the order first
 - [`upgrade`](releases-upgrade.md) — re-run to pick up changes later
 - [`uninstall`](releases-uninstall.md) — tear the set back down
+{% endraw %}

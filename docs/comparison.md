@@ -1,3 +1,8 @@
+---
+title: "Comparison"
+nav_order: 7
+---
+{% raw %}
 # Keramos vs Helm vs Kustomize vs kapp vs kpt — Kubernetes packaging and deployment tools compared
 
 A side-by-side look at keramos and the other tools in the Kubernetes
@@ -306,3 +311,4 @@ minimal `keramos.yaml`, and `keramos install`.
 - [Use cases](use-cases.md) — by role
 - [FAQ](faq.md) — common questions
 - [Documentation map](../README.md#documentation-map)
+{% endraw %}

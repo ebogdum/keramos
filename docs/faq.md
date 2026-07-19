@@ -1,3 +1,8 @@
+---
+title: "FAQ"
+nav_order: 8
+---
+{% raw %}
 # Keramos FAQ — frequently asked questions
 
 Answers to common questions about keramos, organised by topic. If your question
@@ -362,3 +367,4 @@ For specific error messages, see the
 - [Comparison with other tools](comparison.md)
 - [CLI reference](cli/README.md)
 - [Documentation map](../README.md#documentation-map)
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "keramos show crds"
+parent: "CLI"
+---
+{% raw %}
 # keramos show crds
 
 `keramos show crds` prints the CRD YAML files a package ships under its `crds/`
@@ -63,3 +68,4 @@ A package with no `crds/` directory instead prints `(no crds/ directory)`.
 - [`show`](show.md) — the show command index
 - [`show chart`](show-chart.md) — the package metadata
 - [`template`](template.md) — render the package's non-CRD manifests
+{% endraw %}

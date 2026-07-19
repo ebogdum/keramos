@@ -1,3 +1,8 @@
+---
+title: "keramos get manifest"
+parent: "CLI"
+---
+{% raw %}
 # keramos get manifest
 
 `keramos get manifest` prints the rendered Kubernetes manifest that keramos stored for
@@ -79,3 +84,4 @@ spec:
 - [`get`](get.md) — the parent command
 - [`get all`](get-all.md) — the full record, not just the manifest
 - [`drift`](drift.md) — compare the stored manifest against the live cluster
+{% endraw %}

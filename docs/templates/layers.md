@@ -1,3 +1,8 @@
+---
+title: "Layers in templates"
+parent: "Templates"
+---
+{% raw %}
 # Layers in templates
 
 When a package pulls in layers, every layer's `values.yaml` is deep-merged with
@@ -221,3 +226,4 @@ metadata:
 - [Layers guide](../guides/layers.md) — declaring layers, sources, conditions
 - [Control flow](control-flow.md) — `$include` and the directives
 - [Expressions](expressions.md) — reading merged values with `${values.*}`
+{% endraw %}

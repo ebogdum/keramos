@@ -1,3 +1,8 @@
+---
+title: "Host and consume an HTTP repository"
+parent: "Guides"
+---
+{% raw %}
 # Host and consume an HTTP repository
 
 A keramos repository is a directory served over HTTP(S) containing packaged
@@ -242,3 +247,4 @@ the archive is kept; a bad signature aborts the pull. See [Signing](signing.md).
 - [`keramos package`](../cli/package.md) — build the archives you host
 - [OCI](oci.md) — registry-based distribution
 - [Signing](signing.md) — sign and verify packages
+{% endraw %}

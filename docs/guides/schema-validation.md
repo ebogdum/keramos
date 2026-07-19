@@ -1,3 +1,8 @@
+---
+title: "Schema validation"
+parent: "Guides"
+---
+{% raw %}
 # Schema validation
 
 `values.schema.json` asserts that a package's merged values are well-formed
@@ -199,3 +204,4 @@ keramos template . -f ci-values.yaml     # non-zero exit on any violation
   supported keyword subset.
 - [Values](values.md) — how the values being validated are assembled.
 - [`keramos config`](../cli/config.md) and [`keramos lint`](../cli/lint.md).
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "Values"
+parent: "Guides"
+---
+{% raw %}
 # Values
 
 Values are a package's configurable surface. Every choice you make about an
@@ -258,3 +263,4 @@ production override. Provide fallbacks with `default`, e.g.
 - [Layers](layers.md) — how layer values compose.
 - [Schema validation](schema-validation.md) — constraining values.
 - [Expressions](../templates/expressions.md) — the `${...}` language.
+{% endraw %}

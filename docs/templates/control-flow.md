@@ -1,3 +1,8 @@
+---
+title: "Control flow"
+parent: "Templates"
+---
+{% raw %}
 # Control flow
 
 Keramos's control flow is YAML-native: you write conditionals, loops, and case
@@ -380,3 +385,4 @@ substitution.
 - [Expressions](expressions.md) — `${...}` syntax, truthiness, optional fields
 - [Function reference](functions.md) — `default`, `quote`, and the rest
 - [Hooks](hooks.md) — the same directives inside lifecycle hooks
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "keramos repo list"
+parent: "CLI"
+---
+{% raw %}
 # keramos repo list
 
 Show the repositories you have registered.
@@ -49,3 +54,4 @@ https://charts.example.com
 - [`repo add`](repo-add.md) — register a repository
 - [`repo update`](repo-update.md) — refresh registered repositories
 - [`search`](search.md) · [`pull`](pull.md)
+{% endraw %}

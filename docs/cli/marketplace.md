@@ -1,3 +1,8 @@
+---
+title: "keramos marketplace"
+parent: "CLI"
+---
+{% raw %}
 # keramos marketplace
 
 ## Synopsis
@@ -39,3 +44,4 @@ keramos plugin install ./backup
 - [`plugin`](plugin.md) — install and manage plugins
 - [`marketplace search`](marketplace-search.md)
 - [`marketplace verify`](marketplace-verify.md)
+{% endraw %}

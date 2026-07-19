@@ -1,3 +1,8 @@
+---
+title: "keramos show"
+parent: "CLI"
+---
+{% raw %}
 # keramos show
 
 `keramos show` prints a package's metadata, values, README, or CRDs without
@@ -27,3 +32,4 @@ keramos show <chart|values|readme|crds|all> <package-path> [flags]
 - [`values`](values.md) — resolve and trace the merged values
 - [`template`](template.md) — render the package's manifests
 - [`lint`](lint.md) — validate a package
+{% endraw %}

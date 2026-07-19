@@ -1,3 +1,8 @@
+---
+title: "keramos workspace diff"
+parent: "CLI"
+---
+{% raw %}
 # keramos workspace diff
 
 ## Synopsis
@@ -90,3 +95,4 @@ order, `postgres` before `api`.
 - [`workspace plan`](workspace-plan.md) — preview the order of members
 - [`workspace upgrade`](workspace-upgrade.md) — apply the changes shown here
 - [`diff`](diff.md) — the single-release analogue
+{% endraw %}

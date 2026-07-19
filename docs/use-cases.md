@@ -1,3 +1,8 @@
+---
+title: "Use cases"
+nav_order: 6
+---
+{% raw %}
 # Keramos use cases — for platform engineers, SREs, and GitOps teams
 
 This page maps keramos's features onto real workflows. Pick the role or pattern
@@ -274,3 +279,4 @@ check` for in-package policy enforcement.
 - [FAQ](faq.md) — common questions
 - [Glossary](glossary.md) — terminology
 - [Comparison with other tools](comparison.md)
+{% endraw %}

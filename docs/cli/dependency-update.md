@@ -1,3 +1,8 @@
+---
+title: "keramos dependency update"
+parent: "CLI"
+---
+{% raw %}
 # keramos dependency update
 
 `keramos dependency update` re-resolves every layer and required package against
@@ -104,3 +109,4 @@ reads `locked`.
 - [`dependency build`](dependency-build.md) — download what this lock pins
 - [`dependency list`](dependency-list.md) — confirm entries are now `locked`
 - [`install`](install.md) — install using the pinned versions
+{% endraw %}

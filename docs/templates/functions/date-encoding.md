@@ -1,3 +1,9 @@
+---
+title: "Date and Encoding functions"
+parent: "Functions"
+grand_parent: "Templates"
+---
+{% raw %}
 # Date and Encoding functions
 
 > **Pipeline note.** `${value | f x}` desugars to `f(value, x)` — the piped subject becomes the first argument (`value`), and tokens after the function name become trailing arguments.
@@ -130,3 +136,4 @@ SHA-256 digest as a lowercase 64-char hex string.
 ${"hello" | sha256}
     → 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
 ```
+{% endraw %}

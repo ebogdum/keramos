@@ -1,3 +1,8 @@
+---
+title: "keramos-workspace.yaml"
+parent: "Reference"
+---
+{% raw %}
 # keramos-workspace.yaml
 
 Groups several keramos packages from one directory tree into a workspace that
@@ -102,3 +107,4 @@ keep declared order):
 - [`keramos workspace status`](../cli/workspace-status.md).
 - [keramos-releases.yaml](keramos-releases-yaml.md) — releases of unrelated packages.
 - [Workspaces guide](../guides/workspaces.md).
+{% endraw %}

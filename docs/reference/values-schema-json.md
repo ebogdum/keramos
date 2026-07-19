@@ -1,3 +1,8 @@
+---
+title: "values.schema.json"
+parent: "Reference"
+---
+{% raw %}
 # values.schema.json
 
 An optional file at the package root that declares the expected shape of your
@@ -118,3 +123,4 @@ service:
 - [`keramos lint`](../cli/lint.md) — validate the schema and values.
 - [`keramos config`](../cli/config.md) — build values from the schema.
 - [Schema validation guide](../guides/schema-validation.md).
+{% endraw %}

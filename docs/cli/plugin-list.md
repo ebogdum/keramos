@@ -1,3 +1,8 @@
+---
+title: "keramos plugin list"
+parent: "CLI"
+---
+{% raw %}
 # keramos plugin list
 
 ## Synopsis
@@ -61,3 +66,4 @@ No plugins installed.
 - [`plugin install`](plugin-install.md)
 - [`plugin update`](plugin-update.md)
 - [`plugin remove`](plugin-remove.md)
+{% endraw %}

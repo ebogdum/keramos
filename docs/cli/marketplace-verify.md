@@ -1,3 +1,8 @@
+---
+title: "keramos marketplace verify"
+parent: "CLI"
+---
+{% raw %}
 # keramos marketplace verify
 
 ## Synopsis
@@ -74,3 +79,4 @@ keramos marketplace verify \
 
 - [`marketplace search`](marketplace-search.md) — find a plugin and its signer
 - [`plugin install`](plugin-install.md)
+{% endraw %}

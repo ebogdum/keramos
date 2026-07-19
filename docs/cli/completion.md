@@ -1,3 +1,8 @@
+---
+title: "keramos completion"
+parent: "CLI"
+---
+{% raw %}
 # keramos completion
 
 `keramos completion` prints a shell completion script for `bash`, `zsh`, `fish`,
@@ -73,3 +78,4 @@ Start a new shell (or re-source your profile) and `keramos <Tab>` completes.
 
 - [`env`](env.md) — the resolved paths and environment keramos is using
 - [`version`](version.md) — confirm the build you generated completions from
+{% endraw %}

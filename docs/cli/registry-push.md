@@ -1,3 +1,8 @@
+---
+title: "keramos registry push"
+parent: "CLI"
+---
+{% raw %}
 # keramos registry push
 
 Upload a packaged `.keramos.tgz` archive to an OCI registry reference.
@@ -79,3 +84,4 @@ keramos registry push ./dist/my-app-1.0.0.keramos.tgz \
 - [`registry pull`](registry-pull.md) — fetch it back
 - [`publish`](publish.md) — push to an HTTP API registry instead
 - [`install`](install.md) — install a package from a reference
+{% endraw %}

@@ -1,3 +1,10 @@
+---
+title: "Functions"
+parent: "Templates"
+has_children: true
+has_toc: false
+---
+{% raw %}
 # Template function reference
 
 keramos's expression engine ships ~200 built-in functions. Every function is
@@ -70,3 +77,4 @@ In real templates you more often pipe a list straight from your values
 
 - [Expressions](expressions.md) — the `${...}` syntax, operators, and pipelines
 - [CLI reference](../cli/README.md) — the commands that render these templates
+{% endraw %}

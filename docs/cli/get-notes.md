@@ -1,3 +1,8 @@
+---
+title: "keramos get notes"
+parent: "CLI"
+---
+{% raw %}
 # keramos get notes
 
 `keramos get notes` prints the rendered NOTES text that keramos stored for a release
@@ -68,3 +73,4 @@ No notes available for this release.
 
 - [`get`](get.md) — the parent command
 - [`get all`](get-all.md) — notes plus the rest of the record
+{% endraw %}

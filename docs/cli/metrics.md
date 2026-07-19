@@ -1,3 +1,8 @@
+---
+title: "keramos metrics"
+parent: "CLI"
+---
+{% raw %}
 # keramos metrics
 
 `keramos metrics` samples a release's pods over time and prints per-container
@@ -92,3 +97,4 @@ no samples collected (no pods matching the release labels?)
 
 - [`status`](status.md) — current health of the release's resources
 - [`get manifest`](get-manifest.md) — the workloads whose pods are sampled
+{% endraw %}

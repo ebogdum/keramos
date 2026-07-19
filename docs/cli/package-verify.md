@@ -1,3 +1,8 @@
+---
+title: "keramos package verify"
+parent: "CLI"
+---
+{% raw %}
 # keramos package verify
 
 Verify a `.keramos.tgz` archive's `.prov` signature against a public key or
@@ -61,3 +66,4 @@ Error: signature verification failed
 - [`package`](package.md)
 - [`keyring`](keyring.md) — manage trusted public keys
 - [`pull`](pull.md) · [`install`](install.md) — verify inline with `--verify`
+{% endraw %}

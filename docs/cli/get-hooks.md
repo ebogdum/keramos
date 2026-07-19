@@ -1,3 +1,8 @@
+---
+title: "keramos get hooks"
+parent: "CLI"
+---
+{% raw %}
 # keramos get hooks
 
 `keramos get hooks` lists the hooks recorded for a release together with each
@@ -79,3 +84,4 @@ keramos get hooks hello -n prod -o json | jq '.[] | select(.status == "Failed")'
 - [`get`](get.md) — the parent command
 - [`get all`](get-all.md) — hooks plus the rest of the record
 - [`history`](history.md) — the revisions whose hooks you can inspect
+{% endraw %}

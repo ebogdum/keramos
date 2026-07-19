@@ -1,3 +1,9 @@
+---
+title: "Math and Logic functions"
+parent: "Functions"
+grand_parent: "Templates"
+---
+{% raw %}
 # Math and Logic functions
 
 > **Pipeline convention:** `${value | f x}` = `f(value, x)`.
@@ -168,3 +174,4 @@ ${"hi" | ternary "a" "b"}      → a
 #   present → renders `field: <value>`
 #   empty   → the `field:` key disappears
 ```
+{% endraw %}

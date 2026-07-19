@@ -1,3 +1,8 @@
+---
+title: "keramos get metadata"
+parent: "CLI"
+---
+{% raw %}
 # keramos get metadata
 
 `keramos get metadata` prints a release's high-level metadata only — name,
@@ -91,3 +96,4 @@ keramos get metadata hello -n prod -o json | jq -r '.package.version'
 - [`get all`](get-all.md) — metadata plus the full record
 - [`status`](status.md) — current revision plus per-resource readiness
 - [`history`](history.md) — every revision's metadata in one table
+{% endraw %}

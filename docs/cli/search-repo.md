@@ -1,3 +1,8 @@
+---
+title: "keramos search repo"
+parent: "CLI"
+---
+{% raw %}
 # keramos search repo
 
 `keramos search repo` searches the repositories you have added with
@@ -61,3 +66,4 @@ into `keramos pull` or `keramos install`.
 - [`repo`](repo.md) — add the repositories searched here
 - [`pull`](pull.md) — download a matched chart
 - [`install`](install.md) — install a matched package
+{% endraw %}

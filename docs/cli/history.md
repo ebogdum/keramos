@@ -1,3 +1,8 @@
+---
+title: "keramos history"
+parent: "CLI"
+---
+{% raw %}
 # keramos history
 
 `keramos history` prints every stored revision of one release, oldest first, so
@@ -87,3 +92,4 @@ Drop `--max` and all four revisions print, revision 1 first.
 - [`status`](status.md) — the current revision on its own
 - [`audit`](audit.md) — who ran each revision and with which flags
 - [`get`](get.md) — the manifest or values at a specific revision
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "keramos install"
+parent: "CLI"
+---
+{% raw %}
 # keramos install
 
 `keramos install` renders a package directory and applies it to the cluster as a
@@ -146,3 +151,4 @@ keramos install web ./web --dry-run client
 - [`uninstall`](uninstall.md) — remove a release
 - [`plan`](plan.md) — preview what an install or upgrade would change
 - [`status`](status.md) — inspect a release after installing
+{% endraw %}

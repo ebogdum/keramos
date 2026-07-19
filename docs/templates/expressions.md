@@ -1,3 +1,8 @@
+---
+title: "Expression syntax"
+parent: "Templates"
+---
+{% raw %}
 # Expression syntax
 
 Keramos templates are YAML files with `${...}` expressions that you interpolate
@@ -344,3 +349,4 @@ what a `data:` value must be.
 - [Control flow](control-flow.md) — `$if`, `$each`, `$switch`, `$include`
 - [Function reference](functions.md) — the full function catalogue
 - [Capabilities](capabilities.md) — the `capabilities` namespace and `lookup`
+{% endraw %}

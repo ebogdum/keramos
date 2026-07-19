@@ -1,3 +1,8 @@
+---
+title: "keramos get values"
+parent: "CLI"
+---
+{% raw %}
 # keramos get values
 
 `keramos get values` prints the values recorded for a release — the user-supplied
@@ -77,3 +82,4 @@ replicaCount: 3
 - [`get`](get.md) — the parent command
 - [`get all`](get-all.md) — values plus the rest of the record
 - `get provenance` — where each merged value came from
+{% endraw %}

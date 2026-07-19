@@ -1,3 +1,8 @@
+---
+title: "keramos keyring remove"
+parent: "CLI"
+---
+{% raw %}
 # keramos keyring remove
 
 ## Synopsis
@@ -78,3 +83,4 @@ installed.`, and packages signed by it no longer pass `--verify`.
 - [`keyring add`](keyring-add.md) — install a key
 - [`keyring list`](keyring-list.md) — find the fingerprint or file name
 - [`package verify`](package-verify.md) — verify a package against the keyring
+{% endraw %}

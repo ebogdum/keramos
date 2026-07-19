@@ -1,3 +1,8 @@
+---
+title: "keramos workspace uninstall"
+parent: "CLI"
+---
+{% raw %}
 # keramos workspace uninstall
 
 ## Synopsis
@@ -98,3 +103,4 @@ reported.
 - [`workspace`](workspace.md) — the workspace index
 - [`workspace install`](workspace-install.md) — the forward-order counterpart
 - [`uninstall`](uninstall.md) — the single-release analogue
+{% endraw %}

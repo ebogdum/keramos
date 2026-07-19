@@ -1,3 +1,8 @@
+---
+title: "keramos workspace plan"
+parent: "CLI"
+---
+{% raw %}
 # keramos workspace plan
 
 ## Synopsis
@@ -99,3 +104,4 @@ and it would join `postgres` at level 0 and run alongside it under `--parallel`.
 - [`workspace install`](workspace-install.md), [`workspace upgrade`](workspace-upgrade.md)
   — run the members in this order
 - [`plan`](plan.md) — the single-release analogue
+{% endraw %}

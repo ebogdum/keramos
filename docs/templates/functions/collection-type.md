@@ -1,3 +1,9 @@
+---
+title: "Collection and Type functions"
+parent: "Functions"
+grand_parent: "Templates"
+---
+{% raw %}
 # Collection and Type functions
 
 > Pipeline convention: `${value | f x}` is evaluated as `f(value, x)`.
@@ -185,3 +191,4 @@ ${"true" | toBool}   → true
 ${0 | toBool}        → false
 ${nil | toBool}      → false
 ```
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "keramos helm-compat export"
+parent: "CLI"
+---
+{% raw %}
 # keramos helm-compat export
 
 `keramos helm-compat export` writes a keramos package out as a Helm v3 chart so that
@@ -82,3 +87,4 @@ recognises the chart. Alongside it sit the copied `values.yaml` and the
 - [`helm-compat report`](helm-compat-report.md)
 - [`migrate`](migrate.md) — the reverse direction: Helm chart to keramos package
 - [`template`](template.md) — render a keramos package to static manifests
+{% endraw %}

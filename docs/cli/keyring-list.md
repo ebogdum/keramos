@@ -1,3 +1,8 @@
+---
+title: "keramos keyring list"
+parent: "CLI"
+---
+{% raw %}
 # keramos keyring list
 
 ## Synopsis
@@ -63,3 +68,4 @@ No keys installed.
 - [`keyring add`](keyring-add.md) — install a key
 - [`keyring remove`](keyring-remove.md) — remove a key
 - [`package verify`](package-verify.md) — verify a package against the keyring
+{% endraw %}

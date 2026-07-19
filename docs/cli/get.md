@@ -1,3 +1,8 @@
+---
+title: "keramos get"
+parent: "CLI"
+---
+{% raw %}
 # keramos get
 
 `keramos get` reads back what keramos recorded for a release. Each subcommand prints
@@ -45,3 +50,4 @@ subcommands inherit the global flags (`-n/--namespace`, `--kube-context`,
 - [`history`](history.md) — list a release's revisions
 - [`status`](status.md) — current status of a release
 - [`releases`](releases.md) — list installed releases
+{% endraw %}

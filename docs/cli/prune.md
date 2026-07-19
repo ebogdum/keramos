@@ -1,3 +1,8 @@
+---
+title: "keramos prune"
+parent: "CLI"
+---
+{% raw %}
 # keramos prune
 
 `keramos prune` deletes old superseded revisions from a release's history, keeping
@@ -111,3 +116,4 @@ pruned mychart revision 1
 - [`history`](history.md) — list the revisions prune trims
 - [`uninstall`](uninstall.md) — remove a release and its resources entirely
 - [`rollback`](rollback.md) — revert to a retained revision
+{% endraw %}

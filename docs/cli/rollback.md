@@ -1,3 +1,8 @@
+---
+title: "keramos rollback"
+parent: "CLI"
+---
+{% raw %}
 # keramos rollback
 
 `keramos rollback` re-applies a previous revision of a release and records the
@@ -109,3 +114,4 @@ revision — nothing was overwritten.
 - [`status`](status.md) — confirm the current revision after rolling back
 - [`upgrade`](upgrade.md) — the forward operation rollback reverses
 - [`audit`](audit.md) — who ran the rollback, when, and with which flags
+{% endraw %}

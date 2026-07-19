@@ -1,3 +1,8 @@
+---
+title: "keramos search hub"
+parent: "CLI"
+---
+{% raw %}
 # keramos search hub
 
 `keramos search hub` queries Artifact Hub (or another compatible endpoint) for
@@ -79,3 +84,4 @@ keramos search hub '^(postgres|mysql|mariadb)' --regexp --max-results 5
 - [`search repo`](search-repo.md) — search added repositories instead
 - [`repo add`](repo-add.md) — add a repository you found
 - [`pull`](pull.md) — download a matched chart
+{% endraw %}

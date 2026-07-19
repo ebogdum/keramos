@@ -1,3 +1,8 @@
+---
+title: "keramos workspace status"
+parent: "CLI"
+---
+{% raw %}
 # keramos workspace status
 
 ## Synopsis
@@ -79,3 +84,4 @@ status is `not deployed`. Both rows show `apps`, inherited from
 - [`workspace install`](workspace-install.md), [`workspace upgrade`](workspace-upgrade.md)
   — bring members up to a deployed state
 - [`status`](status.md) — the single-release analogue
+{% endraw %}

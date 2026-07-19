@@ -1,3 +1,8 @@
+---
+title: "keramos show readme"
+parent: "CLI"
+---
+{% raw %}
 # keramos show readme
 
 `keramos show readme` prints a package's README to stdout.
@@ -51,3 +56,4 @@ Pipe it through a renderer for nicer display, for example
 - [`show`](show.md) — the show command index
 - [`show all`](show-all.md) — chart, values, and README together
 - [`show chart`](show-chart.md) — the package metadata
+{% endraw %}

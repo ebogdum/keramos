@@ -1,3 +1,8 @@
+---
+title: "keramos multi-install"
+parent: "CLI"
+---
+{% raw %}
 # keramos multi-install
 
 Install one package as the same release into several clusters in a single
@@ -107,3 +112,4 @@ cluster is left in a partial state.
 - [`install`](install.md) — install one release into a single cluster
 - [`workspace`](workspace.md) — drive many releases across contexts from a workspace file
 - [`upgrade`](upgrade.md) — upgrade an existing release
+{% endraw %}

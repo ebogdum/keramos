@@ -1,3 +1,9 @@
+---
+title: "Sequence, Sprig-parity, and External functions"
+parent: "Functions"
+grand_parent: "Templates"
+---
+{% raw %}
 # Sequence, Sprig-parity, and External functions
 
 > **Pipeline note.** `${value | f x}` = `f(value, x)`. Ranges are capped at 65536 items.
@@ -293,3 +299,4 @@ ${"PATH" | env}   → (env var value; requires KERAMOS_RENDER_ENV=1)
 
 ### `getHostByName`
 `getHostByName(name)` → string — resolve a hostname to its first IP (gated behind `KERAMOS_RENDER_NETWORK=1`).
+{% endraw %}

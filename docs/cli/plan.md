@@ -1,3 +1,8 @@
+---
+title: "keramos plan"
+parent: "CLI"
+---
+{% raw %}
 # keramos plan
 
 ## Synopsis
@@ -115,3 +120,4 @@ keramos plan --format json > plan.json
 - [`diff`](diff.md) — compare two files/versions (no cluster)
 - [`drift`](drift.md) — compare package, state, and the live cluster
 - [`upgrade`](upgrade.md)
+{% endraw %}

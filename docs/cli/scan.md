@@ -1,3 +1,8 @@
+---
+title: "keramos scan"
+parent: "CLI"
+---
+{% raw %}
 # keramos scan
 
 `keramos scan` looks across a directory of keramos packages, finds the values and
@@ -102,3 +107,4 @@ for p in ./packages/*/; do keramos lint "$p"; done
 
 - [`lint`](lint.md) — validate the rewritten packages
 - [`dependency`](dependency.md) — manage the layers scan produces
+{% endraw %}

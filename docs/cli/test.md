@@ -1,3 +1,8 @@
+---
+title: "keramos test"
+parent: "CLI"
+---
+{% raw %}
 # keramos test
 
 `keramos test` runs a deployed release's stored test manifests against the live
@@ -128,3 +133,4 @@ debug.
 - [`upgrade`](upgrade.md) — upgrade a release and refresh its stored tests
 - [`lint`](lint.md) — validate a package before deploying
 - [`get`](get.md) — inspect a release's stored manifests and hooks
+{% endraw %}

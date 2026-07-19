@@ -1,3 +1,8 @@
+---
+title: "keramos repo update"
+parent: "CLI"
+---
+{% raw %}
 # keramos repo update
 
 Re-fetch the index of every registered repository.
@@ -60,3 +65,4 @@ my-charts/redis   1.4.0           7.2.4         In-memory data store
 - [`repo add`](repo-add.md) — register a repository first
 - [`search`](search.md) — search the updated indexes
 - [`pull`](pull.md) — download a chart
+{% endraw %}

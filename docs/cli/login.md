@@ -1,3 +1,8 @@
+---
+title: "keramos login"
+parent: "CLI"
+---
+{% raw %}
 # keramos login
 
 Store credentials for a package registry so later pushes and pulls to that
@@ -83,3 +88,4 @@ echo "$REGISTRY_PASSWORD" | keramos login registry.example.com -u alice --passwo
 - [`pull`](pull.md) — download a chart from a repository
 - [`install`](install.md)
 - [`registry`](registry.md)
+{% endraw %}

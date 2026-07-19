@@ -1,3 +1,10 @@
+---
+title: "CLI"
+nav_order: 3
+has_children: true
+has_toc: false
+---
+{% raw %}
 # CLI reference
 
 Keramos's command-line interface is rooted at `keramos`. Every command has a `--help` output reachable via `keramos <cmd> --help`; this directory holds the long-form reference for each, with description, every flag, and examples.
@@ -165,3 +172,4 @@ Keramos prints both the textual error and the numeric code to stderr; scripts ca
 | [`version`](version.md) | Print the keramos version. |
 | [`env`](env.md) | Print keramos's environment information. |
 | [`completion`](completion.md) | Generate shell completion scripts. |
+{% endraw %}

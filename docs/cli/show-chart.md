@@ -1,3 +1,8 @@
+---
+title: "keramos show chart"
+parent: "CLI"
+---
+{% raw %}
 # keramos show chart
 
 `keramos show chart` prints a package's `keramos.yaml` metadata unchanged.
@@ -49,3 +54,4 @@ Pipe it through `yq` to pull a single field, for example
 - [`show`](show.md) — the show command index
 - [`show values`](show-values.md) — the package's default values
 - [`show all`](show-all.md) — chart, values, and README together
+{% endraw %}

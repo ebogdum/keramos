@@ -1,3 +1,8 @@
+---
+title: "keramos repo"
+parent: "CLI"
+---
+{% raw %}
 # keramos repo
 
 `keramos repo` manages the list of HTTP package repositories that keramos searches
@@ -32,3 +37,4 @@ keramos repo [command] [flags]
 - [`search`](search.md) — find charts across your registered repositories
 - [`pull`](pull.md) — download a chart from a repository
 - [`install`](install.md) — install a package as a release
+{% endraw %}

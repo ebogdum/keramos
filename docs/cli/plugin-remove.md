@@ -1,3 +1,8 @@
+---
+title: "keramos plugin remove"
+parent: "CLI"
+---
+{% raw %}
 # keramos plugin remove
 
 ## Synopsis
@@ -53,3 +58,4 @@ keramos plugin rm hello
 - [`plugin install`](plugin-install.md)
 - [`plugin list`](plugin-list.md)
 - [`plugin update`](plugin-update.md)
+{% endraw %}

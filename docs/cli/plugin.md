@@ -1,3 +1,8 @@
+---
+title: "keramos plugin"
+parent: "CLI"
+---
+{% raw %}
 # keramos plugin
 
 ## Synopsis
@@ -42,3 +47,4 @@ keramos backup --release web        # "backup" now runs as a keramos command
 - [`marketplace`](marketplace.md) — find and verify signed plugins to install
 - [`plugin install`](plugin-install.md)
 - [`plugin list`](plugin-list.md)
+{% endraw %}

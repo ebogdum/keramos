@@ -1,3 +1,8 @@
+---
+title: "keramos env"
+parent: "CLI"
+---
+{% raw %}
 # keramos env
 
 `keramos env` prints the resolved paths and settings keramos uses, one
@@ -72,3 +77,4 @@ the values you expect.
 
 - [`config`](config.md) — build a values file interactively
 - [`version`](version.md) — print the keramos build version
+{% endraw %}

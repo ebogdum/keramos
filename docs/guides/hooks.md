@@ -1,3 +1,8 @@
+---
+title: "Hooks"
+parent: "Guides"
+---
+{% raw %}
 # Hooks
 
 Hooks are Job- or Pod-shaped resources that keramos runs at specific points in a
@@ -300,3 +305,4 @@ Pairs naturally with `requires:` in `keramos.yaml`.
 - [Package anatomy](packages.md) — `hooks/` and `tests/` in context.
 - [`keramos test`](../cli/test.md) and [`keramos get`](../cli/get.md).
 - [Template expressions](../templates/expressions.md) — the hook body language.
+{% endraw %}

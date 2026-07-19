@@ -1,3 +1,8 @@
+---
+title: "Glossary"
+nav_order: 9
+---
+{% raw %}
 # Keramos glossary — terminology reference
 
 Every term keramos uses, alphabetised, with links to the relevant guides.
@@ -296,3 +301,4 @@ Members are separate releases installed in topological order.
 - [Use cases](use-cases.md) — by role
 - [Comparison with other tools](comparison.md)
 - [Documentation map](../README.md#documentation-map)
+{% endraw %}

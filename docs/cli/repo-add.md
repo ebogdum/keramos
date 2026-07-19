@@ -1,3 +1,8 @@
+---
+title: "keramos repo add"
+parent: "CLI"
+---
+{% raw %}
 # keramos repo add
 
 Register an HTTP package repository under a name and URL.
@@ -71,3 +76,4 @@ Update complete.
 - [`repo list`](repo-list.md) — confirm the entry was added
 - [`login`](login.md) — store credentials for a registry host
 - [`search`](search.md) · [`pull`](pull.md)
+{% endraw %}

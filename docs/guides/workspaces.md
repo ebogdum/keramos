@@ -1,3 +1,8 @@
+---
+title: "Manage a workspace of packages"
+parent: "Guides"
+---
+{% raw %}
 # Manage a workspace of packages
 
 A workspace is a `keramos-workspace.yaml` file plus a tree of member packages.
@@ -288,3 +293,4 @@ Templates reference it the same way regardless of where the member sits:
   sources
 - [Layers](layers.md) — compose one release from reusable pieces
 - [Values](values.md) — profiles and environments
+{% endraw %}

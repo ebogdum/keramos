@@ -1,3 +1,8 @@
+---
+title: "keramos dependency list"
+parent: "CLI"
+---
+{% raw %}
 # keramos dependency list
 
 `keramos dependency list` shows every layer and required package your package
@@ -87,3 +92,4 @@ same command reports every `STATUS` as `locked`.
 - [`dependency update`](dependency-update.md) — pin these entries into `keramos.lock`
 - [`dependency tree`](dependency-tree.md) — see nested layers, not just the top level
 - [`dependency build`](dependency-build.md) — download the resolved dependencies
+{% endraw %}

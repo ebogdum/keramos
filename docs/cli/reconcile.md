@@ -1,3 +1,8 @@
+---
+title: "keramos reconcile"
+parent: "CLI"
+---
+{% raw %}
 # keramos reconcile
 
 `keramos reconcile` re-applies a release's stored manifest onto the cluster,
@@ -99,3 +104,4 @@ and leave the cluster alone.
 - [`drift`](drift.md) — detect the divergence reconcile fixes
 - [`upgrade`](upgrade.md) — apply new package or values (creates a revision)
 - [`get manifest`](get-manifest.md) — inspect the stored manifest reconcile re-applies
+{% endraw %}

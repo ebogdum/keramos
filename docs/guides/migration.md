@@ -1,3 +1,8 @@
+---
+title: "Migrate a Helm chart to a keramos package"
+parent: "Guides"
+---
+{% raw %}
 # Migrate a Helm chart to a keramos package
 
 `keramos migrate` converts an existing **Helm chart** directory into a **keramos
@@ -184,3 +189,4 @@ under keramos forever.
   [`keramos helm-compat report`](../cli/helm-compat-report.md)
 - [`keramos lint`](../cli/lint.md) — validate the converted package
 - [Workspaces](workspaces.md) — slot the migrated package into a workspace
+{% endraw %}

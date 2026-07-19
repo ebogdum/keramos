@@ -1,3 +1,8 @@
+---
+title: "keramos config"
+parent: "CLI"
+---
+{% raw %}
 # keramos config
 
 `keramos config` walks a package's `values.schema.json` interactively and writes
@@ -79,3 +84,4 @@ it.
 - [`values`](values.md) — resolve and trace the merged values
 - [`show values`](show-values.md) — print the package's default `values.yaml`
 - [`install`](install.md) — install using a values file (`-f`)
+{% endraw %}

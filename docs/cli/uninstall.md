@@ -1,3 +1,8 @@
+---
+title: "keramos uninstall"
+parent: "CLI"
+---
+{% raw %}
 # keramos uninstall
 
 `keramos uninstall` deletes a release's resources from the cluster, keeping its
@@ -116,3 +121,4 @@ keramos uninstall web -n apps --ignore-not-found
 - [`purge`](purge.md) — remove keramos-managed resources in bulk
 - [`history`](history.md) — list a release's revisions
 - [`rollback`](rollback.md) — restore an earlier revision (needs kept history)
+{% endraw %}

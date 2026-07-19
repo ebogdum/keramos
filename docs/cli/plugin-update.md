@@ -1,3 +1,8 @@
+---
+title: "keramos plugin update"
+parent: "CLI"
+---
+{% raw %}
 # keramos plugin update
 
 ## Synopsis
@@ -56,3 +61,4 @@ keramos plugin up backup
 - [`plugin install`](plugin-install.md)
 - [`plugin list`](plugin-list.md)
 - [`plugin remove`](plugin-remove.md)
+{% endraw %}

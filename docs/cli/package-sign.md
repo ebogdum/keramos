@@ -1,3 +1,8 @@
+---
+title: "keramos package sign"
+parent: "CLI"
+---
+{% raw %}
 # keramos package sign
 
 Sign an existing `.keramos.tgz` archive with a PGP private key, producing a
@@ -57,3 +62,4 @@ The verify command exits 0 with no output, confirming the signature is valid.
 - [`package verify`](package-verify.md) — check the signature
 - [`keyring`](keyring.md) — manage trusted public keys
 - [`publish`](publish.md)
+{% endraw %}

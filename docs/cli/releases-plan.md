@@ -1,3 +1,8 @@
+---
+title: "keramos releases plan"
+parent: "CLI"
+---
+{% raw %}
 # keramos releases plan
 
 ## Synopsis
@@ -85,3 +90,4 @@ it is placed after both. That is exactly the order `keramos releases install` an
 - [`releases`](releases.md) — the parent command and the spec-file format
 - [`install`](releases-install.md) — apply the set in this order
 - [`upgrade`](releases-upgrade.md) — upgrade the set in this order
+{% endraw %}

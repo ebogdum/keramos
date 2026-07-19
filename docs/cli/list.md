@@ -1,3 +1,8 @@
+---
+title: "keramos list"
+parent: "CLI"
+---
+{% raw %}
 # keramos list
 
 `keramos list` enumerates releases in a namespace, one row per release, showing
@@ -104,3 +109,4 @@ Add `--all` and the `cache` row appears; add `--sort-by date --reverse` and
 - [`status`](status.md) — the fuller record for a single release
 - [`history`](history.md) — every revision of one release
 - [`get`](get.md) — values, manifest, and notes for a release
+{% endraw %}

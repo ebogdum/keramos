@@ -1,3 +1,8 @@
+---
+title: "keramos logout"
+parent: "CLI"
+---
+{% raw %}
 # keramos logout
 
 Remove the stored credentials for a registry host.
@@ -56,3 +61,4 @@ Not logged in to registry.example.com
 - [`login`](login.md) — store a credential for a host
 - [`publish`](publish.md)
 - [`registry`](registry.md)
+{% endraw %}

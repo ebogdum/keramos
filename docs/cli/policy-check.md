@@ -1,3 +1,8 @@
+---
+title: "keramos policy check"
+parent: "CLI"
+---
+{% raw %}
 # keramos policy check
 
 ## Synopsis
@@ -106,3 +111,4 @@ Now the command exits 0 and the build proceeds.
 - [`policy list`](policy-list.md) — show what rules would run
 - [`template`](template.md) — render the manifest to pipe in
 - [`install`](install.md) — apply the package once it passes
+{% endraw %}

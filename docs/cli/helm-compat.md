@@ -1,3 +1,8 @@
+---
+title: "keramos helm-compat"
+parent: "CLI"
+---
+{% raw %}
 # keramos helm-compat
 
 ## Synopsis
@@ -26,3 +31,4 @@ keramos helm-compat <command> <path>
 
 - [`migrate`](migrate.md) — convert a Helm chart into a native keramos package
 - [`template`](template.md) — render a keramos package to manifests
+{% endraw %}

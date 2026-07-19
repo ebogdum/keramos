@@ -1,3 +1,8 @@
+---
+title: "keramos dependency build"
+parent: "CLI"
+---
+{% raw %}
 # keramos dependency build
 
 `keramos dependency build` resolves every layer and required package declared in
@@ -81,3 +86,4 @@ proof the fetched bytes match what was pinned.
 - [`dependency update`](dependency-update.md) — pin versions into `keramos.lock` first
 - [`dependency tree`](dependency-tree.md) — see what will be downloaded
 - [`install`](install.md) — install the package once dependencies are built
+{% endraw %}

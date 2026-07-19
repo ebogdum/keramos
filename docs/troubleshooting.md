@@ -1,3 +1,8 @@
+---
+title: "Troubleshooting"
+nav_order: 10
+---
+{% raw %}
 # Keramos troubleshooting — common errors and fixes
 
 Look up the error text you saw and follow the fix. If your error isn't here,
@@ -299,3 +304,4 @@ switch to SQL, or split the package.
 - [FAQ](faq.md) — common questions
 - [Glossary](glossary.md) — terminology
 - [Documentation map](../README.md#documentation-map)
+{% endraw %}

@@ -1,3 +1,8 @@
+---
+title: "keramos registry"
+parent: "CLI"
+---
+{% raw %}
 # keramos registry
 
 Push and pull keramos package archives to and from OCI-compliant registries.
@@ -35,3 +40,4 @@ keramos registry pull  oci://ghcr.io/example/charts/my-app:1.0.0 -d ./pulled
 - [`package`](package.md) — build the `.keramos.tgz` archive you push
 - [`publish`](publish.md) — publish to an HTTP API registry instead of OCI
 - [`pull`](pull.md) — fetch from OCI or an HTTP repository by chart name
+{% endraw %}

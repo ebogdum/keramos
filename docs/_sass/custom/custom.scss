@@ -1,0 +1,300 @@
+// Keramos — polish layer over just-the-docs. Imported last, after the theme.
+
+// ----------------------------------------------------------------------------
+// Typography
+// ----------------------------------------------------------------------------
+$keramos-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+$keramos-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+body {
+  font-family: $keramos-sans;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: -0.006em;
+}
+
+h1, h2, h3, h4, h5, h6, .text-alpha, .text-beta, .text-gamma {
+  font-family: $keramos-sans;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h1 { font-weight: 800; }
+
+code, kbd, pre, samp, .highlight, tt {
+  font-family: $keramos-mono;
+  font-variant-ligatures: none;
+}
+
+// ----------------------------------------------------------------------------
+// Links
+// ----------------------------------------------------------------------------
+a {
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: 0.06em;
+  transition: color 0.12s ease;
+}
+
+// ----------------------------------------------------------------------------
+// Sidebar
+// ----------------------------------------------------------------------------
+.side-bar {
+  border-right: 1px solid $border-color;
+  background-image: linear-gradient(180deg, #fbfaff 0%, #f6f4ff 100%);
+}
+
+.site-title {
+  font-weight: 800 !important;
+  letter-spacing: -0.03em;
+  font-size: 1.35rem !important;
+}
+.site-title:hover { background-image: none; }
+
+.site-header { border-bottom: 1px solid $border-color; }
+
+.nav-list .nav-list-item .nav-list-link {
+  transition: background 0.1s ease, color 0.1s ease;
+  border-radius: 6px;
+}
+.nav-list .nav-list-item .nav-list-link:hover {
+  background: rgba(79, 70, 229, 0.06);
+}
+.nav-list .nav-list-item .nav-list-link.active {
+  font-weight: 600;
+  background: rgba(79, 70, 229, 0.09);
+}
+.nav-list .nav-list-item .nav-list-link.active::before {
+  content: "";
+  position: absolute;
+  left: -0.75rem;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 3px;
+  border-radius: 3px;
+  background: $link-color;
+}
+
+// ----------------------------------------------------------------------------
+// Search
+// ----------------------------------------------------------------------------
+.search-input {
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid $border-color;
+}
+.search-input:focus {
+  border-color: $purple-200;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+// ----------------------------------------------------------------------------
+// Main content
+// ----------------------------------------------------------------------------
+.main-content {
+  h1 { font-size: 2rem; margin-top: 0; }
+  h2 {
+    margin-top: 2.4rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid $border-color;
+  }
+
+  a:not(.btn) { color: $link-color; }
+
+  // Code blocks
+  pre.highlight, figure.highlight, div.highlight pre {
+    border: 1px solid $border-color;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(18, 20, 28, 0.04);
+    padding: 0.9rem 1rem;
+  }
+  code {
+    background: $code-background-color;
+    border-radius: 5px;
+    padding: 0.14em 0.4em;
+    font-size: 0.82em;
+  }
+
+  // Tables
+  table {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px $border-color;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  thead th {
+    background: #f7f6fd;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  tbody tr:nth-child(even) { background: #fcfcff; }
+  td, th { border: none; border-bottom: 1px solid $border-color; }
+
+  // Blockquotes
+  blockquote {
+    border-left: 3px solid $purple-200;
+    background: #faf9ff;
+    padding: 0.5rem 1rem;
+    border-radius: 0 8px 8px 0;
+    color: #4a4f5c;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Buttons
+// ----------------------------------------------------------------------------
+.btn-primary {
+  background: linear-gradient(180deg, #5b52ea 0%, #4f46e5 100%);
+  border: none;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.35);
+}
+.btn-primary:hover { background: #4338ca; }
+
+// ----------------------------------------------------------------------------
+// Landing hero + cards (used by index.md)
+// ----------------------------------------------------------------------------
+.keramos-hero {
+  margin: -0.5rem 0 2.5rem;
+  padding: 2.75rem 2.25rem 2.5rem;
+  border-radius: 18px;
+  color: #f5f4ff;
+  background:
+    radial-gradient(1200px 400px at 15% -10%, rgba(139, 122, 255, 0.55), transparent 60%),
+    radial-gradient(900px 500px at 110% 20%, rgba(56, 189, 248, 0.28), transparent 55%),
+    linear-gradient(135deg, #241d5c 0%, #3730a3 45%, #4f46e5 100%);
+  box-shadow: 0 24px 60px -28px rgba(55, 48, 163, 0.7);
+  position: relative;
+  overflow: hidden;
+}
+.keramos-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(600px 300px at 20% 0%, #000 30%, transparent 75%);
+  pointer-events: none;
+}
+.keramos-hero > * { position: relative; z-index: 1; }
+.keramos-hero__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #c7c1ff;
+  margin: 0 0 0.6rem;
+}
+.keramos-hero h1 {
+  font-size: 2.6rem;
+  line-height: 1.05;
+  margin: 0 0 0.7rem;
+  color: #ffffff;
+}
+.keramos-hero p.lead {
+  font-size: 1.1rem;
+  line-height: 1.55;
+  max-width: 46rem;
+  color: #ddd9ff;
+  margin: 0 0 1.5rem;
+}
+.keramos-hero .btn {
+  margin: 0 0.5rem 0.5rem 0;
+}
+.keramos-hero .btn-hero {
+  background: #ffffff;
+  color: #3730a3 !important;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.45);
+}
+.keramos-hero .btn-hero:hover { background: #f0eeff; }
+.keramos-hero .btn-ghost {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.keramos-hero .btn-ghost:hover { background: rgba(255, 255, 255, 0.2); }
+
+.keramos-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+.keramos-card {
+  display: block;
+  padding: 1.15rem 1.2rem;
+  border: 1px solid $border-color;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(18, 20, 28, 0.04);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  color: inherit;
+}
+.keramos-card:hover {
+  transform: translateY(-2px);
+  border-color: $purple-200;
+  box-shadow: 0 12px 28px -16px rgba(79, 70, 229, 0.45);
+  background-image: none;
+}
+.keramos-card__icon {
+  font-size: 1.35rem;
+  line-height: 1;
+  margin-bottom: 0.55rem;
+}
+.keramos-card__title {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  color: $body-heading-color;
+  margin-bottom: 0.25rem;
+}
+.keramos-card__desc {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #5b6270;
+}
+
+.keramos-terminal {
+  background: #12141c;
+  border-radius: 12px;
+  padding: 1rem 1.2rem 1.15rem;
+  margin: 1.5rem 0;
+  box-shadow: 0 20px 45px -25px rgba(18, 20, 28, 0.7);
+  overflow-x: auto;
+}
+.keramos-terminal__dots span {
+  display: inline-block;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.keramos-terminal__dots span:nth-child(1) { background: #ff5f57; }
+.keramos-terminal__dots span:nth-child(2) { background: #febc2e; }
+.keramos-terminal__dots span:nth-child(3) { background: #28c840; }
+.keramos-terminal pre {
+  margin: 0.7rem 0 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: #e6e6f0;
+  font-family: $keramos-mono;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+.keramos-terminal .c-prompt { color: #8b7aff; }
+.keramos-terminal .c-cmd { color: #ffffff; }
+.keramos-terminal .c-out { color: #8b93a7; }
+.keramos-terminal .c-ok { color: #28c840; }
+
+// ----------------------------------------------------------------------------
+// Responsive
+// ----------------------------------------------------------------------------
+@media (max-width: 50rem) {
+  .keramos-hero { padding: 2rem 1.4rem; }
+  .keramos-hero h1 { font-size: 2rem; }
+}

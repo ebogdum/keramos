@@ -1,3 +1,8 @@
+---
+title: "values.yaml"
+parent: "Reference"
+---
+{% raw %}
 # values.yaml
 
 The package's default configuration, sitting beside `keramos.yaml` at the package
@@ -123,3 +128,4 @@ activates any layer whose `condition` is `cache.enabled`.
 - [`keramos template`](../cli/template.md) / [`keramos install`](../cli/install.md) — render values into manifests.
 - [`keramos show values`](../cli/show-values.md), [`keramos get values`](../cli/get-values.md) — inspect defaults and effective values.
 - [Values guide](../guides/values.md), [Layers guide](../guides/layers.md).
+{% endraw %}

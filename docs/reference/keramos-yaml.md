@@ -1,3 +1,8 @@
+---
+title: "keramos.yaml"
+parent: "Reference"
+---
+{% raw %}
 # keramos.yaml
 
 The package manifest at the root of every keramos package. It declares the
@@ -133,3 +138,4 @@ and its templates render into the single `platform-api` release, while
 - [`keramos install`](../cli/install.md) / [`keramos template`](../cli/template.md) — render and apply using the manifest.
 - [`keramos env`](../cli/env.md) — work with declared environments.
 - [Layers guide](../guides/layers.md), [Packages guide](../guides/packages.md).
+{% endraw %}
