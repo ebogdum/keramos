@@ -1,5 +1,6 @@
 ---
 title: "Crypto and Secrets functions"
+nav_order: 6
 parent: "Functions"
 grand_parent: "Templates"
 ---

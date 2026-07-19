@@ -1,5 +1,6 @@
 ---
 title: "values.schema.json"
+nav_order: 3
 parent: "Reference"
 ---
 {% raw %}

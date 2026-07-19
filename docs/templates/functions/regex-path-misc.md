@@ -1,5 +1,6 @@
 ---
 title: "Regex, Path, and Misc functions"
+nav_order: 5
 parent: "Functions"
 grand_parent: "Templates"
 ---

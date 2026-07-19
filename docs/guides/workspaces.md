@@ -1,5 +1,6 @@
 ---
 title: "Manage a workspace of packages"
+nav_order: 8
 parent: "Guides"
 ---
 {% raw %}

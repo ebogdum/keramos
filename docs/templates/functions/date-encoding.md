@@ -1,5 +1,6 @@
 ---
 title: "Date and Encoding functions"
+nav_order: 4
 parent: "Functions"
 grand_parent: "Templates"
 ---

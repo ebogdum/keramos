@@ -1,5 +1,6 @@
 ---
 title: "Sequence, Sprig-parity, and External functions"
+nav_order: 7
 parent: "Functions"
 grand_parent: "Templates"
 ---

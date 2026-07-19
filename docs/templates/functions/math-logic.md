@@ -1,5 +1,6 @@
 ---
 title: "Math and Logic functions"
+nav_order: 3
 parent: "Functions"
 grand_parent: "Templates"
 ---

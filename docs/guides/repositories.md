@@ -1,5 +1,6 @@
 ---
 title: "Host and consume an HTTP repository"
+nav_order: 9
 parent: "Guides"
 ---
 {% raw %}

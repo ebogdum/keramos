@@ -1,5 +1,6 @@
 ---
 title: "String functions"
+nav_order: 1
 parent: "Functions"
 grand_parent: "Templates"
 ---

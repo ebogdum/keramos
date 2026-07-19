@@ -1,5 +1,6 @@
 ---
 title: "Values"
+nav_order: 3
 parent: "Guides"
 ---
 {% raw %}

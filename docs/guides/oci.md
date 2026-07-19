@@ -1,5 +1,6 @@
 ---
 title: "Distribute packages via an OCI registry"
+nav_order: 10
 parent: "Guides"
 ---
 {% raw %}

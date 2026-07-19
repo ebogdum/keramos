@@ -1,5 +1,6 @@
 ---
 title: "Package anatomy"
+nav_order: 2
 parent: "Guides"
 ---
 {% raw %}

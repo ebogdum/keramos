@@ -1,5 +1,6 @@
 ---
 title: "Collection and Type functions"
+nav_order: 2
 parent: "Functions"
 grand_parent: "Templates"
 ---

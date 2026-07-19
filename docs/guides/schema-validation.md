@@ -1,5 +1,6 @@
 ---
 title: "Schema validation"
+nav_order: 4
 parent: "Guides"
 ---
 {% raw %}

@@ -1,5 +1,6 @@
 ---
 title: "Hooks in templates"
+nav_order: 5
 parent: "Templates"
 ---
 {% raw %}

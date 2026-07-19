@@ -1,5 +1,6 @@
 ---
 title: "Plugins"
+nav_order: 12
 parent: "Guides"
 ---
 {% raw %}

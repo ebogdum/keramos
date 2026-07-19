@@ -1,5 +1,6 @@
 ---
 title: "Capabilities"
+nav_order: 6
 parent: "Templates"
 ---
 {% raw %}

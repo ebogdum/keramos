@@ -1,5 +1,6 @@
 ---
 title: "values.yaml"
+nav_order: 2
 parent: "Reference"
 ---
 {% raw %}

@@ -31,6 +31,7 @@ $link-hover-color:        #3730a3;
 // Lines.
 $border-color:            #ecebf5;
 
-// Layout — a hair wider sidebar for long CLI command titles.
+// Layout — wider sidebar for long CLI command titles, and a roomy reading
+// column so prose and tables don't wrap into stubby lines.
 $nav-width: 268px;
-$content-width: 820px;
+$content-width: 1064px;

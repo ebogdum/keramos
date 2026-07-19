@@ -1,5 +1,6 @@
 ---
 title: "Migrate a Helm chart to a keramos package"
+nav_order: 13
 parent: "Guides"
 ---
 {% raw %}

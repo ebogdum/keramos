@@ -1,5 +1,6 @@
 ---
 title: "Functions"
+nav_order: 3
 parent: "Templates"
 has_children: true
 has_toc: false

@@ -1,5 +1,6 @@
 ---
 title: "Control flow"
+nav_order: 2
 parent: "Templates"
 ---
 {% raw %}

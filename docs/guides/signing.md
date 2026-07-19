@@ -1,5 +1,6 @@
 ---
 title: "Sign and verify packages"
+nav_order: 11
 parent: "Guides"
 ---
 {% raw %}

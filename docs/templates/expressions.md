@@ -1,5 +1,6 @@
 ---
 title: "Expression syntax"
+nav_order: 1
 parent: "Templates"
 ---
 {% raw %}
