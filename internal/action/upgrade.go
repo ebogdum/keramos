@@ -509,7 +509,10 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 		return rel, combineFailure(postErr, sec)
 	}
 
-	// Step 10: Mark new revision deployed, all older ones superseded.
+	if "" == opts.DryRun {
+		pruneRemovedResources(client, current.Manifest, manifest)
+	}
+
 	rel.Status = release.StatusDeployed
 	if updateErr := updateReleaseWithRetry(storage, rel); nil != updateErr {
 		return rel, updateErr
@@ -683,6 +686,61 @@ func resourceKey(obj *unstructured.Unstructured) string {
 // computeOrphanedManifest returns the YAML for resources present in failedManifest
 // but absent from previousManifest. These are resources created by the failed upgrade
 // that must be cleaned up during rollback.
+func pruneRemovedResources(client kube.KubeClient, previousManifest, newManifest string) {
+	removed, err := computeOrphanedManifest(previousManifest, newManifest)
+	if nil != err {
+		logger.Warn("could not determine which resources the upgrade removed: %v", err)
+		return
+	}
+	if "" == removed {
+		return
+	}
+
+	retained, retainErr := excludeKinds(removed, "CustomResourceDefinition")
+	if nil != retainErr {
+		logger.Warn("could not filter removed resources: %v", retainErr)
+		return
+	}
+	if "" == retained {
+		return
+	}
+
+	if delErr := client.DeleteManifests(retained); nil != delErr {
+		logger.Warn("failed to delete resources dropped from the package: %v", delErr)
+	}
+}
+
+func excludeKinds(manifest string, kinds ...string) (string, error) {
+	resources, err := kube.ParseManifests(manifest)
+	if nil != err {
+		return "", err
+	}
+
+	excluded := make(map[string]bool, len(kinds))
+	for _, kind := range kinds {
+		excluded[kind] = true
+	}
+
+	var parts []string
+	for _, obj := range resources {
+		if excluded[obj.GetKind()] {
+			logger.Warn("keeping %s/%s: keramos does not delete it automatically", obj.GetKind(), obj.GetName())
+			continue
+		}
+		data, marshalErr := obj.MarshalJSON()
+		if nil != marshalErr {
+			return "", keramoserr.WrapError(keramoserr.ErrKube, "failed to marshal resource", marshalErr)
+		}
+		parts = append(parts, string(data))
+	}
+
+	if 0 == len(parts) {
+		return "", nil
+	}
+
+	return strings.Join(parts, "\n---\n"), nil
+}
+
 func computeOrphanedManifest(failedManifest, previousManifest string) (string, error) {
 	failedResources, err := kube.ParseManifests(failedManifest)
 	if nil != err {

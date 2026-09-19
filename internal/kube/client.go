@@ -15,6 +15,7 @@ import (
 	"github.com/ebogdum/keramos/v3/internal/logger"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -927,7 +928,10 @@ func (c *Client) waitForPVC(ctx context.Context, obj *unstructured.Unstructured)
 			return false, keramoserr.NewErrorf(keramoserr.ErrKube,
 				"PersistentVolumeClaim %s/%s is Lost", ns, name)
 		}
-		return corev1.ClaimBound == pvc.Status.Phase, nil
+		if corev1.ClaimBound == pvc.Status.Phase {
+			return true, nil
+		}
+		return c.bindsOnFirstConsumer(ctx, pvc), nil
 	})
 }
 
@@ -1181,6 +1185,37 @@ func (c *Client) WaitForJob(namespace, name string, timeout time.Duration) error
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func (c *Client) bindsOnFirstConsumer(ctx context.Context, pvc *corev1.PersistentVolumeClaim) bool {
+	className := ""
+	if nil != pvc.Spec.StorageClassName {
+		className = *pvc.Spec.StorageClassName
+	}
+
+	if "" == className {
+		classes, listErr := c.clientset.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
+		if nil != listErr {
+			return false
+		}
+		for i := range classes.Items {
+			if "true" == classes.Items[i].Annotations["storageclass.kubernetes.io/is-default-class"] {
+				className = classes.Items[i].Name
+				break
+			}
+		}
+	}
+
+	if "" == className {
+		return false
+	}
+
+	class, getErr := c.clientset.StorageV1().StorageClasses().Get(ctx, className, metav1.GetOptions{})
+	if nil != getErr || nil == class.VolumeBindingMode {
+		return false
+	}
+
+	return storagev1.VolumeBindingWaitForFirstConsumer == *class.VolumeBindingMode
 }
 
 func (c *Client) requireClientset(kind, name string) error {

@@ -42,7 +42,10 @@ func (c *Client) ResourcesNeedingForce(manifest string) (map[string]bool, error)
 			continue // not present yet — apply will create it normally.
 		}
 		for _, path := range paths {
-			a, _, _ := unstructured.NestedFieldNoCopy(want.Object, append([]string{"spec"}, path...)...)
+			a, declared, _ := unstructured.NestedFieldNoCopy(want.Object, append([]string{"spec"}, path...)...)
+			if !declared {
+				continue
+			}
 			b, _, _ := unstructured.NestedFieldNoCopy(current.Object, append([]string{"spec"}, path...)...)
 			if !reflect.DeepEqual(a, b) {
 				out[resourceKey(want)] = true

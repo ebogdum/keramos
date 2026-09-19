@@ -46,7 +46,11 @@ func EvaluateExpression(expr string, ctx *RenderContext, funcs *FuncRegistry) (a
 		if fn, exists := funcs.Get(name); exists {
 			typed := make([]any, len(args))
 			for i, a := range args {
-				typed[i] = inferArgLiteral(a)
+				resolved, resolveErr := resolveArg(a, ctx)
+				if nil != resolveErr {
+					return nil, resolveErr
+				}
+				typed[i] = resolved
 			}
 			// Bare-call convention: the first arg is the pipeline input
 			// (value), remaining args are extras. This makes
@@ -66,12 +70,8 @@ func EvaluateExpression(expr string, ctx *RenderContext, funcs *FuncRegistry) (a
 			}
 			value = v
 		} else {
-			// Not a known function — fall back to path resolution.
-			v, pErr := resolvePath(firstSeg, ctx)
-			if nil != pErr {
-				return nil, pErr
-			}
-			value = v
+			return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction,
+				"unknown function %q", name).WithExpression(expr)
 		}
 	} else {
 		v, pErr := resolvePath(firstSeg, ctx)
@@ -110,7 +110,11 @@ func EvaluateExpression(expr string, ctx *RenderContext, funcs *FuncRegistry) (a
 
 		typed := make([]any, len(fnArgs))
 		for i, a := range fnArgs {
-			typed[i] = inferArgLiteral(a)
+			resolved, resolveErr := resolveArg(a, ctx)
+			if nil != resolveErr {
+				return nil, resolveErr
+			}
+			typed[i] = resolved
 		}
 		var fnErr error
 		value, fnErr = fn(value, typed...)
@@ -474,15 +478,44 @@ func splitSpaceArgs(s string) []string {
 			inDouble = !inDouble
 		case (' ' == ch || '\t' == ch) && !inSingle && !inDouble:
 			if start < i {
-				out = append(out, stripQuotes(strings.TrimSpace(string(runes[start:i]))))
+				out = append(out, strings.TrimSpace(string(runes[start:i])))
 			}
 			start = i + 1
 		}
 	}
 	if start < len(runes) {
-		out = append(out, stripQuotes(strings.TrimSpace(string(runes[start:]))))
+		out = append(out, strings.TrimSpace(string(runes[start:])))
 	}
 	return out
+}
+
+func isQuotedLiteral(s string) bool {
+	if 2 > len(s) {
+		return false
+	}
+	return ('"' == s[0] && '"' == s[len(s)-1]) || ('\'' == s[0] && '\'' == s[len(s)-1])
+}
+
+func isContextPath(s string) bool {
+	root := s
+	if idx := strings.Index(s, "."); 0 < idx {
+		root = s[:idx]
+	}
+	switch root {
+	case "values", "package", "release", "capabilities":
+		return true
+	}
+	return false
+}
+
+func resolveArg(raw string, ctx *RenderContext) (any, error) {
+	if isQuotedLiteral(raw) {
+		return stripQuotes(raw), nil
+	}
+	if isContextPath(raw) {
+		return resolvePath(raw, ctx)
+	}
+	return inferArgLiteral(stripQuotes(raw)), nil
 }
 
 // parseFuncCall parses a function call like "funcName" or "funcName('arg1', arg2)".
