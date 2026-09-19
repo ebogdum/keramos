@@ -316,8 +316,8 @@ keramos audit hello -n keramos-quickstart
 
 ```
 REVISION    ACTION     USER      STATUS        TIMESTAMP
-1           install    ada    superseded    2026-07-18 22:06:02
-2           upgrade    ada    deployed      2026-07-18 22:07:32
+1           install    ada       superseded    2026-07-18 22:06:02
+2           upgrade    ada       deployed      2026-07-18 22:07:32
 ```
 
 See [`keramos rollback`](../cli/rollback.md) and [`keramos audit`](../cli/audit.md).
