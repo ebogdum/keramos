@@ -35,13 +35,13 @@ type elseIfBranch struct {
 
 // Regex patterns for block detection
 var (
-	reBlockIf      = regexp.MustCompile(`^\s*\{\{-?\s*if\s+(.+?)\s*-?\}\}\s*$`)
-	reBlockElseIf  = regexp.MustCompile(`^\s*\{\{-?\s*else\s+if\s+(.+?)\s*-?\}\}\s*$`)
-	reBlockElse    = regexp.MustCompile(`^\s*\{\{-?\s*else\s*-?\}\}\s*$`)
-	reBlockEnd     = regexp.MustCompile(`^\s*\{\{-?\s*end\s*-?\}\}\s*$`)
-	reBlockRange   = regexp.MustCompile(`^\s*\{\{-?\s*range\s+(.+?)\s*-?\}\}\s*$`)
-	reBlockWith    = regexp.MustCompile(`^\s*\{\{-?\s*with\s+(.+?)\s*-?\}\}\s*$`)
-	reToYamlLine   = regexp.MustCompile(`^\s*\{\{-?\s*toYaml\s+(\S+)\s*\|\s*nindent\s+\d+\s*-?\}\}\s*$`)
+	reBlockIf     = regexp.MustCompile(`^\s*\{\{-?\s*if\s+(.+?)\s*-?\}\}\s*$`)
+	reBlockElseIf = regexp.MustCompile(`^\s*\{\{-?\s*else\s+if\s+(.+?)\s*-?\}\}\s*$`)
+	reBlockElse   = regexp.MustCompile(`^\s*\{\{-?\s*else\s*-?\}\}\s*$`)
+	reBlockEnd    = regexp.MustCompile(`^\s*\{\{-?\s*end\s*-?\}\}\s*$`)
+	reBlockRange  = regexp.MustCompile(`^\s*\{\{-?\s*range\s+(.+?)\s*-?\}\}\s*$`)
+	reBlockWith   = regexp.MustCompile(`^\s*\{\{-?\s*with\s+(.+?)\s*-?\}\}\s*$`)
+	reToYamlLine  = regexp.MustCompile(`^\s*\{\{-?\s*toYaml\s+(\S+)\s*\|\s*nindent\s+\d+\s*-?\}\}\s*$`)
 
 	// Standalone toYaml on its own line: {{- toYaml .Values.x | nindent N }}
 	reToYamlStandalone = regexp.MustCompile(`^\s*\{\{-?\s*toYaml\s+\.Values\.(\S+)\s*\|\s*nindent\s+\d+\s*-?\}\}\s*$`)
@@ -662,6 +662,11 @@ func tryConvertIf(b block, lines []string, filename string, result *MigrateResul
 
 	indent := extractIndent(lines[b.startLine])
 
+	if conditionalHasSiblingKeys(b, lines, indent) {
+		flagBlockForReview(b, lines, filename, result)
+		return false
+	}
+
 	// Simple if without else
 	if -1 == b.elseLine {
 		return tryConvertSimpleIf(b, lines, condRef, indent, bodyStart, bodyEnd, replacements)
@@ -950,4 +955,54 @@ func flagBlockForReview(b block, lines []string, filename string, result *Migrat
 			Original: strings.TrimSpace(lines[b.startLine]),
 		})
 	}
+}
+
+func conditionalHasSiblingKeys(b block, lines []string, indent string) bool {
+	for i := b.startLine - 1; i >= 0; i-- {
+		sibling, stop := siblingKeyAt(lines, i, indent)
+		if stop {
+			break
+		}
+		if sibling {
+			return true
+		}
+	}
+
+	for i := b.endLine + 1; i < len(lines); i++ {
+		sibling, stop := siblingKeyAt(lines, i, indent)
+		if stop {
+			break
+		}
+		if sibling {
+			return true
+		}
+	}
+
+	return false
+}
+
+func siblingKeyAt(lines []string, i int, indent string) (sibling bool, stop bool) {
+	line := lines[i]
+	trimmed := strings.TrimSpace(line)
+
+	if "" == trimmed || strings.HasPrefix(trimmed, "#") {
+		return false, false
+	}
+	if "---" == trimmed {
+		return false, true
+	}
+
+	lineIndent := extractIndent(line)
+	if len(lineIndent) < len(indent) {
+		return false, true
+	}
+	if lineIndent != indent {
+		return false, false
+	}
+	if strings.HasPrefix(trimmed, "{{") || strings.HasPrefix(trimmed, "-") {
+		return false, false
+	}
+
+	colon := strings.Index(trimmed, ":")
+	return 0 < colon, false
 }
