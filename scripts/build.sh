@@ -45,7 +45,6 @@ TARGETS=(
     "openbsd/amd64"
     "openbsd/arm64"
     "netbsd/amd64"
-    "netbsd/arm64"
 )
 
 FAILED=()

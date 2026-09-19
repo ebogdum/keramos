@@ -43,6 +43,10 @@ func newVersionCommand() *cobra.Command {
 		Short: "Print the keramos version",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			version, commit, buildDate := buildMetadata()
+			if "unknown" == commit && "unknown" == buildDate {
+				fmt.Fprintf(cmd.OutOrStdout(), "keramos version %s\n", version)
+				return nil
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "keramos version %s (commit %s, built %s)\n", version, commit, buildDate)
 			return nil
 		},
