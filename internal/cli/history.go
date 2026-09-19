@@ -40,7 +40,10 @@ func runHistory(cmd *cobra.Command, releaseName string, maxRevisions int, output
 		return err
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return storageErr
+	}
 	history, err := storage.History(releaseName)
 	if nil != err {
 		return err

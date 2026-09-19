@@ -124,7 +124,10 @@ func Adopt(client kube.KubeClient, opts *AdoptOptions) (*release.Release, error)
 		ns = "default"
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), ns)
+	storage, storageErr := release.SelectStorage(client.Clientset(), ns)
+	if nil != storageErr {
+		return nil, storageErr
+	}
 	if _, err := storage.Last(opts.ReleaseName); nil == err {
 		return nil, keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
 			"release %s already exists; use 'keramos upgrade' or pick a new name", opts.ReleaseName)

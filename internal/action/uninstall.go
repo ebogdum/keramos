@@ -39,7 +39,10 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 		ns = client.Namespace()
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), ns)
+	storage, storageErr := release.SelectStorage(client.Clientset(), ns)
+	if nil != storageErr {
+		return nil, storageErr
+	}
 
 	// Step 1: Get latest release
 	current, err := storage.Last(opts.ReleaseName)

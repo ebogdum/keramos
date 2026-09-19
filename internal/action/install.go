@@ -178,9 +178,18 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 		return nil, notesErr
 	}
 
-	// Step 5b: Evaluate package policies against the rendered manifest. Deny
-	// violations abort; warns log. A load error is a hard failure so a
-	// corrupt rule file cannot silently disable the security gate.
+	if "" != opts.PostRenderer || 0 < len(opts.PostRenderers) {
+		chain := opts.PostRenderers
+		if 0 == len(chain) && "" != opts.PostRenderer {
+			chain = []string{opts.PostRenderer}
+		}
+		out, prErr := runPostRenderers(chain, manifest, opts.PostRendererTimeout)
+		if nil != prErr {
+			return nil, prErr
+		}
+		manifest = out
+	}
+
 	rules, polErr := policy.LoadRules(packagePath)
 	if nil != polErr {
 		return nil, polErr
@@ -199,18 +208,6 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 			return nil, keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
 				"policy violations:\n%s", policy.FormatHuman(violations))
 		}
-	}
-
-	if "" != opts.PostRenderer || 0 < len(opts.PostRenderers) {
-		chain := opts.PostRenderers
-		if 0 == len(chain) && "" != opts.PostRenderer {
-			chain = []string{opts.PostRenderer}
-		}
-		out, prErr := runPostRenderers(chain, manifest, opts.PostRendererTimeout)
-		if nil != prErr {
-			return nil, prErr
-		}
-		manifest = out
 	}
 
 	// Optionally include CRDs from the crds/ directory. They are tracked on
@@ -279,7 +276,10 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 	}
 
 	// Step 7: Store release as pending
-	storage := release.NewSecretStorage(client.Clientset(), ns)
+	storage, storageErr := release.SelectStorage(client.Clientset(), ns)
+	if nil != storageErr {
+		return nil, storageErr
+	}
 	if storeErr := storage.Create(rel); nil != storeErr {
 		return nil, storeErr
 	}
@@ -397,7 +397,10 @@ func installRequires(client kube.KubeClient, packagePath string, opts *InstallOp
 		ns = "default"
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), ns)
+	storage, storageErr := release.SelectStorage(client.Clientset(), ns)
+	if nil != storageErr {
+		return storageErr
+	}
 
 	for _, reqNode := range requireNodes {
 		// Check if already installed

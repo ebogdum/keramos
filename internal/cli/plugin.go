@@ -43,11 +43,13 @@ func newPluginUpdateCommand() *cobra.Command {
 }
 
 func newPluginInstallCommand() *cobra.Command {
-	return &cobra.Command{
+	var allowHooks bool
+	cmd := &cobra.Command{
 		Use:   "install <source>",
 		Short: "Install a plugin from a git URL or local path",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			plugin.AllowHooks(allowHooks)
 			p, err := plugin.Install(args[0])
 			if nil != err {
 				return err
@@ -57,6 +59,8 @@ func newPluginInstallCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&allowHooks, "allow-hooks", false, "permit the plugin's install hook to execute shell commands")
+	return cmd
 }
 
 func newPluginListCommand() *cobra.Command {

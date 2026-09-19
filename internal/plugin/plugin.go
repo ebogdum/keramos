@@ -315,6 +315,12 @@ func runPluginHook(p *Plugin, dir, hook string) error {
 	if err := validatePluginName(p.Name); nil != err {
 		return err
 	}
+	if !hooksApproved {
+		return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+			"plugin %q wants to run a lifecycle hook:\n  %s\nre-run with --allow-hooks to permit it",
+			p.Name, hook)
+	}
+
 	logger.Log("plugin %q: executing lifecycle hook: %s", p.Name, hook)
 	var cmd *exec.Cmd
 	if "windows" == runtime.GOOS {
@@ -700,4 +706,10 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	return out.Close()
+}
+
+var hooksApproved bool
+
+func AllowHooks(allow bool) {
+	hooksApproved = allow
 }

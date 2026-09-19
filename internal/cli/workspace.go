@@ -189,7 +189,10 @@ func newWorkspaceDiffCommand() *cobra.Command {
 				// Compare the render against the member's stored state, if any.
 				base := ""
 				if client, kErr := kube.NewClient(kubeconfig, kubeContext, m.Namespace); nil == kErr {
-					storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+					storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+					if nil != storageErr {
+						return storageErr
+					}
 					if cur, sErr := storage.Last(m.Name); nil == sErr {
 						base = cur.Manifest
 					}
@@ -235,7 +238,10 @@ func newWorkspaceStatusCommand() *cobra.Command {
 					fmt.Fprintf(cmd.OutOrStdout(), "%-30s %-20s ?          (client error)\n", m.Name, m.Namespace)
 					continue
 				}
-				storage := release.NewSecretStorage(client.Clientset(), m.Namespace)
+				storage, storageErr := release.SelectStorage(client.Clientset(), m.Namespace)
+				if nil != storageErr {
+					return storageErr
+				}
 				rel, lookErr := storage.Last(m.Name)
 				if nil != lookErr || nil == rel {
 					fmt.Fprintf(cmd.OutOrStdout(), "%-30s %-20s -          not deployed\n", m.Name, m.Namespace)
@@ -417,7 +423,10 @@ func waitLevelHealthy(level []workspace.Member, timeout time.Duration) error {
 		if nil != err {
 			return err
 		}
-		storage := release.NewSecretStorage(client.Clientset(), m.Namespace)
+		storage, storageErr := release.SelectStorage(client.Clientset(), m.Namespace)
+		if nil != storageErr {
+			return storageErr
+		}
 		rel, gerr := storage.Last(m.Name)
 		if nil != gerr || nil == rel {
 			continue // member not installed (e.g. dry-run)

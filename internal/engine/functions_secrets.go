@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -127,22 +126,20 @@ func fnExternalSecret(value any, args ...any) (any, error) {
 	if 3 <= len(args) {
 		refresh = coerceString(args[2])
 	}
-	manifest := fmt.Sprintf(`apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: %s
-spec:
-  refreshInterval: %s
-  secretStoreRef:
-    name: %s
-    kind: SecretStore
-  target:
-    name: %s
-    creationPolicy: Owner
-  dataFrom:
-    - extract:
-        key: %s
-`, name, refresh, store, name, remoteKey)
+	manifest, marshalErr := marshalYAML(map[string]any{
+		"apiVersion": "external-secrets.io/v1beta1",
+		"kind":       "ExternalSecret",
+		"metadata":   map[string]any{"name": name},
+		"spec": map[string]any{
+			"refreshInterval": refresh,
+			"secretStoreRef":  map[string]any{"name": store, "kind": "SecretStore"},
+			"target":          map[string]any{"name": name, "creationPolicy": "Owner"},
+			"dataFrom":        []any{map[string]any{"extract": map[string]any{"key": remoteKey}}},
+		},
+	})
+	if nil != marshalErr {
+		return nil, marshalErr
+	}
 	return manifest, nil
 }
 
@@ -169,15 +166,22 @@ func fnSealedSecret(value any, args ...any) (any, error) {
 		return nil, keramoserr.NewError(keramoserr.ErrCLIValidation,
 			"sealedSecret encryptedData must be a map[string]string")
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "apiVersion: bitnami.com/v1alpha1\nkind: SealedSecret\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  encryptedData:\n", name, namespace)
+	encrypted := make(map[string]any, len(data))
 	for k, v := range data {
-		fmt.Fprintf(&b, "    %s: %s\n", k, coerceString(v))
+		encrypted[k] = coerceString(v)
 	}
-	b.WriteString("  template:\n    metadata:\n      name: ")
-	b.WriteString(name)
-	b.WriteString("\n      namespace: ")
-	b.WriteString(namespace)
-	b.WriteString("\n")
-	return b.String(), nil
+
+	manifest, marshalErr := marshalYAML(map[string]any{
+		"apiVersion": "bitnami.com/v1alpha1",
+		"kind":       "SealedSecret",
+		"metadata":   map[string]any{"name": name, "namespace": namespace},
+		"spec": map[string]any{
+			"encryptedData": encrypted,
+			"template":      map[string]any{"metadata": map[string]any{"name": name, "namespace": namespace}},
+		},
+	})
+	if nil != marshalErr {
+		return nil, marshalErr
+	}
+	return manifest, nil
 }

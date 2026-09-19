@@ -1292,3 +1292,39 @@ func (c *Client) checkOwnership(obj *unstructured.Unstructured) error {
 
 	return nil
 }
+
+func (c *Client) RestampOwnership(manifest, releaseName, releaseNamespace string) error {
+	resources, err := ParseManifests(manifest)
+	if nil != err {
+		return err
+	}
+
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{%q:%q,%q:%q}}}`,
+		keramoslabels.ReleaseNameAnnotation, releaseName,
+		keramoslabels.ReleaseNamespaceAnnotation, releaseNamespace)
+
+	for _, obj := range resources {
+		gvr, gvrErr := c.resourceForObj(obj)
+		if nil != gvrErr {
+			return gvrErr
+		}
+
+		ns := c.resolveNamespace(obj)
+		ctx, cancel := c.newContext()
+
+		var patchErr error
+		if "" == ns {
+			_, patchErr = c.dynamic.Resource(gvr).Patch(ctx, obj.GetName(), types.MergePatchType, []byte(patch), metav1.PatchOptions{})
+		} else {
+			_, patchErr = c.dynamic.Resource(gvr).Namespace(ns).Patch(ctx, obj.GetName(), types.MergePatchType, []byte(patch), metav1.PatchOptions{})
+		}
+		cancel()
+
+		if nil != patchErr && !k8serrors.IsNotFound(patchErr) {
+			return keramoserr.WrapErrorf(keramoserr.ErrKube, patchErr,
+				"failed to move ownership of %s/%s", obj.GetKind(), obj.GetName())
+		}
+	}
+
+	return nil
+}

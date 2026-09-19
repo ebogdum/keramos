@@ -314,7 +314,10 @@ func getReleaseRevision(releaseName string, revision int) (*release.Release, err
 		return nil, err
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return nil, storageErr
+	}
 
 	if 0 < revision {
 		return storage.Get(releaseName, revision)

@@ -6,8 +6,10 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/kube"
+	"github.com/ebogdum/keramos/v3/internal/logger"
 	"github.com/ebogdum/keramos/v3/internal/release"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 // newRenameCommand renames a release. Implementation: copy every revision of
@@ -59,6 +61,19 @@ func newRenameCommand() *cobra.Command {
 				copied = append(copied, rev.Revision)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "copied %d revisions from %s to %s\n", len(history), oldName, newName)
+
+			latest := history[len(history)-1]
+			client, clientErr := kube.NewClient(kubeconfig, kubeContext, namespace)
+			if nil != clientErr {
+				return clientErr
+			}
+			if stampErr := client.RestampOwnership(latest.Manifest, newName, client.Namespace()); nil != stampErr {
+				return stampErr
+			}
+			if strings.Contains(latest.Manifest, oldName) {
+				logger.Warn("resources of %s embed the old release name; their object names are unchanged and a later upgrade under %s will create duplicates",
+					oldName, newName)
+			}
 			if keepOld {
 				return nil
 			}
@@ -162,5 +177,5 @@ func storageFor() (release.Storage, error) {
 	if nil != err {
 		return nil, err
 	}
-	return release.SelectStorage(client.Clientset(), namespace)
+	return release.SelectStorage(client.Clientset(), client.Namespace())
 }

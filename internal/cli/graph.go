@@ -30,7 +30,10 @@ so the implicit ordering is made explicit.`,
 			if nil != err {
 				return err
 			}
-			storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+			storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+			if nil != storageErr {
+				return storageErr
+			}
 			var rel *release.Release
 			if 0 < revision {
 				rel, err = storage.Get(args[0], revision)

@@ -61,7 +61,10 @@ func runTest(cmd *cobra.Command, releaseName string, timeout time.Duration, show
 		return err
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return storageErr
+	}
 	rel, err := storage.Last(releaseName)
 	if nil != err {
 		return err

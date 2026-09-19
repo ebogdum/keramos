@@ -28,7 +28,10 @@ without requiring an external audit pipeline.`,
 			if nil != err {
 				return err
 			}
-			storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+			storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+			if nil != storageErr {
+				return storageErr
+			}
 			history, err := storage.History(args[0])
 			if nil != err {
 				return err

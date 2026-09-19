@@ -130,7 +130,10 @@ func newHelmCompatInstallCommand() *cobra.Command {
 			if nil != err {
 				return err
 			}
-			storage := release.NewSecretStorage(client.Clientset(), namespace)
+			storage, storageErr := release.SelectStorage(client.Clientset(), namespace)
+			if nil != storageErr {
+				return storageErr
+			}
 			if existing, _ := storage.Last(name); nil != existing {
 				return keramoserr.NewErrorf(keramoserr.ErrRelease, "release %q already exists; use a different name", name)
 			}

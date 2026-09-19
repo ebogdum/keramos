@@ -38,7 +38,10 @@ func Rollback(client kube.KubeClient, opts *RollbackOptions) (*release.Release, 
 		ns = client.Namespace()
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), ns)
+	storage, storageErr := release.SelectStorage(client.Clientset(), ns)
+	if nil != storageErr {
+		return nil, storageErr
+	}
 
 	// Get current release
 	current, err := storage.Last(opts.ReleaseName)

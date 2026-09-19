@@ -40,7 +40,10 @@ func runStatus(cmd *cobra.Command, releaseName string, revision int, output stri
 		return err
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return storageErr
+	}
 
 	var rel *release.Release
 	if 0 < revision {

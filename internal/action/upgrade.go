@@ -80,7 +80,10 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 		ns = "default"
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), ns)
+	storage, storageErr := release.SelectStorage(client.Clientset(), ns)
+	if nil != storageErr {
+		return nil, storageErr
+	}
 
 	// Step 1: Get latest release
 	current, err := storage.Last(opts.ReleaseName)
@@ -245,6 +248,18 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 		return nil, notesErr
 	}
 
+	if "" != opts.PostRenderer || 0 < len(opts.PostRenderers) {
+		chain := opts.PostRenderers
+		if 0 == len(chain) && "" != opts.PostRenderer {
+			chain = []string{opts.PostRenderer}
+		}
+		out, prErr := runPostRenderers(chain, manifest, opts.PostRendererTimeout)
+		if nil != prErr {
+			return nil, prErr
+		}
+		manifest = out
+	}
+
 	rules, polErr := policy.LoadRules(packagePath)
 	if nil != polErr {
 		return nil, polErr
@@ -263,18 +278,6 @@ func Upgrade(client kube.KubeClient, packagePath string, opts *UpgradeOptions) (
 			return nil, keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
 				"policy violations:\n%s", policy.FormatHuman(violations))
 		}
-	}
-
-	if "" != opts.PostRenderer || 0 < len(opts.PostRenderers) {
-		chain := opts.PostRenderers
-		if 0 == len(chain) && "" != opts.PostRenderer {
-			chain = []string{opts.PostRenderer}
-		}
-		out, prErr := runPostRenderers(chain, manifest, opts.PostRendererTimeout)
-		if nil != prErr {
-			return nil, prErr
-		}
-		manifest = out
 	}
 
 	var crdManifest string

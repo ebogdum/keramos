@@ -18,7 +18,10 @@ import (
 // manifests. It is the data source for the three-way `keramos drift` view.
 // Resources absent from the cluster are omitted from the live manifest.
 func StateAndLiveManifests(client kube.KubeClient, releaseName string) (state string, live string, err error) {
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return "", "", storageErr
+	}
 	current, cErr := storage.Last(releaseName)
 	if nil != cErr {
 		return "", "", cErr
@@ -267,7 +270,10 @@ func Reconcile(client kube.KubeClient, releaseName string, timeout time.Duration
 	if 0 == timeout {
 		timeout = 5 * time.Minute
 	}
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return nil, storageErr
+	}
 	current, err := storage.Last(releaseName)
 	if nil != err {
 		return nil, err

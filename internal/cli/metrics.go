@@ -62,7 +62,10 @@ modes before applying.`,
 			if "" == ns {
 				ns = client.Namespace()
 			}
-			storage := release.NewSecretStorage(client.Clientset(), ns)
+			storage, storageErr := release.SelectStorage(client.Clientset(), ns)
+			if nil != storageErr {
+				return storageErr
+			}
 			rel, err := storage.Last(args[0])
 			if nil != err {
 				return err

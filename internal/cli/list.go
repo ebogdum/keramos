@@ -84,7 +84,10 @@ func runList(cmd *cobra.Command, f *listFilter) error {
 		ns = ""
 	}
 
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return storageErr
+	}
 	releases, err := storage.List(ns)
 	if nil != err {
 		return err

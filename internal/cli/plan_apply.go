@@ -287,7 +287,10 @@ func planBaseManifest(plan *keramosPlan) (base, verb, note string) {
 	if nil != err {
 		return "", "create", "no reachable cluster; showing every resource as a create"
 	}
-	storage := release.NewSecretStorage(client.Clientset(), client.Namespace())
+	storage, storageErr := release.SelectStorage(client.Clientset(), client.Namespace())
+	if nil != storageErr {
+		return "", "create", fmt.Sprintf("could not open release storage (%v); showing every resource as a create", storageErr)
+	}
 	current, err := storage.Last(plan.ReleaseName)
 	if nil != err {
 		var he *keramoserr.KeramosError
