@@ -1,5 +1,11 @@
 module github.com/ebogdum/keramos/v3
 
+retract (
+	v3.0.2 // Superseded; the published archive predates the readiness and supply-chain fixes.
+	v3.0.1 // Superseded; the published archive predates the readiness and supply-chain fixes.
+	v3.0.0 // Published before the module path carried the major version; not installable.
+)
+
 go 1.25.0
 
 toolchain go1.25.10

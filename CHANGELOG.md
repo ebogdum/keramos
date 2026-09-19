@@ -4,6 +4,26 @@ All notable changes to keramos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.3] — 2026-09-19
+
+### Fixed
+
+- Readiness no longer reports a rollout complete before it is. A DaemonSet
+  scheduled onto no nodes counts as ready instead of consuming the whole
+  `--timeout` and letting `--atomic` delete the release, and a claim whose
+  storage class binds on first consumer no longer blocks an install.
+
+### Security
+
+- The digest a repository index declares is verified against the bytes
+  received, dependency names are validated before they are used as paths, and
+  `--verify` fails when there is nothing retained to verify.
+
+### Note
+
+- 3.0.0 through 3.0.2 are retracted. Their published archives are frozen in
+  the module proxy and predate these fixes.
+
 ## [3.0.2] — 2026-09-19
 
 ### Fixed
