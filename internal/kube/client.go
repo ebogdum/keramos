@@ -258,14 +258,14 @@ func (c *Client) Lookup(apiVersion, kind, namespace, name string) (map[string]an
 		var listErr error
 		switch {
 		case "" != namespace && isNamespaced:
-			list, listErr = c.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+			list, listErr = listAllPages(ctx, c.dynamic.Resource(gvr).Namespace(namespace))
 		case isNamespaced:
 			// Namespace-scoped kind with empty namespace: list across all
 			// namespaces using the cluster-scoped client (which the dynamic
 			// client interprets as cross-namespace for namespaced resources).
-			list, listErr = c.dynamic.Resource(gvr).List(ctx, metav1.ListOptions{})
+			list, listErr = listAllPages(ctx, c.dynamic.Resource(gvr))
 		default:
-			list, listErr = c.dynamic.Resource(gvr).List(ctx, metav1.ListOptions{})
+			list, listErr = listAllPages(ctx, c.dynamic.Resource(gvr))
 		}
 		if nil != listErr {
 			if k8serrors.IsNotFound(listErr) {
@@ -687,21 +687,59 @@ func (c *Client) applyResource(obj *unstructured.Unstructured) error {
 	ctx, cancel := c.newContext()
 	defer cancel()
 
-	_, applyErr := resource.Patch(
-		ctx,
-		obj.GetName(),
-		types.ApplyPatchType,
-		data,
-		metav1.PatchOptions{
-			FieldManager: "keramos",
-			Force:        boolPtr(c.forceApply),
-		},
-	)
+	applyErr := retryTransient(ctx, func() error {
+		_, err := resource.Patch(
+			ctx,
+			obj.GetName(),
+			types.ApplyPatchType,
+			data,
+			metav1.PatchOptions{
+				FieldManager: "keramos",
+				Force:        boolPtr(c.forceApply),
+			},
+		)
+		return err
+	})
 	if nil != applyErr {
+		if k8serrors.IsConflict(applyErr) {
+			return keramoserr.WrapErrorf(keramoserr.ErrKube, applyErr,
+				"failed to apply %s/%s: another field manager owns a field this package declares; re-run with --take-ownership or remove the field from the package",
+				obj.GetKind(), obj.GetName())
+		}
 		return keramoserr.WrapErrorf(keramoserr.ErrKube, applyErr, "failed to apply %s/%s", obj.GetKind(), obj.GetName())
 	}
 
 	return nil
+}
+
+func retryTransient(ctx context.Context, attempt func() error) error {
+	backoff := 500 * time.Millisecond
+	var lastErr error
+
+	for try := 0; try < 4; try++ {
+		lastErr = attempt()
+		if nil == lastErr {
+			return nil
+		}
+		if !isTransient(lastErr) {
+			return lastErr
+		}
+		select {
+		case <-ctx.Done():
+			return lastErr
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+
+	return lastErr
+}
+
+func isTransient(err error) bool {
+	if k8serrors.IsTooManyRequests(err) || k8serrors.IsServerTimeout(err) || k8serrors.IsTimeout(err) {
+		return true
+	}
+	return k8serrors.IsInternalError(err)
 }
 
 func (c *Client) deleteResource(obj *unstructured.Unstructured) error {
@@ -1327,4 +1365,31 @@ func (c *Client) RestampOwnership(manifest, releaseName, releaseNamespace string
 	}
 
 	return nil
+}
+
+const listPageSize = 500
+
+func listAllPages(ctx context.Context, lister dynamic.ResourceInterface) (*unstructured.UnstructuredList, error) {
+	var combined *unstructured.UnstructuredList
+	opts := metav1.ListOptions{Limit: listPageSize}
+
+	for {
+		page, err := lister.List(ctx, opts)
+		if nil != err {
+			return nil, err
+		}
+
+		if nil == combined {
+			combined = page
+		} else {
+			combined.Items = append(combined.Items, page.Items...)
+		}
+
+		token := page.GetContinue()
+		if "" == token {
+			combined.SetContinue("")
+			return combined, nil
+		}
+		opts.Continue = token
+	}
 }

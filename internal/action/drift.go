@@ -2,6 +2,7 @@ package action
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -244,12 +245,41 @@ func walkCompare(prefix string, want, live map[string]any, out *[]FieldDiff) {
 			walkCompare(path, wm, lm, out)
 		case []any:
 			lvList, _ := lv.([]any)
-			if !reflect.DeepEqual(wm, lvList) {
-				*out = append(*out, FieldDiff{Path: path, Want: wm, Got: lvList})
-			}
+			compareLists(path, wm, lvList, out)
 		default:
 			if !reflect.DeepEqual(wv, lv) {
 				*out = append(*out, FieldDiff{Path: path, Want: wv, Got: lv})
+			}
+		}
+	}
+}
+
+func compareLists(path string, want, live []any, out *[]FieldDiff) {
+	if len(want) != len(live) {
+		*out = append(*out, FieldDiff{Path: path, Want: want, Got: live})
+		return
+	}
+
+	for i := range want {
+		itemPath := fmt.Sprintf("%s[%d]", path, i)
+		switch wantItem := want[i].(type) {
+		case map[string]any:
+			liveItem, ok := live[i].(map[string]any)
+			if !ok {
+				*out = append(*out, FieldDiff{Path: itemPath, Want: wantItem, Got: live[i]})
+				continue
+			}
+			walkCompare(itemPath, wantItem, liveItem, out)
+		case []any:
+			liveItem, ok := live[i].([]any)
+			if !ok {
+				*out = append(*out, FieldDiff{Path: itemPath, Want: wantItem, Got: live[i]})
+				continue
+			}
+			compareLists(itemPath, wantItem, liveItem, out)
+		default:
+			if !reflect.DeepEqual(want[i], live[i]) {
+				*out = append(*out, FieldDiff{Path: itemPath, Want: want[i], Got: live[i]})
 			}
 		}
 	}
@@ -278,7 +308,7 @@ func Reconcile(client kube.KubeClient, releaseName string, timeout time.Duration
 	if nil != err {
 		return nil, err
 	}
-	driftItems, err := DriftAgainstManifest(client, current.Manifest)
+	driftItems, err := driftAgainstManifestInNamespace(client, current.Manifest, current.Namespace)
 	if nil != err {
 		return nil, err
 	}
