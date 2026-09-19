@@ -19,6 +19,7 @@ func newUninstallCommand() *cobra.Command {
 		ignoreNotFound bool
 		keepHistory    bool
 		noWaitU        bool
+		explicitWait        bool
 	)
 
 	cmd := &cobra.Command{
@@ -46,7 +47,7 @@ func newUninstallCommand() *cobra.Command {
 				NoHooks:        noHooks,
 				Description:    description,
 				IgnoreNotFound: ignoreNotFound,
-				Wait:           !noWaitU,
+				Wait:           explicitWait || !noWaitU,
 			}
 
 			rel, uninstallErr := action.Uninstall(client, opts)
@@ -66,9 +67,7 @@ func newUninstallCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&purge, "purge", false, "delete release history (default: history is kept)")
 	cmd.Flags().BoolVar(&keepHistory, "keep-history", false, "keep release history (default behaviour; explicit positive form)")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "skip lifecycle hooks for this operation")
-	var explicitWait bool
 	cmd.Flags().BoolVar(&explicitWait, "wait", true, "wait for resource deletion to complete (default)")
-	_ = explicitWait // positive form; waiting is the default, toggled off by --no-wait
 	cmd.Flags().BoolVar(&noWaitU, "no-wait", false, "do not wait for resource deletion")
 	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "timeout for resource deletion")
 	cmd.Flags().StringVarP(&output, "output", "o", "table", "output format: table, json, yaml")

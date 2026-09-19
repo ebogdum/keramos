@@ -16,6 +16,7 @@ func newGetCommand() *cobra.Command {
 		Use:   "get",
 		Short: "Get release details",
 		Long:  "Get specific details about a release: values, manifest, notes, or hooks.",
+		Args:  cobra.NoArgs,
 	}
 
 	cmd.AddCommand(newGetValuesCommand())

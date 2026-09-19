@@ -32,6 +32,11 @@ import (
 
 const defaultTimeout = 5 * time.Minute
 
+const (
+	defaultClientQPS   = 50
+	defaultClientBurst = 100
+)
+
 // KubeClient is the interface for Kubernetes cluster operations used by
 // action/, hooks/, and release/ packages. Enables mock testing.
 type KubeClient interface {
@@ -56,7 +61,7 @@ type KubeClient interface {
 
 // Client wraps Kubernetes API access.
 type Client struct {
-	clientset    *kubernetes.Clientset
+	clientset    kubernetes.Interface
 	dynamic      dynamic.Interface
 	config       *rest.Config
 	namespace    string
@@ -89,6 +94,11 @@ func NewClient(kubeconfig, kubeContext, namespace string) (*Client, error) {
 	config, err := clientConfig.ClientConfig()
 	if nil != err {
 		return nil, keramoserr.WrapError(keramoserr.ErrKube, "failed to load kubeconfig", err)
+	}
+
+	if 0 == config.QPS {
+		config.QPS = defaultClientQPS
+		config.Burst = defaultClientBurst
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
@@ -715,6 +725,7 @@ func (c *Client) waitForResource(ctx context.Context, obj *unstructured.Unstruct
 	ns := c.resolveNamespace(obj)
 	name := obj.GetName()
 
+
 	switch kind {
 	case "Deployment":
 		return c.waitForDeployment(ctx, obj)
@@ -723,7 +734,9 @@ func (c *Client) waitForResource(ctx context.Context, obj *unstructured.Unstruct
 	case "Pod":
 		return c.waitForPod(ctx, obj)
 	case "Service":
-		return nil // Services are ready immediately
+		return c.waitForService(ctx, obj)
+	case "PersistentVolumeClaim":
+		return c.waitForPVC(ctx, obj)
 	case "Job":
 		remaining := defaultTimeout
 		if deadline, ok := ctx.Deadline(); ok {
@@ -744,6 +757,10 @@ func (c *Client) waitForResource(ctx context.Context, obj *unstructured.Unstruct
 func (c *Client) waitForDeployment(ctx context.Context, obj *unstructured.Unstructured) error {
 	ns := c.resolveNamespace(obj)
 	name := obj.GetName()
+
+	if err := c.requireClientset(obj.GetKind(), name); nil != err {
+		return err
+	}
 
 	return wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
 		dep, err := c.clientset.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
@@ -806,16 +823,32 @@ func (c *Client) waitForStatefulSet(ctx context.Context, obj *unstructured.Unstr
 	ns := c.resolveNamespace(obj)
 	name := obj.GetName()
 
+	if err := c.requireClientset(obj.GetKind(), name); nil != err {
+		return err
+	}
+
 	return wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
 		ss, err := c.clientset.AppsV1().StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
 		if nil != err {
+			return false, nil
+		}
+		if ss.Status.ObservedGeneration < ss.Generation {
 			return false, nil
 		}
 		replicas := int32(1)
 		if nil != ss.Spec.Replicas {
 			replicas = *ss.Spec.Replicas
 		}
-		return ss.Status.ReadyReplicas >= replicas, nil
+		if ss.Status.UpdatedReplicas < replicas {
+			return false, nil
+		}
+		if ss.Status.ReadyReplicas < replicas {
+			return false, nil
+		}
+		if "" != ss.Status.UpdateRevision && ss.Status.CurrentRevision != ss.Status.UpdateRevision {
+			return false, nil
+		}
+		return true, nil
 	})
 }
 
@@ -823,12 +856,31 @@ func (c *Client) waitForPod(ctx context.Context, obj *unstructured.Unstructured)
 	ns := c.resolveNamespace(obj)
 	name := obj.GetName()
 
+	if err := c.requireClientset(obj.GetKind(), name); nil != err {
+		return err
+	}
+
 	return wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
 		pod, err := c.clientset.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
 		if nil != err {
 			return false, nil
 		}
-		return pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodSucceeded, nil
+		if corev1.PodSucceeded == pod.Status.Phase {
+			return true, nil
+		}
+		if corev1.PodFailed == pod.Status.Phase {
+			return false, keramoserr.NewErrorf(keramoserr.ErrKube,
+				"Pod %s/%s failed: %s", ns, name, pod.Status.Message)
+		}
+		if corev1.PodRunning != pod.Status.Phase {
+			return false, nil
+		}
+		for _, cond := range pod.Status.Conditions {
+			if corev1.PodReady == cond.Type && corev1.ConditionTrue == cond.Status {
+				return true, nil
+			}
+		}
+		return false, nil
 	})
 }
 
@@ -836,12 +888,68 @@ func (c *Client) waitForDaemonSet(ctx context.Context, obj *unstructured.Unstruc
 	ns := c.resolveNamespace(obj)
 	name := obj.GetName()
 
+	if err := c.requireClientset(obj.GetKind(), name); nil != err {
+		return err
+	}
+
 	return wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
 		ds, err := c.clientset.AppsV1().DaemonSets(ns).Get(ctx, name, metav1.GetOptions{})
 		if nil != err {
 			return false, nil
 		}
-		return ds.Status.DesiredNumberScheduled > 0 && ds.Status.NumberReady >= ds.Status.DesiredNumberScheduled, nil
+		if ds.Status.ObservedGeneration < ds.Generation {
+			return false, nil
+		}
+		if 0 == ds.Status.DesiredNumberScheduled {
+			return true, nil
+		}
+		if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
+			return false, nil
+		}
+		return ds.Status.NumberReady >= ds.Status.DesiredNumberScheduled, nil
+	})
+}
+
+func (c *Client) waitForPVC(ctx context.Context, obj *unstructured.Unstructured) error {
+	ns := c.resolveNamespace(obj)
+	name := obj.GetName()
+
+	if err := c.requireClientset(obj.GetKind(), name); nil != err {
+		return err
+	}
+
+	return wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+		pvc, err := c.clientset.CoreV1().PersistentVolumeClaims(ns).Get(ctx, name, metav1.GetOptions{})
+		if nil != err {
+			return false, nil
+		}
+		if corev1.ClaimLost == pvc.Status.Phase {
+			return false, keramoserr.NewErrorf(keramoserr.ErrKube,
+				"PersistentVolumeClaim %s/%s is Lost", ns, name)
+		}
+		return corev1.ClaimBound == pvc.Status.Phase, nil
+	})
+}
+
+func (c *Client) waitForService(ctx context.Context, obj *unstructured.Unstructured) error {
+	ns := c.resolveNamespace(obj)
+	name := obj.GetName()
+
+	serviceType, _, _ := unstructured.NestedString(obj.Object, "spec", "type")
+	if string(corev1.ServiceTypeLoadBalancer) != serviceType {
+		return nil
+	}
+
+	if err := c.requireClientset(obj.GetKind(), name); nil != err {
+		return err
+	}
+
+	return wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+		svc, err := c.clientset.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
+		if nil != err {
+			return false, nil
+		}
+		return 0 < len(svc.Status.LoadBalancer.Ingress), nil
 	})
 }
 
@@ -1073,4 +1181,12 @@ func (c *Client) WaitForJob(namespace, name string, timeout time.Duration) error
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func (c *Client) requireClientset(kind, name string) error {
+	if nil == c.clientset {
+		return keramoserr.NewErrorf(keramoserr.ErrKube,
+			"cannot wait for %s/%s: no Kubernetes client is configured", kind, name)
+	}
+	return nil
 }

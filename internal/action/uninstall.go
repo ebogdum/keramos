@@ -63,7 +63,11 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 	}
 
 	// Step 3: Execute pre-delete hooks (no stored hooks for uninstall, use empty)
-	var parsedHooks []hooks.Hook
+	parsedHooks, hookParseErr := hooks.ParseHooks(current.HookTemplates)
+	if nil != hookParseErr {
+		return current, combineFailure(hookParseErr, markFailed(storage, current))
+	}
+
 	var preResults []release.HookResult
 	var preErr error
 	if !opts.NoHooks {

@@ -30,6 +30,7 @@ func newKeyringCommand() *cobra.Command {
 		Use:   "keyring",
 		Short: "Manage the PGP keyring used for provenance verification",
 		Long:  "Add, list, and remove public keys used to verify .prov sidecars.",
+		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newKeyringListCommand())
 	cmd.AddCommand(newKeyringAddCommand())

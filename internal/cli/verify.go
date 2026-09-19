@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,8 @@ func verifyInstalledSignaturesWithKeyring(packagePath, keyring string) error {
 	if nil != err {
 		return err
 	}
-	if nil == lf {
+	if nil == lf || 0 == len(lf.Dependencies) {
+		logger.Debug("no dependencies to verify for %s", packagePath)
 		return nil
 	}
 
@@ -69,12 +71,14 @@ func verifyInstalledSignaturesWithKeyring(packagePath, keyring string) error {
 	entries, err := os.ReadDir(chartsDir)
 	if nil != err {
 		if os.IsNotExist(err) {
-			return nil
+			return keramoserr.NewErrorf(keramoserr.ErrSignature,
+				"cannot verify: the lock file lists %d dependencies but %s does not exist",
+				len(lf.Dependencies), chartsDir)
 		}
 		return keramoserr.WrapError(keramoserr.ErrSignature, "failed to read packages directory", err)
 	}
 
-	var errs []string
+	provenance := make(map[string]string, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -82,16 +86,33 @@ func verifyInstalledSignaturesWithKeyring(packagePath, keyring string) error {
 		if !strings.HasSuffix(entry.Name(), ".keramos.tgz") {
 			continue
 		}
+		provenance[entry.Name()] = filepath.Join(chartsDir, entry.Name())
+	}
 
-		archivePath := filepath.Join(chartsDir, entry.Name())
+	var errs []string
+	for _, dep := range lf.Dependencies {
+		archiveName := repo.ArchiveFileName(dep.Name, dep.Version)
+		archivePath, ok := provenance[archiveName]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s@%s: no signed archive %s retained to verify against",
+				dep.Name, dep.Version, archiveName))
+			continue
+		}
+		if "" != dep.Digest {
+			if digestErr := repo.VerifyDigest(archivePath, dep.Digest); nil != digestErr {
+				errs = append(errs, fmt.Sprintf("%s@%s: %v", dep.Name, dep.Version, digestErr))
+				continue
+			}
+		}
 		if verifyErr := verifyArchiveSignatureWithKeyring(archivePath, keyring); nil != verifyErr {
-			errs = append(errs, verifyErr.Error())
+			errs = append(errs, fmt.Sprintf("%s@%s: %v", dep.Name, dep.Version, verifyErr))
 		}
 	}
 
 	if 0 < len(errs) {
 		return keramoserr.NewErrorf(keramoserr.ErrSignature,
-			"signature verification failed for %d package(s):\n  %s", len(errs), strings.Join(errs, "\n  "))
+			"signature verification failed for %d of %d dependencies:\n  %s",
+			len(errs), len(lf.Dependencies), strings.Join(errs, "\n  "))
 	}
 
 	logger.Debug("all package signatures verified for %s", packagePath)

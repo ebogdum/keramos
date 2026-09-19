@@ -16,6 +16,7 @@ func newPolicyCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "policy",
 		Short: "Evaluate package policies against rendered manifests",
+		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newPolicyCheckCommand())
 	cmd.AddCommand(newPolicyListCommand())

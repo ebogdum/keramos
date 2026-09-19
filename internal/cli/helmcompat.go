@@ -25,6 +25,7 @@ func newHelmCompatCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "helm-compat",
 		Short: "Run and convert upstream Helm charts",
+		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newHelmCompatRenderCommand())
 	cmd.AddCommand(newHelmCompatInstallCommand())

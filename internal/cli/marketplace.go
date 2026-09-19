@@ -68,6 +68,7 @@ func newMarketplaceCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "marketplace",
 		Short: "Browse and install signed plugins from a keramos marketplace index",
+		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newMarketplaceSearchCommand())
 	cmd.AddCommand(newMarketplaceVerifyCommand())

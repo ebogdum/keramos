@@ -38,6 +38,7 @@ func newReleasesCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "releases",
 		Short: "Manage cross-release dependencies declared in keramos-releases.yaml",
+		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newReleasesPlanCommand())
 	cmd.AddCommand(newReleasesStatusCommand())

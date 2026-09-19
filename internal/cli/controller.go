@@ -104,6 +104,7 @@ func newControllerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "controller",
 		Short: "Reconcile KeramosRelease CRs declared in the cluster",
+		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newControllerInstallCRDCommand())
 	cmd.AddCommand(newControllerRunCommand())

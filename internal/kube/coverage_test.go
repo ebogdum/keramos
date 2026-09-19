@@ -422,7 +422,7 @@ func TestWaitForResource_AllImmediateKinds(t *testing.T) {
 	// These kinds return nil immediately (Service, or fall to default)
 	immediateKinds := []string{
 		"Service", "ConfigMap", "Secret", "Ingress", "CronJob",
-		"PersistentVolumeClaim", "ClusterRole", "RoleBinding",
+		"ClusterRole", "RoleBinding",
 		"CustomResource", "NetworkPolicy", "HorizontalPodAutoscaler",
 	}
 

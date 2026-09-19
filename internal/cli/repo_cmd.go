@@ -16,6 +16,7 @@ func newRepoCommand() *cobra.Command {
 		Use:   "repo",
 		Short: "Manage keramos package repositories",
 		Long:  "Add, list, remove, and update keramos package repositories.",
+		Args:  cobra.NoArgs,
 	}
 
 	cmd.AddCommand(newRepoAddCommand())

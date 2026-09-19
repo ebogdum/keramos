@@ -1,8 +1,10 @@
 package repo
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -254,11 +256,17 @@ func installSingleResolved(absPath string, rd *ResolvedDep) error {
 }
 
 func downloadAndExtract(repoURL, name, version, expectedDigest, destDir string) error {
-	archivePath, err := DownloadPackage(repoURL, name, version)
+	if nameErr := ValidateScopedName(name); nil != nameErr {
+		return keramoserr.WrapErrorf(keramoserr.ErrDependency, nameErr,
+			"refusing to install dependency with unsafe name %q", name)
+	}
+
+	resolved, err := DownloadPackageResolved(repoURL, name, version)
 	if nil != err {
 		return keramoserr.WrapErrorf(keramoserr.ErrDependency, err,
 			"failed to download dependency %s@%s", name, version)
 	}
+	archivePath := resolved.ArchivePath
 	defer os.RemoveAll(filepath.Dir(archivePath))
 
 	// Verify digest if available
@@ -278,8 +286,76 @@ func downloadAndExtract(repoURL, name, version, expectedDigest, destDir string) 
 			"failed to extract dependency %s", name)
 	}
 
+	if retainErr := retainForVerification(resolved, name, version, destDir); nil != retainErr {
+		return retainErr
+	}
+
 	logger.Debug("installed dependency %s version %s", name, version)
 	return nil
+}
+
+func DownloadPackageResolved(repoURL, name, version string) (*ResolvedDownload, error) {
+	client, err := ClientForURL(repoURL)
+	if nil != err {
+		return nil, err
+	}
+	return DownloadPackageResolvedWith(client, repoURL, name, version)
+}
+
+func retainForVerification(resolved *ResolvedDownload, name, version, destDir string) error {
+	packagesDir := packagesRootFor(destDir, name)
+	retained := filepath.Join(packagesDir, ArchiveFileName(name, version))
+
+	if copyErr := copyFile(resolved.ArchivePath, retained); nil != copyErr {
+		return keramoserr.WrapErrorf(keramoserr.ErrDependency, copyErr,
+			"failed to retain archive for %s@%s", name, version)
+	}
+
+	provLocal, provErr := DownloadArchive(resolved.URL + ".prov")
+	if nil != provErr {
+		logger.Debug("no provenance sidecar for %s@%s: %v", name, version, provErr)
+		return nil
+	}
+	defer os.Remove(provLocal)
+
+	if copyErr := copyFile(provLocal, retained+".prov"); nil != copyErr {
+		return keramoserr.WrapErrorf(keramoserr.ErrDependency, copyErr,
+			"failed to retain provenance for %s@%s", name, version)
+	}
+
+	return nil
+}
+
+func packagesRootFor(destDir, name string) string {
+	root := destDir
+	for range strings.Split(filepath.ToSlash(name), "/") {
+		root = filepath.Dir(root)
+	}
+	return root
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if nil != err {
+		return err
+	}
+	defer in.Close()
+
+	if mkErr := os.MkdirAll(filepath.Dir(dst), 0755); nil != mkErr {
+		return mkErr
+	}
+
+	out, err := os.Create(dst)
+	if nil != err {
+		return err
+	}
+	defer out.Close()
+
+	if _, copyErr := io.Copy(out, in); nil != copyErr {
+		return copyErr
+	}
+
+	return out.Close()
 }
 
 func checkDependencyStatus(absPath string, dep pkg.Dependency) DependencyStatus {

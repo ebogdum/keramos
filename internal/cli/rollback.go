@@ -13,6 +13,7 @@ import (
 func newRollbackCommand() *cobra.Command {
 	var (
 		noWait        bool
+		explicitWait        bool
 		timeout       time.Duration
 		description   string
 		noHooks       bool
@@ -53,7 +54,7 @@ func newRollbackCommand() *cobra.Command {
 				ReleaseName:   releaseName,
 				Namespace:     namespace,
 				Revision:      revision,
-				Wait:          !noWait,
+				Wait:          explicitWait || !noWait,
 				Timeout:       timeout,
 				Description:   description,
 				NoHooks:       noHooks,
@@ -75,9 +76,7 @@ func newRollbackCommand() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "don't wait for resources to be ready")
-	var explicitWait bool
 	cmd.Flags().BoolVar(&explicitWait, "wait", false, "wait for resources to be ready (default)")
-	_ = explicitWait
 	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "timeout for readiness wait")
 	cmd.Flags().StringVar(&description, "description", "", "rollback description")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "skip lifecycle hooks for this operation")

@@ -20,6 +20,7 @@ func newSearchCommand() *cobra.Command {
 		Use:   "search",
 		Short: "Search for keramos packages",
 		Long:  "Search configured repositories or Artifact Hub for keramos packages.",
+		Args:  cobra.NoArgs,
 	}
 
 	cmd.AddCommand(newSearchRepoCommand())

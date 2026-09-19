@@ -19,6 +19,7 @@ func newUpgradeCommand() *cobra.Command {
 		setJSON              []string
 		profile              string
 		noWait               bool
+		explicitWait               bool
 		timeout              time.Duration
 		dryRun               string
 		reuseValues          bool
@@ -31,6 +32,7 @@ func newUpgradeCommand() *cobra.Command {
 		noHooks              bool
 		createNamespace      bool
 		includeCRDs          bool
+		skipCRDs             bool
 		labels               []string
 		apiVersions          []string
 		kubeVersion          string
@@ -86,7 +88,7 @@ func newUpgradeCommand() *cobra.Command {
 				SetFiles:             setFiles,
 				SetJSON:              setJSON,
 				Profile:              profile,
-				Wait:                 !noWait,
+				Wait:                 explicitWait || !noWait,
 				Timeout:              timeout,
 				DryRun:               dryRun,
 				ReuseValues:          reuseValues,
@@ -97,7 +99,7 @@ func newUpgradeCommand() *cobra.Command {
 				Atomic:               !noAtomic,
 				NoHooks:              noHooks,
 				CreateNamespace:      createNamespace,
-				IncludeCRDs:          includeCRDs,
+				IncludeCRDs:          includeCRDs && !skipCRDs,
 				Labels:               labelMap,
 				APIVersions:          apiVersions,
 				KubeVersion:          kubeVersion,
@@ -141,9 +143,7 @@ func newUpgradeCommand() *cobra.Command {
 	cmd.Flags().StringArrayVar(&setJSON, "set-json", nil, "set key=<json>; value is parsed as a JSON literal (repeatable)")
 	cmd.Flags().StringVar(&profile, "profile", "", "profile name to apply")
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "don't wait for resources to be ready")
-	var explicitWait bool
 	cmd.Flags().BoolVar(&explicitWait, "wait", false, "wait for resources to be ready (default behaviour)")
-	_ = explicitWait
 	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "timeout for readiness wait")
 	cmd.Flags().StringVar(&dryRun, "dry-run", "", "dry-run mode: 'client' (local render) or 'server' (API validation)")
 	cmd.Flags().BoolVar(&reuseValues, "reuse-values", false, "reuse values from previous release")
@@ -155,7 +155,9 @@ func newUpgradeCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&noForce, "no-force", false, "don't force field ownership on server-side apply")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "skip lifecycle hooks for this operation")
 	cmd.Flags().BoolVar(&createNamespace, "create-namespace", false, "create the release namespace if missing (with --install)")
-	cmd.Flags().BoolVar(&includeCRDs, "include-crds", false, "include CRDs from crds/ in the rendered manifest")
+	cmd.Flags().BoolVar(&skipCRDs, "skip-crds", false, "do not apply the CustomResourceDefinitions in crds/")
+	cmd.Flags().BoolVar(&includeCRDs, "include-crds", true, "apply the CustomResourceDefinitions in crds/ before the templates")
+	_ = cmd.Flags().MarkDeprecated("include-crds", "crds/ is applied by default; use --skip-crds to opt out")
 	cmd.Flags().StringArrayVar(&labels, "labels", nil, "label key=value to attach to the release (repeatable)")
 	cmd.Flags().StringArrayVar(&apiVersions, "api-versions", nil, "Kubernetes API version available for capability checks (repeatable)")
 	cmd.Flags().StringVar(&kubeVersion, "kube-version", "", "override Kubernetes version reported in capabilities")

@@ -23,6 +23,7 @@ func newShowCommand() *cobra.Command {
 		Use:   "show",
 		Short: "Show information about a package",
 		Long:  "Show package metadata, default values, README, or CRDs without installing.",
+		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newShowChartCommand())
 	cmd.AddCommand(newShowValuesCommand())

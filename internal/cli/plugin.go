@@ -14,6 +14,7 @@ func newPluginCommand() *cobra.Command {
 		Use:   "plugin",
 		Short: "Manage keramos plugins",
 		Long:  "Install, list, and remove keramos plugins that extend keramos with custom commands.",
+		Args:  cobra.NoArgs,
 	}
 
 	cmd.AddCommand(newPluginInstallCommand())

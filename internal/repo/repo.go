@@ -248,14 +248,28 @@ func DownloadPackage(repoURL, name, version string) (string, error) {
 
 // DownloadPackageWith downloads a package archive using the provided client.
 func DownloadPackageWith(client *AuthenticatedClient, repoURL, name, version string) (string, error) {
-	idx, err := FetchIndexWith(client, repoURL)
+	resolved, err := DownloadPackageResolvedWith(client, repoURL, name, version)
 	if nil != err {
 		return "", err
+	}
+	return resolved.ArchivePath, nil
+}
+
+type ResolvedDownload struct {
+	ArchivePath string
+	URL         string
+	IndexDigest string
+}
+
+func DownloadPackageResolvedWith(client *AuthenticatedClient, repoURL, name, version string) (*ResolvedDownload, error) {
+	idx, err := FetchIndexWith(client, repoURL)
+	if nil != err {
+		return nil, err
 	}
 
 	entries, ok := idx.Entries[name]
 	if !ok {
-		return "", keramoserr.NewErrorf(keramoserr.ErrRepo, "package %q not found in repository", name)
+		return nil, keramoserr.NewErrorf(keramoserr.ErrRepo, "package %q not found in repository", name)
 	}
 
 	var matchedEntry *IndexEntry
@@ -267,11 +281,11 @@ func DownloadPackageWith(client *AuthenticatedClient, repoURL, name, version str
 	}
 
 	if nil == matchedEntry {
-		return "", keramoserr.NewErrorf(keramoserr.ErrRepo, "version %q of package %q not found", version, name)
+		return nil, keramoserr.NewErrorf(keramoserr.ErrRepo, "version %q of package %q not found", version, name)
 	}
 
 	if 0 == len(matchedEntry.URLs) {
-		return "", keramoserr.NewErrorf(keramoserr.ErrRepo, "no download URL for %s-%s", name, version)
+		return nil, keramoserr.NewErrorf(keramoserr.ErrRepo, "no download URL for %s-%s", name, version)
 	}
 
 	downloadURL := matchedEntry.URLs[0]
@@ -280,10 +294,23 @@ func DownloadPackageWith(client *AuthenticatedClient, repoURL, name, version str
 	}
 
 	if err := validateDownloadHost(repoURL, downloadURL); nil != err {
-		return "", err
+		return nil, err
 	}
 
-	return downloadArchive(client, downloadURL, ArchiveFileName(name, version))
+	archivePath, downloadErr := downloadArchive(client, downloadURL, ArchiveFileName(name, version))
+	if nil != downloadErr {
+		return nil, downloadErr
+	}
+
+	if "" != matchedEntry.Digest {
+		if digestErr := VerifyDigest(archivePath, matchedEntry.Digest); nil != digestErr {
+			os.RemoveAll(filepath.Dir(archivePath))
+			return nil, keramoserr.WrapErrorf(keramoserr.ErrRepo, digestErr,
+				"digest declared by the repository index for %s-%s does not match the downloaded archive", name, version)
+		}
+	}
+
+	return &ResolvedDownload{ArchivePath: archivePath, URL: downloadURL, IndexDigest: matchedEntry.Digest}, nil
 }
 
 // validateDownloadHost ensures the download URL host matches the repository URL host,
@@ -413,7 +440,7 @@ func downloadArchive(client *AuthenticatedClient, archiveURL, fileName string) (
 		}
 	}()
 
-	destPath := filepath.Join(tmpDir, fileName)
+	destPath := filepath.Join(tmpDir, filepath.Base(fileName))
 	outFile, err := os.Create(destPath)
 	if nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrRepo, "failed to create output file", err)

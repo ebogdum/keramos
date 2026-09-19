@@ -12,6 +12,7 @@ func newRegistryCommand() *cobra.Command {
 		Use:   "registry",
 		Short: "Manage OCI registries for keramos packages",
 		Long:  "Login, logout, push, and pull keramos packages to/from OCI-compliant registries.",
+		Args:  cobra.NoArgs,
 	}
 
 	cmd.AddCommand(newRegistryLoginCommand())
