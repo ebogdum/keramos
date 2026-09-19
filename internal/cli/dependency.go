@@ -18,7 +18,7 @@ func newDependencyCommand() *cobra.Command {
 		Aliases: []string{"dep"},
 		Short:   "Manage package layers and dependencies",
 		Long:    "List, update, and build layers and required packages declared in keramos.yaml.",
-		Args:  cobra.NoArgs,
+		Args:    cobra.NoArgs,
 	}
 
 	cmd.AddCommand(newDependencyListCommand())

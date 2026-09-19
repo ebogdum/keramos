@@ -348,6 +348,16 @@ func Install(client kube.KubeClient, packagePath string, opts *InstallOptions) (
 		return rel, updateErr
 	}
 
+	if opts.RecreatePods {
+		if rrErr := recreatePodsForManifest(client, manifest); nil != rrErr {
+			logger.Warn("pod recreation reported: %v", rrErr)
+		}
+	}
+
+	if 0 < opts.HistoryMax {
+		pruneReleaseHistory(storage, opts.ReleaseName, opts.HistoryMax)
+	}
+
 	// Step 13: Install required co-deployed packages. A failure here is
 	// surfaced (not just logged): the primary release IS deployed — rel is
 	// returned — but the caller must know a declared dependency did not install.

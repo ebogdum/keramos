@@ -13,7 +13,7 @@ import (
 func newRollbackCommand() *cobra.Command {
 	var (
 		noWait        bool
-		explicitWait        bool
+		explicitWait  bool
 		timeout       time.Duration
 		description   string
 		noHooks       bool
@@ -80,7 +80,7 @@ func newRollbackCommand() *cobra.Command {
 	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "timeout for readiness wait")
 	cmd.Flags().StringVar(&description, "description", "", "rollback description")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "skip lifecycle hooks for this operation")
-	cmd.Flags().IntVar(&historyMax, "history-max", 0, "maximum revisions to retain in history (0 = unlimited)")
+	cmd.Flags().IntVar(&historyMax, "history-max", 10, "maximum revisions to retain in history (0 = unlimited)")
 	cmd.Flags().BoolVar(&force, "force", false, "delete and recreate resources to force update of immutable fields")
 	cmd.Flags().BoolVar(&cleanupOnFail, "cleanup-on-fail", false, "delete partially-applied resources if rollback fails")
 	cmd.Flags().BoolVar(&recreatePods, "recreate-pods", false, "trigger a rolling restart of Deployments/StatefulSets/DaemonSets")

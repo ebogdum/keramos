@@ -626,6 +626,9 @@ func newApplyCommand() *cobra.Command {
 		Short: "Apply a plan produced by 'keramos plan'",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateDryRunFlag(dryRun); nil != err {
+				return err
+			}
 			if "" == planFile {
 				return keramoserr.NewError(keramoserr.ErrCLIValidation, "--plan is required")
 			}

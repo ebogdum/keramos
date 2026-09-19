@@ -34,7 +34,7 @@ Track upload.`,
 			if nil != err {
 				return err
 			}
-			version := "dev"
+			version, _, _ := buildMetadata()
 			doc, err := sbom.Generate(rel, version)
 			if nil != err {
 				return err

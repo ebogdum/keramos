@@ -157,9 +157,13 @@ Examples:
 				dropKeramosCRDs(ctx, client, ignoreFailures, cmd)
 			}
 
-			if 0 < failed && !ignoreFailures {
-				return keramoserr.NewErrorf(keramoserr.ErrInternal,
-					"%d release(s) failed to uninstall (use --ignore-failures to suppress)", failed)
+			if 0 < failed {
+				if !ignoreFailures {
+					return keramoserr.NewErrorf(keramoserr.ErrInternal,
+						"%d release(s) failed to uninstall (use --ignore-failures to suppress)", failed)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "purge finished with %d failed release(s)\n", failed)
+				return nil
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "purge complete")
 			return nil
@@ -389,9 +393,7 @@ func purgeReleases(ctx context.Context, scope purgeScope, parallel int, ignoreFa
 				mu.Lock()
 				failed++
 				mu.Unlock()
-				if !ignoreFailures {
-					fmt.Fprintf(cmd.OutOrStdout(), "  ✗ %s/%s [%d/%d]: %v\n", j.ns, j.name, d, total, uErr)
-				}
+				fmt.Fprintf(cmd.OutOrStdout(), "  ✗ %s/%s [%d/%d]: %v\n", j.ns, j.name, d, total, uErr)
 				return
 			}
 			// Always also nuke the storage secret so retry never sees it.

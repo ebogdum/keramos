@@ -9,6 +9,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
+	"github.com/ebogdum/keramos/v3/internal/audit"
 	"github.com/ebogdum/keramos/v3/internal/engine"
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	keramoslabels "github.com/ebogdum/keramos/v3/internal/labels"
@@ -94,6 +95,14 @@ func NewClient(kubeconfig, kubeContext, namespace string) (*Client, error) {
 	}
 
 	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
+
+	if raw, rawErr := clientConfig.RawConfig(); nil == rawErr {
+		resolved := kubeContext
+		if "" == resolved {
+			resolved = raw.CurrentContext
+		}
+		audit.SetKubeContext(resolved)
+	}
 
 	config, err := clientConfig.ClientConfig()
 	if nil != err {

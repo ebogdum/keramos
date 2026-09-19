@@ -3,6 +3,7 @@ package action
 import (
 	"time"
 
+	"github.com/ebogdum/keramos/v3/internal/audit"
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/hooks"
 	"github.com/ebogdum/keramos/v3/internal/kube"
@@ -58,6 +59,7 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 
 	// Step 2: Mark as uninstalling
 	current.Status = release.StatusUninstalling
+	current.Audit = audit.Capture("uninstall", current.Revision)
 	if updateErr := storage.Update(current); nil != updateErr {
 		return nil, updateErr
 	}

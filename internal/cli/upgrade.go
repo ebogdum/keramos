@@ -20,7 +20,7 @@ func newUpgradeCommand() *cobra.Command {
 		profile              string
 		noWait               bool
 		takeOwnership        bool
-		explicitWait               bool
+		explicitWait         bool
 		timeout              time.Duration
 		dryRun               string
 		reuseValues          bool
@@ -168,7 +168,7 @@ func newUpgradeCommand() *cobra.Command {
 	cmd.Flags().StringVar(&postRenderer, "post-renderer", "", "command piped the rendered manifests on stdin (yields stdout)")
 	cmd.Flags().StringArrayVar(&postRenderers, "post-renderers", nil, "chained post-renderers (repeatable; output of N feeds N+1)")
 	cmd.Flags().DurationVar(&postRendererTimeout, "post-renderer-timeout", 5*time.Minute, "per-stage timeout for post-renderers")
-	cmd.Flags().IntVar(&historyMax, "history-max", 0, "maximum revisions to retain in history (0 = unlimited)")
+	cmd.Flags().IntVar(&historyMax, "history-max", 10, "maximum revisions to retain in history (0 = unlimited)")
 	cmd.Flags().BoolVar(&force, "force", false, "delete-and-recreate resources to force update of immutable fields")
 	cmd.Flags().BoolVar(&cleanupOnFail, "cleanup-on-fail", false, "delete partially-applied resources if the upgrade fails")
 	cmd.Flags().BoolVar(&recreatePods, "recreate-pods", false, "trigger a rolling restart of Deployments/StatefulSets/DaemonSets")

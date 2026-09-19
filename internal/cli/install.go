@@ -216,7 +216,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&generateName, "generate-name", false, "generate a release name from the package name")
 	cmd.Flags().BoolVar(&verify, "verify", false, "verify package signatures before installing")
 	cmd.Flags().BoolVar(&skipRequires, "skip-requires", false, "skip installation of required co-deployed packages")
-	cmd.Flags().IntVar(&historyMax, "history-max", 0, "maximum number of revisions to retain in history (0 = unlimited)")
+	cmd.Flags().IntVar(&historyMax, "history-max", 10, "maximum number of revisions to retain in history (0 = unlimited)")
 	cmd.Flags().BoolVar(&recreatePods, "recreate-pods", false, "trigger a rolling restart of Deployments/StatefulSets/DaemonSets")
 	cmd.Flags().BoolVar(&force, "force", false, "delete and recreate resources to force update of immutable fields")
 

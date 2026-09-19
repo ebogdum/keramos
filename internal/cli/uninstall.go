@@ -19,7 +19,7 @@ func newUninstallCommand() *cobra.Command {
 		ignoreNotFound bool
 		keepHistory    bool
 		noWaitU        bool
-		explicitWait        bool
+		explicitWait   bool
 	)
 
 	cmd := &cobra.Command{

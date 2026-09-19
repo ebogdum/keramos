@@ -24,6 +24,8 @@ func Capture(action string, parentRev int) release.AuditRecord {
 	if h, err := os.Hostname(); nil == err {
 		rec.Hostname = h
 	}
+	rec.KeramosVersion = toolVersion
+	rec.KubeContext = kubeContext
 	if v := os.Getenv("KERAMOS_VERSION"); "" != v {
 		rec.KeramosVersion = v
 	}
@@ -31,6 +33,24 @@ func Capture(action string, parentRev int) release.AuditRecord {
 		rec.KubeContext = ctx
 	}
 	return rec
+}
+
+var (
+	toolVersion string
+	kubeContext string
+)
+
+func SetProvenance(version, context string) {
+	toolVersion = version
+	if "" != context {
+		kubeContext = context
+	}
+}
+
+func SetKubeContext(context string) {
+	if "" != context {
+		kubeContext = context
+	}
 }
 
 // WithFlags attaches the CLI flag list (already redacted by the caller —

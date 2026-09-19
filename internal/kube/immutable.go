@@ -14,9 +14,9 @@ import (
 // Non-exhaustive; covers the kinds where the upgrade `--force` path needs
 // to recreate-on-divergence.
 var ImmutableFieldsForKind = map[string][][]string{
-	"Service":     {{"clusterIP"}, {"type"}, {"selector"}},
-	"Job":         {{"selector"}, {"template"}},
-	"StatefulSet": {{"serviceName"}, {"selector"}, {"volumeClaimTemplates"}, {"podManagementPolicy"}},
+	"Service":               {{"clusterIP"}, {"type"}, {"selector"}},
+	"Job":                   {{"selector"}, {"template"}},
+	"StatefulSet":           {{"serviceName"}, {"selector"}, {"volumeClaimTemplates"}, {"podManagementPolicy"}},
 	"PersistentVolume":      {{"capacity"}, {"persistentVolumeReclaimPolicy"}},
 	"PersistentVolumeClaim": {{"accessModes"}, {"resources", "requests"}, {"storageClassName"}, {"volumeName"}},
 }

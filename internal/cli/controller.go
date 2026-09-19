@@ -148,6 +148,11 @@ func newControllerRunCommand() *cobra.Command {
 		Use:   "run",
 		Short: "Run the KeramosRelease reconciler in the foreground",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if 0 >= interval {
+				return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
+					"--interval must be greater than zero, got %s", interval)
+			}
+
 			client, err := kube.NewClient(kubeconfig, kubeContext, namespace)
 			if nil != err {
 				return err

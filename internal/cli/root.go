@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ebogdum/keramos/v3/internal/audit"
 	"github.com/ebogdum/keramos/v3/internal/logger"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +29,9 @@ func NewRootCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			logger.Init(false, debugFlag)
 			logger.Debug("debug mode enabled")
+
+			toolVersion, _, _ := buildMetadata()
+			audit.SetProvenance(toolVersion, kubeContext)
 			// A transport opt-in flag is exactly equivalent to exporting its
 			// environment variable — the fetch/registry code reads the env.
 			// Only set on true so an unset flag never clears an existing export.

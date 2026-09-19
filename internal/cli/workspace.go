@@ -65,7 +65,7 @@ are processed concurrently up to --parallel. Members at level N+1 wait for
 every member of level N to finish. With --health-gate the wait extends until
 every pod owned by level N is Ready, so level N+1 can rely on its
 dependencies actually serving traffic, not merely "applied".`,
-		Args:  cobra.NoArgs,
+		Args: cobra.NoArgs,
 	}
 	cmd.AddCommand(newWorkspacePlanCommand())
 	cmd.AddCommand(newWorkspaceInstallCommand())
