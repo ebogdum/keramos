@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/deptree"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/pkg"
+	"github.com/ebogdum/keramos/v2/internal/deptree"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/pkg"
 	"gopkg.in/yaml.v3"
 )
 

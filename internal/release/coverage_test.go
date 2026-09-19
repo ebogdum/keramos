@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	keramoslabels "github.com/ebogdum/keramos/internal/labels"
+	keramoslabels "github.com/ebogdum/keramos/v2/internal/labels"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/diff"
+	"github.com/ebogdum/keramos/v2/internal/diff"
 )
 
 // makePlanTestPackage writes a minimal renderable package into a temp dir,

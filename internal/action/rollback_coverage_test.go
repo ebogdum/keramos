@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/release"
 )
 
 func TestRollbackToSpecificRevision(t *testing.T) {

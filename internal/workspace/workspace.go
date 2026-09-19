@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 

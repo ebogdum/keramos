@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/release"
 	"gopkg.in/yaml.v3"
 )
 

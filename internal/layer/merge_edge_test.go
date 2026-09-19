@@ -3,7 +3,7 @@ package layer
 import (
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/maputil"
+	"github.com/ebogdum/keramos/v2/internal/maputil"
 )
 
 func TestDeepMerge_BothNil(t *testing.T) {

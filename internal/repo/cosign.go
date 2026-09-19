@@ -4,8 +4,8 @@ import (
 	"os/exec"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/logger"
 )
 
 // CosignKeylessOpts holds required identity parameters for keyless (Sigstore) verification.

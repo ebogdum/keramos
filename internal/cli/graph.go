@@ -3,9 +3,9 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ebogdum/keramos/internal/graph"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/graph"
+	"github.com/ebogdum/keramos/v2/internal/kube"
+	"github.com/ebogdum/keramos/v2/internal/release"
 	"github.com/spf13/cobra"
 )
 

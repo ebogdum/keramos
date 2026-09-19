@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/diff"
-	"github.com/ebogdum/keramos/internal/engine"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/layer"
-	"github.com/ebogdum/keramos/internal/values"
+	"github.com/ebogdum/keramos/v2/internal/diff"
+	"github.com/ebogdum/keramos/v2/internal/engine"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/layer"
+	"github.com/ebogdum/keramos/v2/internal/values"
 	"github.com/spf13/cobra"
 )
 

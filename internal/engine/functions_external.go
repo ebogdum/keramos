@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/netguard"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/netguard"
 )
 
 // validateOutboundURL parses and string-validates the URL: scheme must be

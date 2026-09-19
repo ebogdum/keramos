@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/repo"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/repo"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

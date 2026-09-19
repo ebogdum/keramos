@@ -5,9 +5,9 @@ import (
 	"sort"
 	texttemplate "text/template"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/release"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/kube"
+	"github.com/ebogdum/keramos/v2/internal/release"
 	"github.com/spf13/cobra"
 )
 

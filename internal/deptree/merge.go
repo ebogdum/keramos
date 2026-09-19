@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/maputil"
+	"github.com/ebogdum/keramos/v2/internal/maputil"
 )
 
 // MergeValues walks the tree in merge order and produces the final merged values.

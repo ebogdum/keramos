@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/pkg"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/pkg"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

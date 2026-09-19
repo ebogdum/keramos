@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/release"
 )
 
 func createTestPackage(t *testing.T, dir string) {

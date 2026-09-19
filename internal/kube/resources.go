@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )

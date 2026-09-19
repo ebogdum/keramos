@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/audit"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/hooks"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/audit"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/hooks"
+	"github.com/ebogdum/keramos/v2/internal/kube"
+	"github.com/ebogdum/keramos/v2/internal/logger"
+	"github.com/ebogdum/keramos/v2/internal/release"
 )
 
 // RollbackOptions configures a rollback operation.

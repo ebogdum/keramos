@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/release"
 )
 
 // failingStorage implements release.Storage; Update always errors so we can

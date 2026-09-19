@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/engine"
+	"github.com/ebogdum/keramos/v2/internal/engine"
 )
 
 // --- renderHooks tests ---

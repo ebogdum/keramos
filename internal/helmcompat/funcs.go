@@ -8,7 +8,7 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 

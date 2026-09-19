@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/engine"
+	"github.com/ebogdum/keramos/v2/internal/engine"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"

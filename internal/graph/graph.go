@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/hooks"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/hooks"
+	"github.com/ebogdum/keramos/v2/internal/kube"
+	"github.com/ebogdum/keramos/v2/internal/release"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
+	keramoserrors "github.com/ebogdum/keramos/v2/internal/errors"
 )
 
 func registerEncodingFuncs(r *FuncRegistry) {

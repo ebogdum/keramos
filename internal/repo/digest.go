@@ -4,8 +4,8 @@ import (
 	"crypto/subtle"
 	"os"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/logger"
 )
 
 // VerifyDigest checks a file's SHA256 against an expected digest.

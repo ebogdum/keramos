@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/repo"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/repo"
 	"github.com/spf13/cobra"
 )
 
