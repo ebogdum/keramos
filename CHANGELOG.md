@@ -4,6 +4,18 @@ All notable changes to keramos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] — 2026-09-19
+
+### Fixed
+
+- `keramos version` reports the real version, commit and build date when the
+  binary was produced by `go install` rather than the release build, which is
+  the only path that sets them through ldflags.
+- The NetBSD amd64 build works again. The sqlite driver shipped generated
+  NetBSD sources that did not compile, so both NetBSD targets were missing
+  from releases. NetBSD arm64 stays unavailable: the underlying C runtime has
+  no support for it.
+
 ## [3.0.0] — 2026-09-19
 
 ### Breaking changes
