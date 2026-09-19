@@ -112,11 +112,10 @@ func DriftAgainstManifest(client kube.KubeClient, manifest string) ([]DriftItem,
 	return driftAgainstManifestInNamespace(client, manifest, "")
 }
 
-// driftAgainstManifestInNamespace is the internal variant that defaults
-// any namespace-scoped resource without an explicit `metadata.namespace`
-// to `defaultNS`. The release-storage drift path passes the release's
-// namespace; the public DriftAgainstManifest passes empty (preserves
-// historical behaviour).
+func DriftInNamespace(client kube.KubeClient, manifest, defaultNS string) ([]DriftItem, error) {
+	return driftAgainstManifestInNamespace(client, manifest, defaultNS)
+}
+
 func driftAgainstManifestInNamespace(client kube.KubeClient, manifest, defaultNS string) ([]DriftItem, error) {
 	resources, err := kube.ParseManifests(manifest)
 	if nil != err {

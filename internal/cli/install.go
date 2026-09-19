@@ -97,8 +97,10 @@ func newInstallCommand() *cobra.Command {
 				return err
 			}
 
-			if depErr := repo.ResolveDependencies(packagePath); nil != depErr {
-				return depErr
+			if "" == dryRun {
+				if depErr := repo.ResolveDependencies(packagePath); nil != depErr {
+					return depErr
+				}
 			}
 
 			if verify {

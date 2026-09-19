@@ -15,12 +15,15 @@ import (
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/kube"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/release"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
 // validateControllerPackagePath rejects absolute paths, traversal sequences,
@@ -140,9 +143,10 @@ func newControllerInstallCRDCommand() *cobra.Command {
 
 func newControllerRunCommand() *cobra.Command {
 	var (
-		interval time.Duration
-		watchNS  string
-		pkgRoot  string
+		interval    time.Duration
+		watchNS     string
+		pkgRoot     string
+		leaderElect bool
 	)
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -174,9 +178,16 @@ func newControllerRunCommand() *cobra.Command {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			return ctrl.run(ctx, cmd)
+
+			if !leaderElect {
+				return ctrl.run(ctx, cmd)
+			}
+			return runWithLeaderElection(ctx, cmd, client, leaseNamespace(watchNS), func(leaderCtx context.Context) error {
+				return ctrl.run(leaderCtx, cmd)
+			})
 		},
 	}
+	cmd.Flags().BoolVar(&leaderElect, "leader-elect", true, "hold a lease so only one replica reconciles at a time")
 	cmd.Flags().DurationVar(&interval, "interval", 30*time.Second, "reconcile interval")
 	cmd.Flags().StringVar(&watchNS, "watch-namespace", "", "namespace to watch (empty = all)")
 	cmd.Flags().StringVar(&pkgRoot, "package-root", "/var/lib/keramos/packages",
@@ -257,7 +268,7 @@ func (c *controllerLoop) reconcileOne(ctx context.Context, item *unstructured.Un
 	c.mu.Lock()
 	last := c.processed[key]
 	c.mu.Unlock()
-	if last == item.GetResourceVersion() {
+	if last == item.GetResourceVersion() && !c.releaseHasDrifted(item) {
 		return nil
 	}
 	rawSpec, _, _ := unstructured.NestedMap(item.Object, "spec")
@@ -443,3 +454,84 @@ spec:
                 revision:       { type: integer }
                 lastTransition: { type: string }
 `
+
+func (c *controllerLoop) releaseHasDrifted(item *unstructured.Unstructured) bool {
+	releaseName, _, _ := unstructured.NestedString(item.Object, "spec", "releaseName")
+	if "" == releaseName {
+		releaseName = item.GetName()
+	}
+
+	storage, storageErr := release.SelectStorage(c.client.Clientset(), item.GetNamespace())
+	if nil != storageErr {
+		return false
+	}
+
+	current, lastErr := storage.Last(releaseName)
+	if nil != lastErr {
+		return false
+	}
+
+	drifted, driftErr := action.DriftInNamespace(c.client, current.Manifest, current.Namespace)
+	if nil != driftErr {
+		logger.Warn("drift check for %s failed: %v", releaseName, driftErr)
+		return false
+	}
+
+	return 0 < len(drifted)
+}
+
+func leaseNamespace(watchNS string) string {
+	if "" != watchNS {
+		return watchNS
+	}
+	if fromEnv := os.Getenv("POD_NAMESPACE"); "" != fromEnv {
+		return fromEnv
+	}
+	return "default"
+}
+
+func runWithLeaderElection(ctx context.Context, cmd *cobra.Command, client *kube.Client, ns string, run func(context.Context) error) error {
+	host, hostErr := os.Hostname()
+	if nil != hostErr || "" == host {
+		host = "keramos"
+	}
+	identity := fmt.Sprintf("%s-%d", host, os.Getpid())
+
+	lock := &resourcelock.LeaseLock{
+		LeaseMeta: metav1.ObjectMeta{Name: "keramos-controller", Namespace: ns},
+		Client:    client.Clientset().CoordinationV1(),
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity: identity,
+		},
+	}
+
+	runErrCh := make(chan error, 1)
+	electionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	leaderelection.RunOrDie(electionCtx, leaderelection.LeaderElectionConfig{
+		Lock:            lock,
+		ReleaseOnCancel: true,
+		LeaseDuration:   15 * time.Second,
+		RenewDeadline:   10 * time.Second,
+		RetryPeriod:     2 * time.Second,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(leaderCtx context.Context) {
+				logger.Log("acquired leadership as %s; reconciling", identity)
+				runErr := run(leaderCtx)
+				runErrCh <- runErr
+				cancel()
+			},
+			OnStoppedLeading: func() {
+				logger.Warn("lost leadership as %s; stopping reconcile", identity)
+			},
+		},
+	})
+
+	select {
+	case runErr := <-runErrCh:
+		return runErr
+	default:
+		return nil
+	}
+}

@@ -108,6 +108,9 @@ func runTest(cmd *cobra.Command, releaseName string, timeout time.Duration, show
 		for attempt := 0; attempt <= retries; attempt++ {
 			if attempt > 0 {
 				fmt.Fprintf(&report, "    retry %d/%d\n", attempt, retries)
+				if delErr := client.DeleteManifests(manifest); nil != delErr {
+					logger.Warn("failed to remove test resources before retrying %s: %v", name, delErr)
+				}
 				time.Sleep(time.Duration(attempt) * time.Second)
 			}
 			passed, logTxt, err := executeOneTest(client, clientset, ns, manifest, timeout, showLogs)
@@ -258,12 +261,14 @@ func executeOneTest(client kube.KubeClient, clientset kubernetes.Interface, ns, 
 			if waitErr := client.WaitForJob(ns, name, timeout); nil != waitErr {
 				passed = false
 			}
+			if showLogs {
+				collectPodLogs(clientset, ns, jobPodSelector(name), &logBuf)
+			}
 			continue
 		}
 		ok, waitErr := waitForTestPod(clientset, ns, name, timeout)
 		if nil != waitErr || !ok {
 			passed = false
-			continue
 		}
 		if showLogs {
 			if l, _ := getPodLogs(clientset, ns, name); "" != l {
@@ -369,4 +374,29 @@ func findTestHooks(rel *release.Release) []testHook {
 		}
 	}
 	return results
+}
+
+func jobPodSelector(jobName string) string {
+	return "job-name=" + jobName
+}
+
+func collectPodLogs(clientset kubernetes.Interface, ns, selector string, out *strings.Builder) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pods, err := clientset.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if nil != err {
+		return
+	}
+
+	for i := range pods.Items {
+		logs, logErr := getPodLogs(clientset, ns, pods.Items[i].Name)
+		if nil != logErr || "" == logs {
+			continue
+		}
+		out.WriteString(logs)
+		if !strings.HasSuffix(logs, "\n") {
+			out.WriteByte('\n')
+		}
+	}
 }
