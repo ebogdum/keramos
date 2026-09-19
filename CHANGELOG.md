@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Releases installed by a 2.x binary are not recognised by this version.
   Re-adopt them with `keramos adopt` before managing them again.
+- The import path carries the major version, as Go requires from v2 onward:
+
+  ```sh
+  go install github.com/ebogdum/keramos/v3/cmd/keramos@latest
+  ```
 
 ## [2.1.0] — 2026-07-19
 
