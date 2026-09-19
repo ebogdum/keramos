@@ -84,7 +84,7 @@ func Render(chartPath string, opts Options) (map[string]string, error) {
 	for _, u := range renderUnits {
 		ctx := map[string]any{
 			"Values":       u.chart.scoped,
-			"Chart":        u.chart.metadata,
+			"Chart":        chartMap(u.chart.metadata),
 			"Release":      releaseMap(rel),
 			"Capabilities": caps,
 			"Files":        newFiles(u.chart.files),
@@ -138,6 +138,41 @@ func collectTemplates(c *chart, set *template.Template, partials *[]string, unit
 		}
 	}
 	return nil
+}
+
+func chartMap(metadata map[string]any) map[string]any {
+	out := make(map[string]any, len(metadata)+len(chartFieldNames))
+
+	for key, value := range metadata {
+		out[key] = value
+	}
+
+	for lower, capitalized := range chartFieldNames {
+		if value, ok := metadata[lower]; ok {
+			out[capitalized] = value
+		}
+	}
+
+	return out
+}
+
+var chartFieldNames = map[string]string{
+	"name":        "Name",
+	"version":     "Version",
+	"appVersion":  "AppVersion",
+	"description": "Description",
+	"type":        "Type",
+	"keywords":    "Keywords",
+	"home":        "Home",
+	"sources":     "Sources",
+	"icon":        "Icon",
+	"apiVersion":  "APIVersion",
+	"condition":   "Condition",
+	"tags":        "Tags",
+	"deprecated":  "Deprecated",
+	"annotations": "Annotations",
+	"kubeVersion": "KubeVersion",
+	"maintainers": "Maintainers",
 }
 
 func releaseMap(r ReleaseMeta) map[string]any {

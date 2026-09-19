@@ -16,9 +16,11 @@ package labels
 // compatibility with releases written by older keramos versions; new code
 // should not write the legacy key.
 const (
-	ManagedByLabel      = "managedBy"
-	ManagedByValue      = "keramos"
-	ManagedByAnnotation = "keramos.sh/managed-by"
+	ManagedByLabel             = "managedBy"
+	ManagedByValue             = "keramos"
+	ReleaseNameAnnotation      = "keramos.sh/release-name"
+	ReleaseNamespaceAnnotation = "keramos.sh/release-namespace"
+	ManagedByAnnotation        = "keramos.sh/managed-by"
 )
 
 // IsKeramosManaged returns true if the given labels/annotations map

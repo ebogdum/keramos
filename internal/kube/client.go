@@ -62,15 +62,18 @@ type KubeClient interface {
 
 // Client wraps Kubernetes API access.
 type Client struct {
-	clientset    kubernetes.Interface
-	dynamic      dynamic.Interface
-	config       *rest.Config
-	namespace    string
-	discovery    discovery.DiscoveryInterface
-	timeout      time.Duration
-	forceApply   bool
-	mapperMu     sync.RWMutex
-	cachedMapper meta.RESTMapper
+	clientset        kubernetes.Interface
+	dynamic          dynamic.Interface
+	config           *rest.Config
+	namespace        string
+	discovery        discovery.DiscoveryInterface
+	timeout          time.Duration
+	forceApply       bool
+	releaseName      string
+	releaseNamespace string
+	takeOwnership    bool
+	mapperMu         sync.RWMutex
+	cachedMapper     meta.RESTMapper
 }
 
 // NewClient creates a Client from kubeconfig path, context name, and namespace.
@@ -310,7 +313,7 @@ func (c *Client) dryRunApplyResource(obj *unstructured.Unstructured) error {
 	// could pass for an unlabelled object that the real apply path
 	// would then mutate, in theory letting an admission webhook see
 	// different data between dry-run and real apply.
-	stampKeramosManaged(obj)
+	stampKeramosManaged(obj, c.releaseName, c.releaseNamespace)
 
 	ns := c.resolveNamespace(obj)
 	data, err := obj.MarshalJSON()
@@ -383,7 +386,7 @@ func (c *Client) serverSideDiffResource(obj *unstructured.Unstructured) (live, m
 	if nil != mapErr {
 		return "", "", mapErr
 	}
-	stampKeramosManaged(obj)
+	stampKeramosManaged(obj, c.releaseName, c.releaseNamespace)
 	ns := c.resolveNamespace(obj)
 
 	var resource dynamic.ResourceInterface
@@ -646,12 +649,16 @@ func (c *Client) applyResource(obj *unstructured.Unstructured) error {
 		return err
 	}
 
+	if ownerErr := c.checkOwnership(obj); nil != ownerErr {
+		return ownerErr
+	}
+
 	// Stamp every applied resource with the keramos-managed label. This is
 	// the source of truth that purge/list/drift use to recognise keramos's
 	// own work — without it we'd be reduced to name pattern guessing.
 	// Stamping is idempotent: setting a label that's already there is a
 	// no-op for server-side apply.
-	stampKeramosManaged(obj)
+	stampKeramosManaged(obj, c.releaseName, c.releaseNamespace)
 
 	ns := c.resolveNamespace(obj)
 	data, err := obj.MarshalJSON()
@@ -725,7 +732,6 @@ func (c *Client) waitForResource(ctx context.Context, obj *unstructured.Unstruct
 
 	ns := c.resolveNamespace(obj)
 	name := obj.GetName()
-
 
 	switch kind {
 	case "Deployment":
@@ -1110,7 +1116,7 @@ func (c *Client) CreateNamespace(name string) error {
 // resource carries the label, which is sufficient to identify the
 // CRD instance as keramos-managed. Their controllers are responsible for
 // propagating labels to spawned pods if they want.
-func stampKeramosManaged(obj *unstructured.Unstructured) {
+func stampKeramosManaged(obj *unstructured.Unstructured, releaseName, releaseNamespace string) {
 	if nil == obj {
 		return
 	}
@@ -1121,6 +1127,16 @@ func stampKeramosManaged(obj *unstructured.Unstructured) {
 	if keramoslabels.ManagedByValue != lbls[keramoslabels.ManagedByLabel] {
 		lbls[keramoslabels.ManagedByLabel] = keramoslabels.ManagedByValue
 		obj.SetLabels(lbls)
+	}
+
+	if "" != releaseName {
+		annotations := obj.GetAnnotations()
+		if nil == annotations {
+			annotations = map[string]string{}
+		}
+		annotations[keramoslabels.ReleaseNameAnnotation] = releaseName
+		annotations[keramoslabels.ReleaseNamespaceAnnotation] = releaseNamespace
+		obj.SetAnnotations(annotations)
 	}
 
 	switch obj.GetKind() {
@@ -1223,5 +1239,47 @@ func (c *Client) requireClientset(kind, name string) error {
 		return keramoserr.NewErrorf(keramoserr.ErrKube,
 			"cannot wait for %s/%s: no Kubernetes client is configured", kind, name)
 	}
+	return nil
+}
+
+func (c *Client) SetRelease(name, namespace string) {
+	c.releaseName = name
+	c.releaseNamespace = namespace
+}
+
+func (c *Client) SetTakeOwnership(take bool) {
+	c.takeOwnership = take
+}
+
+func (c *Client) checkOwnership(obj *unstructured.Unstructured) error {
+	if c.takeOwnership || "" == c.releaseName {
+		return nil
+	}
+
+	current, err := c.fetchCurrent(obj)
+	if nil != err || nil == current {
+		return nil
+	}
+
+	annotations := current.GetAnnotations()
+	if nil == annotations {
+		return nil
+	}
+
+	owner := annotations[keramoslabels.ReleaseNameAnnotation]
+	ownerNS := annotations[keramoslabels.ReleaseNamespaceAnnotation]
+	if "" != owner && (owner != c.releaseName || ownerNS != c.releaseNamespace) {
+		return keramoserr.NewErrorf(keramoserr.ErrKube,
+			"%s/%s is owned by release %s in namespace %s; pass --take-ownership to claim it",
+			obj.GetKind(), obj.GetName(), owner, ownerNS)
+	}
+
+	helmOwner := annotations["meta.helm.sh/release-name"]
+	if "" != helmOwner {
+		return keramoserr.NewErrorf(keramoserr.ErrKube,
+			"%s/%s is owned by the Helm release %s; pass --take-ownership to claim it",
+			obj.GetKind(), obj.GetName(), helmOwner)
+	}
+
 	return nil
 }

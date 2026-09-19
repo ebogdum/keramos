@@ -19,6 +19,7 @@ func newUpgradeCommand() *cobra.Command {
 		setJSON              []string
 		profile              string
 		noWait               bool
+		takeOwnership        bool
 		explicitWait               bool
 		timeout              time.Duration
 		dryRun               string
@@ -73,6 +74,8 @@ func newUpgradeCommand() *cobra.Command {
 			if noForce {
 				client.SetForce(false)
 			}
+			client.SetRelease(releaseName, client.Namespace())
+			client.SetTakeOwnership(takeOwnership)
 
 			labelMap, labelErr := parseLabelFlags(labels)
 			if nil != labelErr {
@@ -155,6 +158,7 @@ func newUpgradeCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&noForce, "no-force", false, "don't force field ownership on server-side apply")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "skip lifecycle hooks for this operation")
 	cmd.Flags().BoolVar(&createNamespace, "create-namespace", false, "create the release namespace if missing (with --install)")
+	cmd.Flags().BoolVar(&takeOwnership, "take-ownership", false, "claim resources already owned by another release")
 	cmd.Flags().BoolVar(&skipCRDs, "skip-crds", false, "do not apply the CustomResourceDefinitions in crds/")
 	cmd.Flags().BoolVar(&includeCRDs, "include-crds", true, "apply the CustomResourceDefinitions in crds/ before the templates")
 	_ = cmd.Flags().MarkDeprecated("include-crds", "crds/ is applied by default; use --skip-crds to opt out")

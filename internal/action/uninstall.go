@@ -79,7 +79,11 @@ func Uninstall(client kube.KubeClient, opts *UninstallOptions) (*release.Release
 	}
 
 	// Step 4: Delete all manifests (reverse install order handled by DeleteManifests)
-	if delErr := client.DeleteManifests(current.Manifest); nil != delErr {
+	deletable, filterErr := excludeKinds(current.Manifest, "CustomResourceDefinition")
+	if nil != filterErr {
+		return current, combineFailure(filterErr, markFailed(storage, current))
+	}
+	if delErr := client.DeleteManifests(deletable); nil != delErr {
 		return current, combineFailure(delErr, markFailed(storage, current))
 	}
 

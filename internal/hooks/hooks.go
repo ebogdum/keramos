@@ -152,9 +152,12 @@ func ExecuteHooksWithTimeout(client kube.KubeClient, allHooks []Hook, hookType H
 		}
 
 		// Handle before-hook-creation delete policy
-		if "before-hook-creation" == h.DeletePolicy {
+		if hasDeletePolicy(h.DeletePolicy, "before-hook-creation") {
 			if delErr := deleteHookResources(client, h.Manifest); nil != delErr {
 				return results, delErr
+			}
+			if waitErr := waitForHookDeletion(client, h.Manifest, h.Timeout); nil != waitErr {
+				return results, waitErr
 			}
 		}
 
@@ -171,7 +174,7 @@ func ExecuteHooksWithTimeout(client kube.KubeClient, allHooks []Hook, hookType H
 				Kind:   hookKind,
 				Status: "failed",
 			})
-			if "hook-failed" == h.DeletePolicy {
+			if hasDeletePolicy(h.DeletePolicy, "hook-failed") {
 				if delErr := deleteHookResources(client, h.Manifest); nil != delErr {
 					logger.Warn("hook-failed cleanup for %s reported: %v", h.Type, delErr)
 				}
@@ -205,6 +208,27 @@ func ExecuteHooksWithTimeout(client kube.KubeClient, allHooks []Hook, hookType H
 					}
 					continue
 				}
+			} else if "Pod" == kind {
+				effectiveTimeout := h.Timeout
+				if 0 < maxTimeout && (0 == effectiveTimeout || maxTimeout < effectiveTimeout) {
+					effectiveTimeout = maxTimeout
+				}
+				single, marshalErr := res.MarshalJSON()
+				if nil != marshalErr {
+					return results, keramoserr.WrapErrorf(keramoserr.ErrKube, marshalErr, "failed to marshal hook pod %s", res.GetName())
+				}
+				if waitErr := client.WaitForReady(string(single), effectiveTimeout); nil != waitErr {
+					results = append(results, release.HookResult{
+						Name:   res.GetName(),
+						Kind:   kind,
+						Status: "failed",
+					})
+					hookFailed = true
+					if nil == firstWaitErr {
+						firstWaitErr = keramoserr.WrapErrorf(keramoserr.ErrKube, waitErr, "hook pod %s failed", res.GetName())
+					}
+					continue
+				}
 			}
 
 			results = append(results, release.HookResult{
@@ -215,7 +239,7 @@ func ExecuteHooksWithTimeout(client kube.KubeClient, allHooks []Hook, hookType H
 		}
 
 		if hookFailed {
-			if "hook-failed" == h.DeletePolicy {
+			if hasDeletePolicy(h.DeletePolicy, "hook-failed") {
 				if delErr := deleteHookResources(client, h.Manifest); nil != delErr {
 					logger.Warn("hook-failed cleanup for %s reported: %v", h.Type, delErr)
 				}
@@ -224,7 +248,7 @@ func ExecuteHooksWithTimeout(client kube.KubeClient, allHooks []Hook, hookType H
 		}
 
 		// Handle hook-succeeded delete policy
-		if "hook-succeeded" == h.DeletePolicy {
+		if hasDeletePolicy(h.DeletePolicy, "hook-succeeded") {
 			if delErr := deleteHookResources(client, h.Manifest); nil != delErr {
 				return results, delErr
 			}
@@ -248,6 +272,40 @@ func deleteHookResources(client kube.KubeClient, manifest string) error {
 		return nil
 	}
 	return keramoserr.WrapError(keramoserr.ErrKube, "failed to delete hook resources", delErr)
+}
+
+func waitForHookDeletion(client kube.KubeClient, manifest string, timeout time.Duration) error {
+	resources, err := kube.ParseManifests(manifest)
+	if nil != err {
+		return err
+	}
+
+	if 0 >= timeout {
+		timeout = 2 * time.Minute
+	}
+
+	deadline := time.Now().Add(timeout)
+	for {
+		remaining := 0
+		for _, res := range resources {
+			ns := res.GetNamespace()
+			if "" == ns {
+				ns = client.Namespace()
+			}
+			obj, lookupErr := client.Lookup(res.GetAPIVersion(), res.GetKind(), ns, res.GetName())
+			if nil == lookupErr && nil != obj {
+				remaining++
+			}
+		}
+		if 0 == remaining {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return keramoserr.NewErrorf(keramoserr.ErrKube,
+				"timed out after %s waiting for %d hook resource(s) to be deleted", timeout, remaining)
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 func filterByType(allHooks []Hook, hookType HookType) []Hook {
@@ -387,4 +445,16 @@ func extractDirective(content string) (hookDirective, string, error) {
 		parts = append(parts, string(out))
 	}
 	return directive, strings.Join(parts, "---\n"), nil
+}
+
+func hasDeletePolicy(declared, want string) bool {
+	if "" == declared {
+		return "before-hook-creation" == want
+	}
+	for _, part := range strings.Split(declared, ",") {
+		if want == strings.TrimSpace(part) {
+			return true
+		}
+	}
+	return false
 }
