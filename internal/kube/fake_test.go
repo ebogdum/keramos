@@ -371,7 +371,10 @@ func TestWaitForStatefulSet_Ready(t *testing.T) {
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "ss", Namespace: "default"},
 		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
-		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 3},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: 3, UpdatedReplicas: 3, ObservedGeneration: 0,
+			CurrentRevision: "ss-1", UpdateRevision: "ss-1",
+		},
 	}
 
 	c, cleanup := newFakeClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -395,7 +398,10 @@ func TestWaitForStatefulSet_NilReplicas(t *testing.T) {
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "ss", Namespace: "default"},
 		Spec:       appsv1.StatefulSetSpec{},
-		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: 1, UpdatedReplicas: 1, ObservedGeneration: 0,
+			CurrentRevision: "ss-1", UpdateRevision: "ss-1",
+		},
 	}
 
 	c, cleanup := newFakeClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -420,7 +426,10 @@ func TestWaitForStatefulSet_NotReady_TimesOut(t *testing.T) {
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "ss", Namespace: "default"},
 		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
-		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: 1, UpdatedReplicas: 1, ObservedGeneration: 0,
+			CurrentRevision: "ss-1", UpdateRevision: "ss-1",
+		},
 	}
 
 	c, cleanup := newFakeClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -450,7 +459,10 @@ func TestWaitForStatefulSet_NotReady_TimesOut(t *testing.T) {
 func TestWaitForPod_Running(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "default"},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+		},
 	}
 
 	c, cleanup := newFakeClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -529,6 +541,7 @@ func TestWaitForDaemonSet_Ready(t *testing.T) {
 		Status: appsv1.DaemonSetStatus{
 			DesiredNumberScheduled: 3,
 			NumberReady:            3,
+			UpdatedNumberScheduled: 3,
 		},
 	}
 
@@ -647,7 +660,10 @@ func TestWaitForResource_StatefulSetRoute(t *testing.T) {
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "ss", Namespace: "default"},
 		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
-		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: 1, UpdatedReplicas: 1, ObservedGeneration: 0,
+			CurrentRevision: "ss-1", UpdateRevision: "ss-1",
+		},
 	}
 
 	c, cleanup := newFakeClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -670,7 +686,10 @@ func TestWaitForResource_StatefulSetRoute(t *testing.T) {
 func TestWaitForResource_PodRoute(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "default"},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+		},
 	}
 
 	c, cleanup := newFakeClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1439,7 +1458,10 @@ func TestWaitForReady_MultipleResourceTypes(t *testing.T) {
 	}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "default"},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+		},
 	}
 
 	// This handler is simple — it returns dep or pod depending on the URL
