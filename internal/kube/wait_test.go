@@ -44,7 +44,7 @@ func TestWaitForResourceKindRouting(t *testing.T) {
 	c := &Client{namespace: "default", timeout: 5 * time.Second}
 	ctx := context.Background()
 
-	immediateKinds := []string{"Service", "ConfigMap", "Secret", "PersistentVolumeClaim"}
+	immediateKinds := []string{"Service", "ConfigMap", "Secret"}
 	for _, kind := range immediateKinds {
 		obj := &unstructured.Unstructured{}
 		obj.SetKind(kind)

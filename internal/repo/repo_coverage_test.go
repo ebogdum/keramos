@@ -487,7 +487,7 @@ entries:
   myapp:
     - name: myapp
       version: "1.0.0"
-      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411
+      digest: 806166f1698bd2415adafa8e02c7c2a89d393a60978d0ac27efc9ec3265ab5c5
       urls:
         - packages/myapp-1.0.0.keramos.tgz
 `

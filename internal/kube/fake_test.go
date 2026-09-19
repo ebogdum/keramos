@@ -591,7 +591,7 @@ func TestWaitForDaemonSet_NotReady_TimesOut(t *testing.T) {
 	}
 }
 
-func TestWaitForDaemonSet_ZeroDesired_TimesOut(t *testing.T) {
+func TestWaitForDaemonSet_ZeroDesiredIsReady(t *testing.T) {
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "ds", Namespace: "default"},
 		Status: appsv1.DaemonSetStatus{
@@ -599,31 +599,25 @@ func TestWaitForDaemonSet_ZeroDesired_TimesOut(t *testing.T) {
 			NumberReady:            0,
 		},
 	}
-
 	c, cleanup := newFakeClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(ds)
 	}))
 	defer cleanup()
-
 	obj := &unstructured.Unstructured{}
 	obj.SetKind("DaemonSet")
 	obj.SetName("ds")
 	obj.SetNamespace("default")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-
-	err := c.waitForDaemonSet(ctx, obj)
-	if nil == err {
-		t.Fatal("expected timeout error")
+	if err := c.waitForDaemonSet(ctx, obj); nil != err {
+		t.Fatalf("a DaemonSet scheduled onto no nodes must count as ready, got %v", err)
 	}
 }
 
 // ---------------------------------------------------------------------------
 // waitForResource routing — with real sub-calls
 // ---------------------------------------------------------------------------
-
 func TestWaitForResource_DeploymentRoute(t *testing.T) {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "default", Generation: 1},
@@ -715,6 +709,7 @@ func TestWaitForResource_DaemonSetRoute(t *testing.T) {
 		Status: appsv1.DaemonSetStatus{
 			DesiredNumberScheduled: 1,
 			NumberReady:            1,
+			UpdatedNumberScheduled: 1,
 		},
 	}
 
