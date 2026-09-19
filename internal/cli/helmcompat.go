@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ebogdum/keramos/v3/internal/action"
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/helmcompat"
 	"github.com/ebogdum/keramos/v3/internal/kube"
@@ -41,6 +42,13 @@ func renderHelmChart(chartPath string, valueFiles, sets, setStrings, setFiles, s
 	userValues, err := values.ResolveAll(map[string]any{}, valueFiles, sets, setStrings, setFiles, setJSON)
 	if nil != err {
 		return "", err
+	}
+	effective, mergeErr := helmcompat.EffectiveValues(chartPath, userValues)
+	if nil != mergeErr {
+		return "", mergeErr
+	}
+	if schemaErr := action.ValidateValuesAgainstSchema(chartPath, effective); nil != schemaErr {
+		return "", schemaErr
 	}
 	rendered, err := helmcompat.Render(chartPath, helmcompat.Options{
 		Release:      rel,

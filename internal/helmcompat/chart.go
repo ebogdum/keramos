@@ -2,6 +2,7 @@ package helmcompat
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -19,6 +20,10 @@ type chart struct {
 	templates map[string]string
 	files     map[string][]byte
 	subcharts []*chart
+	alias     string
+	condition string
+	tags      []string
+	enabled   bool
 
 	scoped map[string]any // values after scoping/coalescing; set by assignValues
 }
@@ -96,6 +101,8 @@ func loadChartNamed(dir, parentFQ string) (*chart, error) {
 			if nil != sErr {
 				return nil, sErr
 			}
+			sub.enabled = true
+			applyDependencyMeta(c, sub)
 			c.subcharts = append(c.subcharts, sub)
 		}
 	}
@@ -134,6 +141,8 @@ func loadTemplates(tmplDir string, c *chart) error {
 }
 
 func loadFiles(dir string, c *chart) error {
+	ignored := loadHelmIgnore(dir)
+
 	return filepath.Walk(dir, func(path string, info os.FileInfo, e error) error {
 		if nil != e {
 			return e
@@ -143,6 +152,12 @@ func loadFiles(dir string, c *chart) error {
 			base := filepath.Base(path)
 			if path != dir && ("templates" == base || "charts" == base) {
 				return filepath.SkipDir
+			}
+			if path != dir {
+				rel, relErr := filepath.Rel(dir, path)
+				if nil == relErr && ignored.matches(filepath.ToSlash(rel)+"/") {
+					return filepath.SkipDir
+				}
 			}
 			return nil
 		}
@@ -155,6 +170,9 @@ func loadFiles(dir string, c *chart) error {
 		}
 		switch rel {
 		case "Chart.yaml", "values.yaml", "Chart.lock":
+			return nil
+		}
+		if ignored.matches(filepath.ToSlash(rel)) {
 			return nil
 		}
 		// Bound file size so a hostile chart can't exhaust memory via .Files.
@@ -178,8 +196,9 @@ func assignValues(c *chart, vals map[string]any) {
 	c.scoped = vals
 	global, _ := vals["global"].(map[string]any)
 	for _, sub := range c.subcharts {
+		sub.enabled = subchartEnabled(sub, vals)
 		subVals := deepCopy(sub.values)
-		if override, ok := vals[sub.name].(map[string]any); ok {
+		if override, ok := vals[subchartKey(sub)].(map[string]any); ok {
 			subVals = coalesce(subVals, override)
 		}
 		if nil != global {
@@ -219,4 +238,151 @@ func deepCopy(m map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+type helmIgnore struct {
+	patterns []string
+}
+
+func loadHelmIgnore(dir string) helmIgnore {
+	body, err := readFile(filepath.Join(dir, ".helmignore"))
+	if nil != err {
+		return helmIgnore{}
+	}
+
+	out := helmIgnore{}
+	for _, line := range strings.Split(string(body), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if "" == trimmed || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		out.patterns = append(out.patterns, trimmed)
+	}
+	return out
+}
+
+func (h helmIgnore) matches(rel string) bool {
+	if 0 == len(h.patterns) {
+		return false
+	}
+
+	clean := strings.TrimSuffix(rel, "/")
+	base := path.Base(clean)
+
+	for _, pattern := range h.patterns {
+		p := strings.TrimSuffix(strings.TrimPrefix(pattern, "/"), "/")
+		if "" == p {
+			continue
+		}
+		if p == clean || p == base {
+			return true
+		}
+		if strings.HasPrefix(clean, p+"/") {
+			return true
+		}
+		if ok, mErr := path.Match(p, base); nil == mErr && ok {
+			return true
+		}
+		if ok, mErr := path.Match(p, clean); nil == mErr && ok {
+			return true
+		}
+	}
+	return false
+}
+
+func EffectiveValues(chartPath string, userValues map[string]any) (map[string]any, error) {
+	root, err := loadChart(chartPath)
+	if nil != err {
+		return nil, err
+	}
+	if nil == userValues {
+		userValues = map[string]any{}
+	}
+	return coalesce(deepCopy(root.values), userValues), nil
+}
+
+func applyDependencyMeta(parent, sub *chart) {
+	deps, _ := parent.metadata["dependencies"].([]any)
+	for _, raw := range deps {
+		dep, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := dep["name"].(string)
+		if name != sub.name {
+			continue
+		}
+		if alias, ok := dep["alias"].(string); ok && "" != alias {
+			sub.alias = alias
+		}
+		if cond, ok := dep["condition"].(string); ok {
+			sub.condition = cond
+		}
+		for _, tag := range toStringSlice(dep["tags"]) {
+			sub.tags = append(sub.tags, tag)
+		}
+		return
+	}
+}
+
+func toStringSlice(v any) []string {
+	items, _ := v.([]any)
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func subchartKey(sub *chart) string {
+	if "" != sub.alias {
+		return sub.alias
+	}
+	return sub.name
+}
+
+func subchartEnabled(sub *chart, parentValues map[string]any) bool {
+	for _, path := range strings.Split(sub.condition, ",") {
+		path = strings.TrimSpace(path)
+		if "" == path {
+			continue
+		}
+		if val, found := lookupBoolPath(parentValues, path); found {
+			return val
+		}
+	}
+
+	tagsBlock, _ := parentValues["tags"].(map[string]any)
+	decided := false
+	enabled := false
+	for _, tag := range sub.tags {
+		if val, ok := tagsBlock[tag].(bool); ok {
+			decided = true
+			enabled = enabled || val
+		}
+	}
+	if decided {
+		return enabled
+	}
+
+	return true
+}
+
+func lookupBoolPath(values map[string]any, path string) (bool, bool) {
+	parts := strings.Split(path, ".")
+	var cursor any = values
+	for _, part := range parts {
+		m, ok := cursor.(map[string]any)
+		if !ok {
+			return false, false
+		}
+		cursor, ok = m[part]
+		if !ok {
+			return false, false
+		}
+	}
+	b, ok := cursor.(bool)
+	return b, ok
 }

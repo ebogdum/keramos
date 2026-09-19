@@ -133,6 +133,9 @@ func collectTemplates(c *chart, set *template.Template, partials *[]string, unit
 		*units = append(*units, renderUnit{name: fullName, chart: c})
 	}
 	for _, sub := range c.subcharts {
+		if !sub.enabled {
+			continue
+		}
 		if err := collectTemplates(sub, set, partials, units); nil != err {
 			return err
 		}

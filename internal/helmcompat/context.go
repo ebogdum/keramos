@@ -1,6 +1,8 @@
 package helmcompat
 
 import (
+	"encoding/base64"
+	"gopkg.in/yaml.v3"
 	"path"
 	"sort"
 	"strconv"
@@ -41,7 +43,7 @@ type capabilities struct {
 func newCapabilities(c CapabilitiesMeta) capabilities {
 	ver := c.KubeVersion
 	if "" == ver {
-		ver = "v1.29.0"
+		ver = defaultKubeVersion
 	}
 	major, minor := parseMajorMinor(ver)
 	set := map[string]bool{}
@@ -49,7 +51,7 @@ func newCapabilities(c CapabilitiesMeta) capabilities {
 		set[a] = true
 	}
 	// Always-present core groups, as Helm seeds.
-	for _, a := range []string{"v1", "apps/v1", "batch/v1", "networking.k8s.io/v1", "rbac.authorization.k8s.io/v1"} {
+	for _, a := range defaultAPIVersions {
 		set[a] = true
 	}
 	return capabilities{
@@ -114,18 +116,63 @@ func (f files) Lines(name string) []string {
 	return strings.Split(string(b), "\n")
 }
 
-func (f files) AsConfig() map[string]string {
+func (f files) AsConfig() string {
 	out := map[string]string{}
 	for name, b := range f.data {
 		out[path.Base(name)] = string(b)
 	}
-	return out
+	return marshalSortedYAML(out)
 }
 
-func (f files) AsSecrets() map[string]string {
+func (f files) AsSecrets() string {
 	out := map[string]string{}
 	for name, b := range f.data {
-		out[path.Base(name)] = string(b)
+		out[path.Base(name)] = base64.StdEncoding.EncodeToString(b)
 	}
-	return out
+	return marshalSortedYAML(out)
+}
+
+func marshalSortedYAML(in map[string]string) string {
+	if 0 == len(in) {
+		return ""
+	}
+
+	keys := make([]string, 0, len(in))
+	for k := range in {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, k := range keys {
+		encoded, err := yaml.Marshal(map[string]string{k: in[k]})
+		if nil != err {
+			continue
+		}
+		b.Write(encoded)
+	}
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+const defaultKubeVersion = "v1.31.0"
+
+var defaultAPIVersions = []string{
+	"v1",
+	"admissionregistration.k8s.io/v1",
+	"apiextensions.k8s.io/v1",
+	"apps/v1",
+	"autoscaling/v1",
+	"autoscaling/v2",
+	"batch/v1",
+	"certificates.k8s.io/v1",
+	"coordination.k8s.io/v1",
+	"discovery.k8s.io/v1",
+	"events.k8s.io/v1",
+	"networking.k8s.io/v1",
+	"node.k8s.io/v1",
+	"policy/v1",
+	"rbac.authorization.k8s.io/v1",
+	"scheduling.k8s.io/v1",
+	"storage.k8s.io/v1",
 }
