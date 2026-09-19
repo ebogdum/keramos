@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v3/internal/release"
 )
 
 // --- Command construction tests ---

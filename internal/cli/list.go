@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/release"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/kube"
+	"github.com/ebogdum/keramos/v3/internal/release"
 	"github.com/spf13/cobra"
 )
 

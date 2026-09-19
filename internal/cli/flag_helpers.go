@@ -3,7 +3,7 @@ package cli
 import (
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 // parseLabelFlags parses repeated --labels k=v entries into a map.

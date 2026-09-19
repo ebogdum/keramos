@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 

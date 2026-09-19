@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/pkg"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/pkg"
 	"gopkg.in/yaml.v3"
 )
 

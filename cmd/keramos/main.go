@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ebogdum/keramos/internal/cli"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/cli"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 func main() {

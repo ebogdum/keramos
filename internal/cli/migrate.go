@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ebogdum/keramos/internal/migrate"
+	"github.com/ebogdum/keramos/v3/internal/migrate"
 	"github.com/spf13/cobra"
 )
 

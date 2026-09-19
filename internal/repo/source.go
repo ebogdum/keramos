@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/logger"
 )
 
 // SourceType classifies the origin of a layer or required package.

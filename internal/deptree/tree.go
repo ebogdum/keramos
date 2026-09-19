@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/pkg"
-	"github.com/ebogdum/keramos/internal/repo"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/pkg"
+	"github.com/ebogdum/keramos/v3/internal/repo"
 	"gopkg.in/yaml.v3"
 )
 

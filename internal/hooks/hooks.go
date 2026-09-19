@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/release"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/kube"
+	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/release"
 	// yaml.v3 is safe for untrusted input: unlike Python's yaml.load(), Go's yaml.v3
 	// does not support arbitrary object instantiation or code execution during
 	// deserialization. All values are decoded into standard Go types.

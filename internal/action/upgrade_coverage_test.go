@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v3/internal/release"
 )
 
 // storeRelease creates a release revision in storage so upgrade can find it.

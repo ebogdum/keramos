@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 // Status represents the state of a release.

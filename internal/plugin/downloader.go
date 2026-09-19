@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 // FindDownloader scans installed plugins for one that handles the given URL

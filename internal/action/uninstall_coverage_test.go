@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v3/internal/release"
 )
 
 func TestUninstallSuccess(t *testing.T) {

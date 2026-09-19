@@ -3,8 +3,8 @@ package values
 import (
 	"os"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/layer"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/layer"
 	"gopkg.in/yaml.v3"
 )
 

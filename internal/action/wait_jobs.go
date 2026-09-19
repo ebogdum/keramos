@@ -3,7 +3,7 @@ package action
 import (
 	"time"
 
-	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/ebogdum/keramos/v3/internal/kube"
 )
 
 // waitForJobsInManifest blocks until every Job resource in the manifest

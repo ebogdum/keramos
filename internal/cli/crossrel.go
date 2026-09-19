@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/action"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v3/internal/action"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/kube"
+	"github.com/ebogdum/keramos/v3/internal/release"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

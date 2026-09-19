@@ -1,6 +1,6 @@
 package layer
 
-import "github.com/ebogdum/keramos/internal/maputil"
+import "github.com/ebogdum/keramos/v3/internal/maputil"
 
 // DeepMerge merges src into dst recursively.
 // Maps are merged recursively, all other types are replaced.

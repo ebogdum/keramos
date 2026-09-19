@@ -20,7 +20,7 @@ import (
 	"strings"
 	"text/template"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 // ReleaseMeta supplies the .Release context.

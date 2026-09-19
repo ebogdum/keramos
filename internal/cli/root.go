@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/logger"
 	"github.com/spf13/cobra"
 )
 

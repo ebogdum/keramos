@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/pkg"
-	"github.com/ebogdum/keramos/internal/repo"
+	"github.com/ebogdum/keramos/v3/internal/pkg"
+	"github.com/ebogdum/keramos/v3/internal/repo"
 )
 
 func TestScopedPackageCreation(t *testing.T) {

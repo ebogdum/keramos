@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 // Dialect identifies the SQL flavor for parameter binding. Postgres uses

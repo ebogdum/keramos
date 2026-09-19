@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/pkg"
+	"github.com/ebogdum/keramos/v3/internal/pkg"
 )
 
 // setupTestRepoServer creates a test HTTP server serving a repository with

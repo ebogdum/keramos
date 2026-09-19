@@ -1,7 +1,7 @@
 package action
 
 import (
-	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/ebogdum/keramos/v3/internal/kube"
 )
 
 // newResourcesOnly returns a key set for resources in `manifest` that are NOT

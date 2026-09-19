@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/diff"
+	"github.com/ebogdum/keramos/v3/internal/diff"
 )
 
 // triField is one field whose value differs across the three views. A "" value

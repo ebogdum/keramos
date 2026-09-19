@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
+	keramoserrors "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 // Engine-aware function constructors live below. They are bound per-render via

@@ -3,8 +3,8 @@ package engine
 import (
 	"strings"
 
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserrors "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/logger"
 )
 
 // maxIncludeDepth caps the chain length of nested $include calls. Cycle

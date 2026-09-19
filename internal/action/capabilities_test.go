@@ -3,7 +3,7 @@ package action
 import (
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/engine"
+	"github.com/ebogdum/keramos/v3/internal/engine"
 )
 
 func TestOverrideCapabilitiesAPIVersions(t *testing.T) {

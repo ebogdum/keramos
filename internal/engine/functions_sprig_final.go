@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
+	keramoserrors "github.com/ebogdum/keramos/v3/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 

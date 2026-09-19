@@ -6,7 +6,7 @@ import (
 	"os/user"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v3/internal/release"
 )
 
 // Capture builds an AuditRecord for the current process. It reads a few

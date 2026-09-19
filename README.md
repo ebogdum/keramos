@@ -79,7 +79,7 @@ Kubernetes manifests are **configuration data**, but most tools treat them as *s
 ### `go install` (recommended for most users)
 
 ```sh
-go install github.com/ebogdum/keramos/cmd/keramos@latest
+go install github.com/ebogdum/keramos/v3/cmd/keramos@latest
 ```
 
 Binary lands in `$GOBIN` (or `$(go env GOPATH)/bin`). Go 1.25 or later required.

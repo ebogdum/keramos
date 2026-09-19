@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/repo"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/repo"
 	"github.com/spf13/cobra"
 )
 

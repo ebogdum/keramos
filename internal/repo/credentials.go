@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/logger"
 )
 
 // AuthType identifies the authentication method for a credential.

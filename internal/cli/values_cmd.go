@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ebogdum/keramos/internal/layer"
-	"github.com/ebogdum/keramos/internal/values"
+	"github.com/ebogdum/keramos/v3/internal/layer"
+	"github.com/ebogdum/keramos/v3/internal/values"
 	"github.com/spf13/cobra"
 )
 

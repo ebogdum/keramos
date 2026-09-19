@@ -51,9 +51,9 @@ TARGETS=(
 FAILED=()
 
 LDFLAGS="-s -w \
--X github.com/ebogdum/keramos/internal/cli.Version=${VERSION} \
--X github.com/ebogdum/keramos/internal/cli.Commit=${COMMIT} \
--X github.com/ebogdum/keramos/internal/cli.BuildDate=${BUILD_DATE}"
+-X github.com/ebogdum/keramos/v3/internal/cli.Version=${VERSION} \
+-X github.com/ebogdum/keramos/v3/internal/cli.Commit=${COMMIT} \
+-X github.com/ebogdum/keramos/v3/internal/cli.BuildDate=${BUILD_DATE}"
 
 echo "Building keramos ${VERSION} (commit ${COMMIT:0:12})"
 echo

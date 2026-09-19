@@ -1,4 +1,4 @@
-module github.com/ebogdum/keramos
+module github.com/ebogdum/keramos/v3
 
 go 1.25.0
 

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/netguard"
-	"github.com/ebogdum/keramos/internal/repo"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/netguard"
+	"github.com/ebogdum/keramos/v3/internal/repo"
 	"github.com/spf13/cobra"
 )
 

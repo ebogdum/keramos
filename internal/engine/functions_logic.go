@@ -1,7 +1,7 @@
 package engine
 
 import (
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
+	keramoserrors "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 func registerLogicFuncs(r *FuncRegistry) {

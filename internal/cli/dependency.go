@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/deptree"
-	"github.com/ebogdum/keramos/internal/layer"
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/pkg"
-	"github.com/ebogdum/keramos/internal/repo"
+	"github.com/ebogdum/keramos/v3/internal/deptree"
+	"github.com/ebogdum/keramos/v3/internal/layer"
+	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/pkg"
+	"github.com/ebogdum/keramos/v3/internal/repo"
 	"github.com/spf13/cobra"
 )
 

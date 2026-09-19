@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/repo"
+	"github.com/ebogdum/keramos/v3/internal/repo"
 	"gopkg.in/yaml.v3"
 )
 

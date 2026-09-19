@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/layer"
+	"github.com/ebogdum/keramos/v3/internal/layer"
 )
 
 // Source identifies where a value came from in the resolution chain.

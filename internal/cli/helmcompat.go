@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/helmcompat"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/release"
-	"github.com/ebogdum/keramos/internal/values"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/helmcompat"
+	"github.com/ebogdum/keramos/v3/internal/kube"
+	"github.com/ebogdum/keramos/v3/internal/release"
+	"github.com/ebogdum/keramos/v3/internal/values"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

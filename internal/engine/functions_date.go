@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
+	keramoserrors "github.com/ebogdum/keramos/v3/internal/errors"
 )
 
 func registerDateFuncs(r *FuncRegistry) {

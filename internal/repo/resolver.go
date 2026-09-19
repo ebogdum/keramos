@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/pkg"
+	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
+	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/pkg"
 )
 
 // ResolvedDep describes a fully resolved dependency including its transitive children.
