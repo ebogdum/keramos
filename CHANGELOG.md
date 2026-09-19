@@ -4,6 +4,13 @@ All notable changes to keramos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] — 2026-09-19
+
+### Breaking changes
+
+- Releases installed by a 2.x binary are not recognised by this version.
+  Re-adopt them with `keramos adopt` before managing them again.
+
 ## [2.1.0] — 2026-07-19
 
 ### Added
