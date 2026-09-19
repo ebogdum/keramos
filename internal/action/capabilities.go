@@ -1,7 +1,7 @@
 package action
 
 import (
-	"github.com/ebogdum/keramos/internal/engine"
+	"github.com/ebogdum/keramos/v2/internal/engine"
 )
 
 // overrideCapabilities applies user-provided --api-versions and --kube-version

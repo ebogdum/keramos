@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/plugin"
+	"github.com/ebogdum/keramos/v2/internal/plugin"
 )
 
 // TryDownloaderFetchPublic exposes the plugin-downloader dispatch to callers

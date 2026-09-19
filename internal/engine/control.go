@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserrors "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/logger"
 )
 
 // omitSentinel marks a value that must be DROPPED from its containing map or

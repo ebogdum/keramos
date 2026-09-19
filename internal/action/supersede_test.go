@@ -3,7 +3,7 @@ package action
 import (
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/release"
 )
 
 // TestSupersedeOtherDeployedSelfHeals proves that marking a new revision the

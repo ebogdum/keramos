@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/policy"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/policy"
 	"github.com/spf13/cobra"
 )
 

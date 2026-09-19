@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/logger"
 )
 
 // RateLimiter controls concurrent download slots and per-host request rates.

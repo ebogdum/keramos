@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/pkg"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/logger"
+	"github.com/ebogdum/keramos/v2/internal/pkg"
 	"gopkg.in/yaml.v3"
 )
 

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
 )
 
 // sopsKeyPattern bounds keypaths to safe identifiers so the bracket-quoted

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	keramoserrors "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/logger"
+	keramoserrors "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/logger"
 	"gopkg.in/yaml.v3"
 )
 

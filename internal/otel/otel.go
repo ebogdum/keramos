@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/netguard"
+	"github.com/ebogdum/keramos/v2/internal/netguard"
 )
 
 // Span represents one operation. Use Start to construct, then call End when

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/action"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/release"
+	"github.com/ebogdum/keramos/v2/internal/action"
+	"github.com/ebogdum/keramos/v2/internal/kube"
+	"github.com/ebogdum/keramos/v2/internal/release"
 )
 
 func kubeconfig(t *testing.T) string {

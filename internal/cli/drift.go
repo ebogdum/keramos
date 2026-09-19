@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ebogdum/keramos/internal/action"
-	"github.com/ebogdum/keramos/internal/diff"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	"github.com/ebogdum/keramos/internal/kube"
-	"github.com/ebogdum/keramos/internal/pkg"
+	"github.com/ebogdum/keramos/v2/internal/action"
+	"github.com/ebogdum/keramos/v2/internal/diff"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	"github.com/ebogdum/keramos/v2/internal/kube"
+	"github.com/ebogdum/keramos/v2/internal/pkg"
 	"github.com/spf13/cobra"
 )
 

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
 )
 
 var scopedNameRegex = regexp.MustCompile(`^(@[a-z0-9][a-z0-9-]*/)?[a-z0-9][a-z0-9.-]*$`)

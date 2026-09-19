@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/ebogdum/keramos/internal/action"
-	"github.com/ebogdum/keramos/internal/kube"
+	"github.com/ebogdum/keramos/v2/internal/action"
+	"github.com/ebogdum/keramos/v2/internal/kube"
 	"github.com/spf13/cobra"
 )
 

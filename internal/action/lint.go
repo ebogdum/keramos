@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ebogdum/keramos/internal/engine"
-	"github.com/ebogdum/keramos/internal/layer"
-	"github.com/ebogdum/keramos/internal/values"
+	"github.com/ebogdum/keramos/v2/internal/engine"
+	"github.com/ebogdum/keramos/v2/internal/layer"
+	"github.com/ebogdum/keramos/v2/internal/values"
 	"gopkg.in/yaml.v3"
 )
 

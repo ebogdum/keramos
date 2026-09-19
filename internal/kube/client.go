@@ -9,10 +9,10 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/ebogdum/keramos/internal/engine"
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
-	keramoslabels "github.com/ebogdum/keramos/internal/labels"
-	"github.com/ebogdum/keramos/internal/logger"
+	"github.com/ebogdum/keramos/v2/internal/engine"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
+	keramoslabels "github.com/ebogdum/keramos/v2/internal/labels"
+	"github.com/ebogdum/keramos/v2/internal/logger"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
 )
 
 // cloneRelease returns a deep copy of rel via a JSON round-trip. The cluster-

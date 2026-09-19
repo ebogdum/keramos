@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/pkg"
-	"github.com/ebogdum/keramos/internal/repo"
+	"github.com/ebogdum/keramos/v2/internal/pkg"
+	"github.com/ebogdum/keramos/v2/internal/repo"
 	"gopkg.in/yaml.v3"
 )
 

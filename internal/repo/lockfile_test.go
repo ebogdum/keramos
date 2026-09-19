@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ebogdum/keramos/internal/pkg"
+	"github.com/ebogdum/keramos/v2/internal/pkg"
 )
 
 func TestLockFileSaveLoadRoundTrip(t *testing.T) {

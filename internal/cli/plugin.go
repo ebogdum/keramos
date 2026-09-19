@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"text/tabwriter"
 
-	"github.com/ebogdum/keramos/internal/logger"
-	"github.com/ebogdum/keramos/internal/plugin"
+	"github.com/ebogdum/keramos/v2/internal/logger"
+	"github.com/ebogdum/keramos/v2/internal/plugin"
 	"github.com/spf13/cobra"
 )
 

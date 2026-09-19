@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	keramoserr "github.com/ebogdum/keramos/internal/errors"
+	keramoserr "github.com/ebogdum/keramos/v2/internal/errors"
 )
 
 // maxSetIndex bounds --set array indexes so a single flag cannot grow a slice
