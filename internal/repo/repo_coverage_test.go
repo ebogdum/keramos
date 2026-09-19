@@ -15,7 +15,7 @@ entries:
   myapp:
     - name: myapp
       version: "1.0.0"
-      digest: abc123
+      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411123
       urls:
         - myapp-1.0.0.keramos.tgz
 generated: "2025-01-01T00:00:00Z"
@@ -162,7 +162,7 @@ entries:
   other-app:
     - name: other-app
       version: "1.0.0"
-      digest: abc
+      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411
       urls:
         - other-app-1.0.0.keramos.tgz
 `
@@ -194,7 +194,7 @@ entries:
   myapp:
     - name: myapp
       version: "1.0.0"
-      digest: abc
+      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411
       urls:
         - myapp-1.0.0.keramos.tgz
 `
@@ -226,7 +226,7 @@ entries:
   myapp:
     - name: myapp
       version: "1.0.0"
-      digest: abc
+      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411
       urls: []
 `
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -257,7 +257,7 @@ entries:
   myapp:
     - name: myapp
       version: "1.0.0"
-      digest: abc
+      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411
       urls:
         - myapp-1.0.0.keramos.tgz
 `
@@ -289,7 +289,7 @@ entries:
   myapp:
     - name: myapp
       version: "1.0.0"
-      digest: abc
+      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411
       urls:
         - ` + "http://" + r.Host + `/packages/myapp-1.0.0.keramos.tgz
 `
@@ -487,7 +487,7 @@ entries:
   myapp:
     - name: myapp
       version: "1.0.0"
-      digest: abc
+      digest: fd3d4b42292957ad0b649621615962140c857fbf7342038d6cc6b2b1ab8c3411
       urls:
         - packages/myapp-1.0.0.keramos.tgz
 `

@@ -76,13 +76,39 @@ Kubernetes manifests are **configuration data**, but most tools treat them as *s
 
 ## Quick install
 
-### `go install` (recommended for most users)
+### Download a binary (no toolchain required)
+
+Every release ships prebuilt binaries for Linux, macOS, Windows, FreeBSD and
+OpenBSD on amd64 and arm64, with a `SHA256SUMS` file beside them.
+
+```sh
+VER=$(curl -fsSI https://github.com/ebogdum/keramos/releases/latest \
+  | tr -d '\r' | awk -F/ '/^location:/ {print $NF}')
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+
+curl -fsSL -O "https://github.com/ebogdum/keramos/releases/download/$VER/keramos-$VER-$OS-$ARCH.tar.gz"
+curl -fsSL -O "https://github.com/ebogdum/keramos/releases/download/$VER/SHA256SUMS"
+grep " keramos-$VER-$OS-$ARCH.tar.gz$" SHA256SUMS | shasum -a 256 -c -
+
+tar -xzf "keramos-$VER-$OS-$ARCH.tar.gz"
+sudo install -m 0755 "keramos-$VER-$OS-$ARCH/keramos" /usr/local/bin/keramos
+keramos version
+```
+
+Windows builds are `.zip` archives of the same naming shape.
+
+### `go install`
+
+For a Go toolchain you already have:
 
 ```sh
 go install github.com/ebogdum/keramos/v3/cmd/keramos@latest
 ```
 
 Binary lands in `$GOBIN` (or `$(go env GOPATH)/bin`). Go 1.25 or later required.
+A binary built this way reports its module version but carries no commit or
+build date, because the Go toolchain does not stamp them.
 
 ### Build from source
 

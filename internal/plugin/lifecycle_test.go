@@ -18,6 +18,8 @@ func TestRunPluginHook_Executes(t *testing.T) {
 	if "windows" == runtime.GOOS {
 		t.Skip("posix shell required")
 	}
+	AllowHooks(true)
+	t.Cleanup(func() { AllowHooks(false) })
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "marker")
 	if err := runPluginHook(&Plugin{Name: "demo"}, dir, "touch "+marker); nil != err {
@@ -32,6 +34,8 @@ func TestRunPluginHook_FailurePropagates(t *testing.T) {
 	if "windows" == runtime.GOOS {
 		t.Skip("posix shell required")
 	}
+	AllowHooks(true)
+	t.Cleanup(func() { AllowHooks(false) })
 	dir := t.TempDir()
 	if err := runPluginHook(&Plugin{Name: "demo"}, dir, "exit 7"); nil == err {
 		t.Fatal("expected non-zero exit to surface")
@@ -39,8 +43,27 @@ func TestRunPluginHook_FailurePropagates(t *testing.T) {
 }
 
 func TestRunPluginHook_RejectsBadName(t *testing.T) {
+	AllowHooks(true)
+	t.Cleanup(func() { AllowHooks(false) })
 	if err := runPluginHook(&Plugin{Name: "../escape"}, t.TempDir(), "true"); nil == err {
 		t.Fatal("expected name validation error")
+	}
+}
+
+func TestRunPluginHookRefusedWithoutApproval(t *testing.T) {
+	if "windows" == runtime.GOOS {
+		t.Skip("posix shell required")
+	}
+	AllowHooks(false)
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "marker")
+
+	err := runPluginHook(&Plugin{Name: "demo"}, dir, "touch "+marker)
+	if nil == err {
+		t.Fatal("expected an unapproved hook to be refused")
+	}
+	if _, statErr := os.Stat(marker); nil == statErr {
+		t.Fatal("refused hook still executed")
 	}
 }
 

@@ -359,9 +359,22 @@ func TestMigrateFullChart(t *testing.T) {
 	deployData2, _ := os.ReadFile(deployPath)
 	deployStr := string(deployData2)
 
-	// Verify if block was converted
-	if !strings.Contains(deployStr, "$if: ${values.ingress.enabled}") {
-		t.Error("deployment.yaml missing converted if block")
+	if strings.Contains(deployStr, "$if: ${values.ingress.enabled}") {
+		t.Error("deployment.yaml converted an if-block that has unconditional sibling keys")
+	}
+	for _, sibling := range []string{"imagePullPolicy:", "ports:", "env:"} {
+		if !strings.Contains(deployStr, sibling) {
+			t.Errorf("deployment.yaml lost unconditional key %q", sibling)
+		}
+	}
+	flaggedForReview := false
+	for _, item := range result.ManualReview {
+		if strings.Contains(item.File, "deployment.yaml") {
+			flaggedForReview = true
+		}
+	}
+	if !flaggedForReview {
+		t.Error("deployment.yaml if-block was neither converted nor flagged for review")
 	}
 
 	// Verify range block was converted

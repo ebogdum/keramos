@@ -299,14 +299,17 @@ spec:
 	result := &MigrateResult{ManualReview: make([]ReviewItem, 0)}
 	got := convertTemplateContentV2(input, "test.yaml", result)
 
-	if 0 != len(result.ManualReview) {
-		t.Errorf("expected 0 review items, got %d: %+v", len(result.ManualReview), result.ManualReview)
+	if 1 != len(result.ManualReview) {
+		t.Errorf("expected the unsafe if-block to be flagged once, got %d: %+v", len(result.ManualReview), result.ManualReview)
 	}
 	if !strings.Contains(got, "${release.name}") {
 		t.Errorf("missing release.name, got:\n%s", got)
 	}
-	if !strings.Contains(got, "$if: ${!values.autoscaling.enabled}") {
-		t.Errorf("missing if block, got:\n%s", got)
+	if strings.Contains(got, "$if: ${!values.autoscaling.enabled}") {
+		t.Errorf("converted an if-block guarding one key of a map whose sibling keys are unconditional, got:\n%s", got)
+	}
+	if !strings.Contains(got, "template:") {
+		t.Errorf("lost the unconditional sibling key, got:\n%s", got)
 	}
 	if !strings.Contains(got, "${values.image.repository}") {
 		t.Errorf("missing image ref, got:\n%s", got)

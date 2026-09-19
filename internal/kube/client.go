@@ -1386,7 +1386,7 @@ func listAllPages(ctx context.Context, lister dynamic.ResourceInterface) (*unstr
 		}
 
 		token := page.GetContinue()
-		if "" == token {
+		if "" == token || token == opts.Continue {
 			combined.SetContinue("")
 			return combined, nil
 		}
