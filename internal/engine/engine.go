@@ -260,6 +260,9 @@ func stashExpressions(content string) (string, []string) {
 			}
 			if 0 == depth {
 				expr := string(runes[i:j])
+				if scalarIsQuotedExpression(runes, i, j) {
+					expr = "${" + strings.TrimSuffix(strings.TrimPrefix(expr, "${"), "}") + " | toString}"
+				}
 				token := fmt.Sprintf("%s%d%s", keramosExprPrefix, len(exprs), keramosExprSuffix)
 				exprs = append(exprs, expr)
 				b.WriteString(token)
@@ -408,6 +411,34 @@ func depthExceeds(v any, max int) bool {
 			if depthExceeds(e, max-1) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func scalarIsQuotedExpression(runes []rune, start, end int) bool {
+	if 0 >= start || end >= len(runes) {
+		return false
+	}
+
+	opening := runes[start-1]
+	if '"' != opening && '\'' != opening {
+		return false
+	}
+	if runes[end] != opening {
+		return false
+	}
+
+	for k := start - 2; k >= 0; k-- {
+		switch runes[k] {
+		case ' ', '\t':
+			continue
+		case '\n':
+			return false
+		case ':', '-', ',', '[', '{':
+			return true
+		default:
+			return false
 		}
 	}
 	return false
