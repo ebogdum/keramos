@@ -109,9 +109,9 @@ func truncateError(body []byte) string {
 
 // registerExternalFuncs adds render-time external-API functions:
 //
-//   ${http "https://example/x" [headers]}        GET → response body string
-//   ${httpJSON "https://example/x" [headers]}    GET → parsed JSON value
-//   ${vault "secret/data/db" "password"}         HashiCorp Vault KV-v2 lookup
+//	${http "https://example/x" [headers]}        GET → response body string
+//	${httpJSON "https://example/x" [headers]}    GET → parsed JSON value
+//	${vault "secret/data/db" "password"}         HashiCorp Vault KV-v2 lookup
 //
 // Network egress at render time is opt-in via the KERAMOS_RENDER_NETWORK env var
 // to avoid surprising hermetic-build assumptions. Without it the functions

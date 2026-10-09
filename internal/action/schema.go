@@ -65,9 +65,9 @@ func ValidateValuesAgainstSchema(packagePath string, vals map[string]any) error 
 const maxSchemaPatternLen = 512
 
 type validator struct {
-	root        map[string]any
-	errs        []string
-	regexCache  map[string]*regexp.Regexp
+	root       map[string]any
+	errs       []string
+	regexCache map[string]*regexp.Regexp
 }
 
 func (v *validator) compilePattern(pattern string) (*regexp.Regexp, error) {

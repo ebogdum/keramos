@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/ebogdum/keramos/v3/internal/paths"
 )
 
 func TestCredentialStore_SetGetRemove(t *testing.T) {
@@ -129,13 +131,12 @@ func TestMigrateOCICredentials(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv(paths.ConfigHomeEnv, "")
 
-	configDir, err := os.UserConfigDir()
+	keramosDir, err := paths.ConfigHome()
 	if nil != err {
-		t.Fatalf("UserConfigDir failed: %v", err)
+		t.Fatalf("ConfigHome failed: %v", err)
 	}
-
-	keramosDir := filepath.Join(configDir, "keramos")
 	if err := os.MkdirAll(keramosDir, 0755); nil != err {
 		t.Fatalf("MkdirAll failed: %v", err)
 	}

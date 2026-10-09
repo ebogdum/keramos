@@ -70,6 +70,13 @@ func renderHelmChart(chartPath string, valueFiles, sets, setStrings, setFiles, s
 	return b.String(), nil
 }
 
+func helmCompatNamespaceDefault() string {
+	if ns := namespaceFromEnv(); "" != ns {
+		return ns
+	}
+	return "default"
+}
+
 func newHelmCompatRenderCommand() *cobra.Command {
 	var (
 		name        string
@@ -105,9 +112,9 @@ func newHelmCompatRenderCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "release-name", "release name (.Release.Name)")
-	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace (.Release.Namespace)")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", helmCompatNamespaceDefault(), "namespace (.Release.Namespace)")
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig")
-	cmd.Flags().StringVar(&kubeContext, "kube-context", "", "kubeconfig context")
+	cmd.Flags().StringVar(&kubeContext, "kube-context", kubeContextFromEnv(), "kubeconfig context (default from KERAMOS_KUBECONTEXT)")
 	cmd.Flags().StringSliceVarP(&valueFiles, "values", "f", nil, "values file(s)")
 	cmd.Flags().StringArrayVar(&sets, "set", nil, "set values (key=val)")
 	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "set string values")
@@ -174,9 +181,9 @@ func newHelmCompatInstallCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", helmCompatNamespaceDefault(), "namespace")
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig")
-	cmd.Flags().StringVar(&kubeContext, "kube-context", "", "kubeconfig context")
+	cmd.Flags().StringVar(&kubeContext, "kube-context", kubeContextFromEnv(), "kubeconfig context (default from KERAMOS_KUBECONTEXT)")
 	cmd.Flags().StringSliceVarP(&valueFiles, "values", "f", nil, "values file(s)")
 	cmd.Flags().StringArrayVar(&sets, "set", nil, "set values (key=val)")
 	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "set string values")

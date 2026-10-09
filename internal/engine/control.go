@@ -3,6 +3,9 @@ package engine
 import (
 	"fmt"
 	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	keramoserrors "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
@@ -37,6 +40,12 @@ func ProcessControlFlow(node any, ctx *RenderContext, funcs *FuncRegistry) (any,
 }
 
 func processMap(m map[string]any, ctx *RenderContext, funcs *FuncRegistry) (any, error) {
+	if _, ok := m[textKey]; ok {
+		return processText(m, ctx, funcs)
+	}
+	if _, ok := m[letKey]; ok {
+		return processLet(m, ctx, funcs)
+	}
 	// Check for $if directive
 	if ifExpr, ok := m["$if"]; ok {
 		return processIf(m, ifExpr, ctx, funcs)
@@ -55,6 +64,7 @@ func processMap(m map[string]any, ctx *RenderContext, funcs *FuncRegistry) (any,
 	// Regular map: recursively process values. A value resolving to the omit
 	// sentinel drops its key entirely (optional-field omission).
 	result := make(map[string]any, len(m))
+	var merged any
 	for k, v := range m {
 		processed, err := ProcessControlFlow(v, ctx, funcs)
 		if nil != err {
@@ -63,14 +73,184 @@ func processMap(m map[string]any, ctx *RenderContext, funcs *FuncRegistry) (any,
 		if isOmit(processed) {
 			continue
 		}
+		if mergeKey == k {
+			merged = processed
+			continue
+		}
 		result[k] = processed
 	}
+	if nil != merged {
+		if 0 == len(result) {
+			return soleMerge(merged, ctx, funcs)
+		}
+		if err := applyMerge(result, merged, ctx, funcs); nil != err {
+			return nil, err
+		}
+	}
 	return result, nil
+}
+
+func soleMerge(value any, ctx *RenderContext, funcs *FuncRegistry) (any, error) {
+	resolved, err := resolveValue(value, ctx, funcs)
+	if nil != err {
+		return nil, err
+	}
+	resolved = parseMergeText(resolved)
+	switch v := resolved.(type) {
+	case nil:
+		return omit, nil
+	case []any:
+		return mergeList(v, ctx, funcs)
+	case map[string]any:
+		return v, nil
+	default:
+		return resolved, nil
+	}
+}
+
+func mergeList(items []any, ctx *RenderContext, funcs *FuncRegistry) (any, error) {
+	out := map[string]any{}
+	list := make([]any, 0, len(items))
+	for _, item := range items {
+		resolved, err := resolveValue(item, ctx, funcs)
+		if nil != err {
+			return nil, err
+		}
+		switch v := resolved.(type) {
+		case nil:
+		case map[string]any:
+			for k, val := range v {
+				if isOmit(val) {
+					continue
+				}
+				out[k] = val
+			}
+		case []any:
+			list = append(list, v...)
+		default:
+			if !isOmit(resolved) {
+				list = append(list, resolved)
+			}
+		}
+	}
+	if 0 < len(list) && 0 == len(out) {
+		return list, nil
+	}
+	return out, nil
+}
+
+const mergeKey = "$merge"
+
+func applyMerge(dst map[string]any, value any, ctx *RenderContext, funcs *FuncRegistry) error {
+	resolved, err := resolveValue(value, ctx, funcs)
+	if nil != err {
+		return err
+	}
+	resolved = parseMergeText(resolved)
+	switch v := resolved.(type) {
+	case nil:
+		return nil
+	case map[string]any:
+		for k, item := range v {
+			if isOmit(item) {
+				continue
+			}
+			dst[k] = item
+		}
+		return nil
+	case []any:
+		for _, item := range v {
+			if isOmit(item) || nil == item {
+				continue
+			}
+			if err := applyMerge(dst, item, ctx, funcs); nil != err {
+				return err
+			}
+		}
+		return nil
+	default:
+		return keramoserrors.NewErrorf(keramoserrors.ErrType,
+			"$merge: expected a map or a list of maps, got %T", resolved)
+	}
+}
+
+func parseMergeText(value any) any {
+	text, isText := value.(string)
+	if !isText {
+		return value
+	}
+	if "" == strings.TrimSpace(text) {
+		return nil
+	}
+	var parsed any
+	if err := yaml.Unmarshal([]byte(text), &parsed); nil != err {
+		return value
+	}
+	return normalizeYAML(parsed)
+}
+
+func normalizeYAML(value any) any {
+	switch v := value.(type) {
+	case map[any]any:
+		out := make(map[string]any, len(v))
+		for k, item := range v {
+			out[fmt.Sprintf("%v", k)] = normalizeYAML(item)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, item := range v {
+			out[k] = normalizeYAML(item)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(v))
+		for _, item := range v {
+			out = append(out, normalizeYAML(item))
+		}
+		return out
+	}
+	return value
+}
+
+func spliceMerge(dst []any, value any, ctx *RenderContext, funcs *FuncRegistry) ([]any, error) {
+	resolved, err := resolveValue(value, ctx, funcs)
+	if nil != err {
+		return nil, err
+	}
+	switch v := resolved.(type) {
+	case nil:
+		return dst, nil
+	case []any:
+		for _, item := range v {
+			if isOmit(item) || nil == item {
+				continue
+			}
+			dst = append(dst, item)
+		}
+		return dst, nil
+	default:
+		return append(dst, resolved), nil
+	}
 }
 
 func processSlice(s []any, ctx *RenderContext, funcs *FuncRegistry) (any, error) {
 	result := make([]any, 0, len(s))
 	for _, item := range s {
+		if spliced, ok := listMergeValue(item); ok {
+			processed, err := ProcessControlFlow(spliced, ctx, funcs)
+			if nil != err {
+				return nil, err
+			}
+			if isOmit(processed) {
+				continue
+			}
+			result, err = spliceMerge(result, processed, ctx, funcs)
+			if nil != err {
+				return nil, err
+			}
+			continue
+		}
 		processed, err := ProcessControlFlow(item, ctx, funcs)
 		if nil != err {
 			return nil, err
@@ -81,6 +261,15 @@ func processSlice(s []any, ctx *RenderContext, funcs *FuncRegistry) (any, error)
 		result = append(result, processed)
 	}
 	return result, nil
+}
+
+func listMergeValue(item any) (any, bool) {
+	m, isMap := item.(map[string]any)
+	if !isMap || 1 != len(m) {
+		return nil, false
+	}
+	v, ok := m[mergeKey]
+	return v, ok
 }
 
 func processIf(m map[string]any, ifExpr any, ctx *RenderContext, funcs *FuncRegistry) (any, error) {

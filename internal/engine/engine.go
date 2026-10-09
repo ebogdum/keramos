@@ -104,6 +104,22 @@ func (e *Engine) RenderFile(name, content string, partials map[string]any, ctx *
 		if nil == rendered {
 			continue // document was conditionally removed
 		}
+		if text, isText := rendered.(string); isText && "" == strings.TrimSpace(text) {
+			continue
+		}
+		if list, isList := rendered.([]any); isList {
+			for _, item := range list {
+				out, err := marshalYAML(item)
+				if nil != err {
+					return nil, keramoserrors.WrapErrorf(keramoserrors.ErrParse, err, "failed to marshal rendered YAML in %s", name)
+				}
+				if 0 == len(strings.TrimSpace(out)) {
+					continue
+				}
+				result = append(result, out)
+			}
+			continue
+		}
 		out, err := marshalYAML(rendered)
 		if nil != err {
 			return nil, keramoserrors.WrapErrorf(keramoserrors.ErrParse, err, "failed to marshal rendered YAML in %s", name)
@@ -124,6 +140,7 @@ func buildRenderRegistry(e *Engine, ctx *RenderContext, partials map[string]any)
 	override["tpl"] = makeTplFunc(e, ctx, partials)
 	override["include"] = makeIncludeFunc(e, ctx, partials)
 	override["lookup"] = makeLookupFunc(ctx)
+	override["Capabilities.APIVersions.Has"] = makeAPIVersionsHas(ctx)
 	override["Files.Get"] = makeFilesGet(ctx)
 	override["Files.Glob"] = makeFilesGlob(ctx)
 	override["Files.AsConfig"] = makeFilesAsConfig(ctx)
@@ -352,6 +369,12 @@ var keramosDirectiveKeys = map[string]struct{}{
 	"$cases":   {},
 	"$default": {},
 	"$include": {},
+	"$merge":   {},
+	"$text":    {},
+	"$let":     {},
+	"$in":      {},
+	"$join":    {},
+	"$indent":  {},
 	"$item":    {},
 	"$key":     {},
 	"$value":   {},

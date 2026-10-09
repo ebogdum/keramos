@@ -8,16 +8,17 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"github.com/ebogdum/keramos/v3/internal/repo"
 )
 
 // keyringDir returns the default keyring directory for keramos.
 func keyringDir() (string, error) {
-	configDir, err := os.UserConfigDir()
+	dir, err := paths.Keyring()
 	if nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrSignature, "failed to determine config directory", err)
 	}
-	return filepath.Join(configDir, "keramos", "keyring"), nil
+	return dir, nil
 }
 
 // verifyArchiveSignature checks the provenance file for a single archive.

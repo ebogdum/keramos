@@ -225,7 +225,7 @@ env:
 ```
 
 You cannot build a *map* with `$each` — it yields a list, and `${...}` inside a
-map **key** is never substituted. When you already have a map in values and want
+map **key** is substituted. When you already have a map in values and want
 it as a map in output, embed it directly instead:
 
 **Template:**
@@ -272,6 +272,125 @@ spec:
 ```
 
 When nothing matches and there is no `$default`, the field is omitted.
+
+## `$merge` — folding values into the surrounding node
+
+`$merge` splices a map into the map it sits in, or a list into the list it sits
+in, after the rest of the node is resolved. Its value may be a map, a list, or a
+list of maps applied in order; later entries win over earlier ones and over the
+node's own keys.
+
+**Template:**
+
+```yaml
+metadata:
+  labels:
+    app: web
+    $merge:
+      - ${values.commonLabels}
+      - $if: ${values.extraLabels}
+        $then: ${values.extraLabels}
+```
+
+**Values:** `{ commonLabels: { tier: backend }, extraLabels: { team: core } }`
+
+**Output:**
+
+```yaml
+metadata:
+  labels:
+    app: web
+    tier: backend
+    team: core
+```
+
+When `$merge` is the only key in its map, the merged value replaces the map —
+so a list merged into an otherwise empty map becomes that list:
+
+```yaml
+spec:
+  containers:
+    $merge: ${values.extraContainers}
+```
+
+Inside a sequence, an item of the form `- $merge: <list>` splices the list's
+elements into the surrounding sequence at that position.
+
+## `$let` — naming intermediate values
+
+`$let` binds names to values for the block under `$in`. Each binding is a full
+template fragment — directives and `${...}` are resolved — and bindings are
+evaluated in name order, so a later name may use an earlier one. Inside `$in`
+the name is reachable as `${name}` or `${$name}`.
+
+**Template:**
+
+```yaml
+$let:
+  names:
+    $each: ${values.storages}
+    $as: item
+    $yield:
+      $if: ${item | hasPrefix ' '}
+      $then: ${item | trim | trimSuffix ':'}
+$in:
+  kind: ConfigMap
+  data:
+    storages: ${names | join ','}
+```
+
+**Values:** `{ storages: [" a:", "b", " c:"] }`
+
+**Output:**
+
+```yaml
+kind: ConfigMap
+data:
+  storages: a,c
+```
+
+A binding that resolves to nothing (an `$if` with no matching branch) is bound
+as `null`. `$let` without `$in` is an error.
+
+## `$text` — building text line by line
+
+`$text` turns a list of items into one string. Items are joined with a newline,
+or with `$join` when given; `$indent` shifts every non-blank line right by that
+many spaces. Items may be plain strings, `${...}` expressions, or `$each` /
+`$if` / `$switch` directives whose results are flattened into the line list.
+An item that resolves to a map is an error — `$text` builds lines, not
+structure.
+
+**Template:**
+
+```yaml
+data:
+  app.conf:
+    $text:
+      - "[server]"
+      - $each: ${values.config}
+        $as: entry
+        $yield: "${entry.key} = ${entry.value}"
+      - $if: ${values.metrics}
+        $then: "metrics = on"
+```
+
+**Values:** `{ config: { port: 8080, host: 0.0.0.0 }, metrics: true }`
+
+**Output:**
+
+```yaml
+data:
+  app.conf: |-
+    [server]
+    host = 0.0.0.0
+    port = 8080
+    metrics = on
+```
+
+A map is iterated in key order, each entry as `{key, value}`. Add
+`$join: ", "` beside `$text` to change the separator, or `$indent: 4` to shift
+every non-blank line right by four spaces.
 
 ## `$include` — inserting partials
 
@@ -333,6 +452,28 @@ metadata:
     ns: |
       default/hello
 ```
+
+Both forms take an optional context argument. The partial reads it as `$ctx`,
+which is how a Helm `include "name" (dict …)` or `include "name" .Values.db`
+carries over:
+
+**Partial:** `db.url: ${$ctx.host}:${$ctx.port}`
+
+```yaml
+data:
+  url: ${include "db.url" values.db}
+  admin: ${include "db.url" (dict "host" "admin" "port" 5433)}
+```
+
+**Output (`values.db = { host: db, port: 5432 }`):**
+
+```yaml
+data:
+  url: db:5432
+  admin: admin:5433
+```
+
+`tpl` accepts the same second argument.
 
 ## Combining directives
 

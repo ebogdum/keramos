@@ -8,6 +8,7 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"github.com/ebogdum/keramos/v3/internal/pkg"
 	"github.com/ebogdum/keramos/v3/internal/repo"
 	"gopkg.in/yaml.v3"
@@ -208,6 +209,8 @@ func loadNodeContent(node *Node) error {
 	node.Templates = templates
 	node.Partials = partials
 
+	registerTemplatePaths(node, templates, partials)
+
 	hooksMap, err := loadDir(filepath.Join(node.Source, "hooks"))
 	if nil != err {
 		return err
@@ -301,11 +304,11 @@ func printChildren(b *strings.Builder, node *Node, prefix string) {
 }
 
 func defaultCacheDir() string {
-	home, err := os.UserCacheDir()
+	dir, err := paths.CacheHome()
 	if nil != err {
 		return filepath.Join(os.TempDir(), "keramos-cache")
 	}
-	return filepath.Join(home, "keramos")
+	return dir
 }
 
 // --- file loading helpers (reuse layer package helpers via delegation) ---
@@ -396,45 +399,66 @@ func loadTemplates(dirPath string) (map[string]string, map[string]any, error) {
 		return templates, partials, nil
 	}
 
-	entries, err := os.ReadDir(templatesDir)
+	if err := walkTemplateTree(templatesDir, "", templates, partials); nil != err {
+		return nil, nil, err
+	}
+
+	return templates, partials, nil
+}
+
+func registerTemplatePaths(node *Node, templates map[string]string, partials map[string]any) {
+	name := node.Name
+	if nil != node.Metadata && "" != node.Metadata.Name {
+		name = node.Metadata.Name
+	}
+	for rel, content := range templates {
+		partials[name+"/templates/"+rel] = content
+		partials["/"+rel] = content
+	}
+}
+
+func walkTemplateTree(dir, rel string, templates map[string]string, partials map[string]any) error {
+	entries, err := os.ReadDir(dir)
 	if nil != err {
-		return nil, nil, keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read templates directory", err)
+		return keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read templates directory", err)
 	}
 
 	for _, entry := range entries {
+		name := entry.Name()
+		key := name
+		if "" != rel {
+			key = rel + "/" + name
+		}
 		if entry.IsDir() {
+			if err := walkTemplateTree(filepath.Join(dir, name), key, templates, partials); nil != err {
+				return err
+			}
 			continue
 		}
-		name := entry.Name()
 		if !isYAMLFile(name) {
 			continue
 		}
 
-		data, readErr := os.ReadFile(filepath.Join(templatesDir, name))
+		data, readErr := os.ReadFile(filepath.Join(dir, name))
 		if nil != readErr {
-			return nil, nil, keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read template file", readErr)
+			return keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read template file", readErr)
 		}
 
 		if strings.HasPrefix(name, "_") {
-			// Partial files are YAML maps whose top-level keys become
-			// individually-addressable partials. Both the filename-keyed
-			// raw string AND each parsed top-level key are stored so
-			// callers can address either form.
 			var parsed map[string]any
 			if pErr := yaml.Unmarshal(data, &parsed); nil != pErr {
-				return nil, nil, keramoserr.WrapErrorf(keramoserr.ErrPackageInvalid, pErr,
-					"failed to parse partials file %s", name)
+				return keramoserr.WrapErrorf(keramoserr.ErrPackageInvalid, pErr,
+					"failed to parse partials file %s", key)
 			}
-			partials[name] = string(data)
+			partials[key] = string(data)
 			for k, v := range parsed {
 				partials[k] = v
 			}
-		} else {
-			templates[name] = string(data)
+			continue
 		}
+		templates[key] = string(data)
 	}
-
-	return templates, partials, nil
+	return nil
 }
 
 func loadDir(dirPath string) (map[string]string, error) {

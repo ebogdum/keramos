@@ -9,11 +9,11 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
 	"time"
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/netguard"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"github.com/spf13/cobra"
 )
 
@@ -25,11 +25,11 @@ import (
 func loadTrustedKeys() (map[string]string, error) {
 	path := os.Getenv("KERAMOS_TRUSTED_KEYS")
 	if "" == path {
-		home, err := os.UserHomeDir()
+		defaultPath, err := paths.MarketplaceTrustedKeys()
 		if nil != err {
-			return nil, keramoserr.WrapError(keramoserr.ErrCLIValidation, "locate home dir", err)
+			return nil, keramoserr.WrapError(keramoserr.ErrCLIValidation, "locate config dir", err)
 		}
-		path = filepath.Join(home, ".config", "keramos", "marketplace_trusted_keys.json")
+		path = defaultPath
 	}
 	data, err := os.ReadFile(path)
 	if nil != err {

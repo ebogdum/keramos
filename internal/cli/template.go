@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/ebogdum/keramos/v3/internal/action"
 	"github.com/ebogdum/keramos/v3/internal/engine"
@@ -146,6 +147,7 @@ func runTemplate(cmd *cobra.Command, packagePath string, o *templateOpts) error 
 	}
 
 	caps := map[string]any{}
+
 	for _, v := range o.APIVersions {
 		if mp, ok := caps["apiVersions"].(map[string]bool); ok {
 			mp[v] = true
@@ -153,11 +155,15 @@ func runTemplate(cmd *cobra.Command, packagePath string, o *templateOpts) error 
 			caps["apiVersions"] = map[string]bool{v: true}
 		}
 	}
-	if "" != o.KubeVersion {
-		caps["kubeVersion"] = map[string]any{
-			"Version":    o.KubeVersion,
-			"GitVersion": o.KubeVersion,
-		}
+	kubeVersion := o.KubeVersion
+	if "" == kubeVersion {
+		kubeVersion = defaultKubeVersion
+	}
+	caps["kubeVersion"] = map[string]any{
+		"Version":    kubeVersion,
+		"GitVersion": kubeVersion,
+		"Major":      kubeVersionPart(kubeVersion, 0),
+		"Minor":      kubeVersionPart(kubeVersion, 1),
 	}
 
 	ctx := &engine.RenderContext{
@@ -241,4 +247,15 @@ func newKubeClientForTemplate() (kubeClientForTemplate, error) {
 
 type kubeClientForTemplate interface {
 	DryRunApply(string) error
+}
+
+const defaultKubeVersion = "v1.31.0"
+
+func kubeVersionPart(version string, index int) string {
+	trimmed := strings.TrimPrefix(version, "v")
+	parts := strings.Split(trimmed, ".")
+	if index >= len(parts) {
+		return ""
+	}
+	return parts[index]
 }

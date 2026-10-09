@@ -22,7 +22,9 @@ parent: "CLI"
    directory, and derived paths like `KERAMOS_REPOSITORY_CACHE` sit under it).
 2. Resolves the namespace in order: `--namespace` flag → `KERAMOS_NAMESPACE` →
    `HELM_NAMESPACE` → `default`.
-3. Sorts the keys and prints them as quoted `KEY="value"` lines.
+3. Resolves the kubeconfig context in order: `--kube-context` flag →
+   `KERAMOS_KUBECONTEXT` → empty (the kubeconfig's current context).
+4. Sorts the keys and prints them as quoted `KEY="value"` lines.
 
 No cluster is contacted.
 
@@ -35,7 +37,7 @@ keramos env [flags]
 ## Flags
 
 Inherits the global flags. `-n, --namespace` changes the reported
-`KERAMOS_NAMESPACE`.
+`KERAMOS_NAMESPACE`; `--kube-context` changes the reported `KERAMOS_KUBECONTEXT`.
 
 ## Worked example
 
@@ -43,16 +45,17 @@ Inherits the global flags. `-n, --namespace` changes the reported
 
 ```
 KERAMOS_BIN="/usr/local/bin/keramos"
-KERAMOS_CACHE_HOME="/Users/you/Library/Caches/keramos"
-KERAMOS_CONFIG_HOME="/Users/you/Library/Application Support/keramos"
+KERAMOS_CACHE_HOME="/Users/you/.cache/keramos"
+KERAMOS_CONFIG_HOME="/Users/you/.config/keramos"
 KERAMOS_DATA_HOME="/Users/you/.local/share/keramos"
+KERAMOS_DEBUG="false"
 KERAMOS_KUBECONFIG=""
 KERAMOS_KUBECONTEXT=""
 KERAMOS_NAMESPACE="default"
-KERAMOS_PLUGINS="/Users/you/.local/share/keramos/plugins"
-KERAMOS_REGISTRY_CONFIG="/Users/you/Library/Application Support/keramos/registry.json"
-KERAMOS_REPOSITORY_CACHE="/Users/you/Library/Caches/keramos/repository"
-KERAMOS_REPOSITORY_CONFIG="/Users/you/Library/Application Support/keramos/repositories.yaml"
+KERAMOS_PLUGINS="/Users/you/.config/keramos/plugins"
+KERAMOS_REGISTRY_CONFIG="/Users/you/.config/keramos/credentials.json"
+KERAMOS_REPOSITORY_CACHE="/Users/you/.cache/keramos/indexes"
+KERAMOS_REPOSITORY_CONFIG="/Users/you/.config/keramos/repositories.yaml"
 ```
 
 **Now set values and watch the output follow.** With `KERAMOS_CACHE_HOME` set, the
@@ -60,7 +63,7 @@ derived repository cache moves with it (`KERAMOS_CACHE_HOME=/data/cache keramos 
 
 ```
 KERAMOS_CACHE_HOME="/data/cache"
-KERAMOS_REPOSITORY_CACHE="/data/cache/repository"
+KERAMOS_REPOSITORY_CACHE="/data/cache/indexes"
 ```
 
 Pass `-n staging` and the resolved namespace changes

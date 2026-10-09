@@ -147,6 +147,31 @@ ${tuple 1 2 3 | toYaml}
 - 3
 ```
 
+### `toYamlPretty`
+`toYamlPretty(value)` → string
+
+Same as `toYaml`: marshals any value to YAML with the trailing newline stripped. Kept so Helm charts that use it convert without edits.
+
+**Examples**
+```
+${dict "a" 1 | toYamlPretty}
+# →
+a: 1
+```
+
+### `index`
+`index(collection, key, …)` → any
+
+Walks into a map by key or a list by position, one key per argument. A missing key, an out-of-range position, or a `nil` step yields `nil` instead of an error.
+
+**Examples**
+```
+${index values.ports 0}            → 80     (ports = [80, 443])
+${index values.labels "app"}       → web
+${index values.matrix 1 "name"}    → b      (matrix = [{name: a}, {name: b}])
+${index values.ports 9}            → nil
+```
+
 ### `toJson`
 `toJson(value)` → string
 

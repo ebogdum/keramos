@@ -166,6 +166,66 @@ ${"false" | ternary "a" "b"}   → b
 ${"hi" | ternary "a" "b"}      → a
 ```
 
+### `eq`
+`eq(a, b, …)` → bool — `true` when every argument equals `a`. Numbers compare by value across int/float; `nil` only equals `nil`.
+
+**Examples**
+```
+${values.env | eq "prod"}     → true   (values.env = prod)
+${eq 1 1.0}                   → true
+${eq "a" "a" "b"}             → false
+```
+
+### `ne`
+`ne(a, b)` → bool — the negation of `eq`.
+
+**Examples**
+```
+${values.env | ne "prod"}     → false  (values.env = prod)
+${ne 1 2}                     → true
+```
+
+### `lt`, `le`, `gt`, `ge`
+`lt(a, b)` → bool — `a < b`; `le` is `<=`, `gt` is `>`, `ge` is `>=`. Numbers compare numerically, anything else compares as strings. Exactly one argument.
+
+**Examples**
+```
+${values.replicas | gt 1}     → true   (replicas = 3)
+${lt 2 10}                    → true
+${ge "b" "a"}                 → true
+${le 3 3}                     → true
+```
+
+### `and`
+`and(a, b, …)` → any — the first falsy operand, or the last operand when all are truthy (Go-template semantics, not a strict bool).
+
+**Examples**
+```
+${and true "x"}               → x
+${and values.enabled 0}       → 0      (enabled = true)
+${and "" "x"}                 → ""
+```
+
+### `or`
+`or(a, b, …)` → any — the first truthy operand, or the last operand when none is.
+
+**Examples**
+```
+${or "" "fallback"}           → fallback
+${or values.tag "latest"}     → latest (tag unset)
+${or false 0}                 → 0
+```
+
+### `not`
+`not(value)` → bool — `true` when `value` is falsy.
+
+**Examples**
+```
+${not false}                  → true
+${values.enabled | not}       → false  (enabled = true)
+${not ""}                     → true
+```
+
 ### `omitempty`
 `omitempty(value)` → any | (omitted) — returns `value`, or drops its containing map key / slice element when empty (emits the omit sentinel, so no `key: null`).
 

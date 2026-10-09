@@ -14,16 +14,22 @@ import (
 
 const maxTplDepth = 16
 
+const includeContextVar = "$ctx"
+
 func makeTplFunc(e *Engine, ctx *RenderContext, partials map[string]any) Func {
 	return func(value any, args ...any) (any, error) {
 		if int32(maxTplDepth) <= ctx.tplDepth.Load() {
 			return nil, keramoserrors.NewError(keramoserrors.ErrFunction, "tpl: recursion depth exceeded")
 		}
 		s := fmt.Sprintf("%v", value)
+		rctx := ctx
+		if 0 < len(args) {
+			rctx = scopeWithVar(ctx, includeContextVar, args[0])
+		}
 		ctx.tplDepth.Add(1)
 		defer ctx.tplDepth.Add(-1)
 		// Render the template body as a single anonymous file.
-		out, err := e.RenderFile("__tpl__", s, partials, ctx)
+		out, err := e.RenderFile("__tpl__", s, partials, rctx)
 		if nil != err {
 			return nil, err
 		}
@@ -37,6 +43,10 @@ func makeIncludeFunc(e *Engine, ctx *RenderContext, partials map[string]any) Fun
 		raw, ok := partials[name]
 		if !ok {
 			return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "include: partial %q not found", name)
+		}
+		rctx := ctx
+		if 0 < len(args) {
+			rctx = scopeWithVar(ctx, includeContextVar, args[0])
 		}
 		if int32(maxTplDepth) <= ctx.tplDepth.Load() {
 			return nil, keramoserrors.NewError(keramoserrors.ErrFunction, "include: recursion depth exceeded")
@@ -56,12 +66,50 @@ func makeIncludeFunc(e *Engine, ctx *RenderContext, partials map[string]any) Fun
 		}
 		ctx.tplDepth.Add(1)
 		defer ctx.tplDepth.Add(-1)
-		out, err := e.RenderFile("__include__:"+name, body, partials, ctx)
+		out, err := e.RenderFile("__include__:"+name, body, partials, rctx)
 		if nil != err {
 			return nil, err
 		}
-		return strings.Join(out, "\n"), nil
+		return strings.TrimRight(strings.Join(out, "\n"), "\n"), nil
 	}
+}
+
+func makeAPIVersionsHas(ctx *RenderContext) Func {
+	return func(value any, args ...any) (any, error) {
+		wanted := fmt.Sprintf("%v", value)
+		versions := apiVersionSet(ctx)
+		if versions[wanted] {
+			return true, nil
+		}
+		if idx := strings.LastIndex(wanted, "/"); 0 < idx {
+			return versions[wanted[:idx]], nil
+		}
+		return false, nil
+	}
+}
+
+func apiVersionSet(ctx *RenderContext) map[string]bool {
+	out := map[string]bool{}
+	if nil == ctx || nil == ctx.Capabilities {
+		return out
+	}
+	switch raw := ctx.Capabilities["apiVersions"].(type) {
+	case map[string]bool:
+		return raw
+	case map[string]any:
+		for k := range raw {
+			out[k] = true
+		}
+	case []any:
+		for _, v := range raw {
+			out[fmt.Sprintf("%v", v)] = true
+		}
+	case []string:
+		for _, v := range raw {
+			out[v] = true
+		}
+	}
+	return out
 }
 
 func makeLookupFunc(ctx *RenderContext) Func {

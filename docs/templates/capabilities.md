@@ -90,25 +90,32 @@ The set of group/versions the cluster has registered. Keramos fills it from API
 discovery on live operations, and from `--api-versions` (repeatable) when
 running offline. The value is a map keyed by group/version.
 
-There is **no method call, slash-path, or bracket access** in keramos's native
-`${...}` engine, so none of these work:
+Ask whether a group/version is registered with the `Capabilities.APIVersions.Has`
+function — the same name Helm charts use, so a migrated chart keeps working:
 
 ```yaml
-${capabilities.apiVersions.has('apps/v1')}   # no method call
+apiVersion: ${Capabilities.APIVersions.Has "policy/v1" | ternary "policy/v1" "policy/v1beta1"}
+kind: PodDisruptionBudget
+```
+
+```yaml
+$if: ${Capabilities.APIVersions.Has "monitoring.coreos.com/v1"}
+$then:
+  apiVersion: monitoring.coreos.com/v1
+  kind: ServiceMonitor
+```
+
+It returns `true` when the exact group/version is present (`apps/v1`), and also
+when a kind is given in Helm's `group/version/Kind` form and the group/version
+part is registered.
+
+Paths into the map do not work — a slash splits the path and there is no
+bracket or method syntax:
+
+```yaml
 ${capabilities.apiVersions.apps/v1}          # slash splits the path
 ${capabilities.apiVersions['apps/v1']}       # no bracket form
 ```
-
-(The `.Has` method exists only in Helm-compatibility mode, which uses Go
-`{{ }}` templates, not keramos expressions.) So there is no clean template-time
-"is this GVK registered?" check. Practical alternatives:
-
-1. **Trust the operator** — assume the GVK is present when the package's
-   `kubeVersion` constraint covers it, or when CI passes `--api-versions`.
-2. **Render unconditionally** and let the API server reject a missing kind;
-   with `--cleanup-on-fail` the failure rolls back cleanly.
-3. **Gate at install time** — a `pre-install` hook runs
-   `kubectl get crd ... || exit 1` before the install proceeds.
 
 For version-driven branching, `kubeVersion` + `semverCompare` is usually enough.
 

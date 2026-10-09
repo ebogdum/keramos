@@ -9,198 +9,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestConvertSimpleValueRef(t *testing.T) {
-	input := "{{ .Values.replicaCount }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.replicaCount}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertNestedValueRef(t *testing.T) {
-	input := "{{ .Values.image.repository }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.image.repository}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertReleaseName(t *testing.T) {
-	input := "{{ .Release.Name }}"
-	got := ConvertHelmExpression(input)
-	expected := "${release.name}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertReleaseNamespace(t *testing.T) {
-	input := "{{ .Release.Namespace }}"
-	got := ConvertHelmExpression(input)
-	expected := "${release.namespace}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertChartName(t *testing.T) {
-	input := "{{ .Chart.Name }}"
-	got := ConvertHelmExpression(input)
-	expected := "${package.name}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertChartVersion(t *testing.T) {
-	input := "{{ .Chart.Version }}"
-	got := ConvertHelmExpression(input)
-	expected := "${package.version}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertChartAppVersion(t *testing.T) {
-	input := "{{ .Chart.AppVersion }}"
-	got := ConvertHelmExpression(input)
-	expected := "${package.appVersion}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertWithDefault(t *testing.T) {
-	input := `{{ .Values.x | default "foo" }}`
-	got := ConvertHelmExpression(input)
-	expected := `${values.x | default("foo")}`
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertWithUpper(t *testing.T) {
-	input := "{{ .Values.x | upper }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.x | upper}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertWithQuote(t *testing.T) {
-	input := "{{ .Values.x | quote }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.x | quote}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertWithB64Enc(t *testing.T) {
-	input := "{{ .Values.x | b64enc }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.x | b64encode}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertWithIndent(t *testing.T) {
-	input := "{{ .Values.x | indent 4 }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.x | indent(4)}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertWithNindent(t *testing.T) {
-	input := "{{ .Values.x | nindent 8 }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.x | nindent(8)}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertWithToYaml(t *testing.T) {
-	input := "{{ .Values.x | toYaml }}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.x | toYaml}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertPipedDefaultAndUpper(t *testing.T) {
-	input := `{{ .Values.appName | default "myapp" | upper }}`
-	got := ConvertHelmExpression(input)
-	expected := `${values.appName | default("myapp") | upper}`
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertIncludeLine(t *testing.T) {
-	result := &MigrateResult{ManualReview: make([]ReviewItem, 0)}
-	input := `    {{ include "myapp.name" . }}`
-	got := ConvertHelmLine(input, "test.yaml", 1, result)
-	expected := "    $include: myapp.name"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestConvertLineWithDash(t *testing.T) {
-	input := "{{- .Values.x -}}"
-	got := ConvertHelmExpression(input)
-	expected := "${values.x}"
-	if expected != got {
-		t.Errorf("expected %q, got %q", expected, got)
-	}
-}
-
-func TestIfBlockFlaggedForReview(t *testing.T) {
-	result := &MigrateResult{ManualReview: make([]ReviewItem, 0)}
-	input := "{{- if .Values.ingress.enabled }}"
-	got := ConvertHelmLine(input, "test.yaml", 5, result)
-
-	// Should remain unconverted
-	if input != got {
-		t.Errorf("expected line unchanged, got %q", got)
-	}
-	if 1 != len(result.ManualReview) {
-		t.Fatalf("expected 1 review item, got %d", len(result.ManualReview))
-	}
-	if "test.yaml" != result.ManualReview[0].File {
-		t.Errorf("expected file test.yaml, got %s", result.ManualReview[0].File)
-	}
-}
-
-func TestRangeBlockFlaggedForReview(t *testing.T) {
-	result := &MigrateResult{ManualReview: make([]ReviewItem, 0)}
-	input := "{{- range .Values.extraEnv }}"
-	ConvertHelmLine(input, "deploy.yaml", 10, result)
-	if 1 != len(result.ManualReview) {
-		t.Fatalf("expected 1 review item, got %d", len(result.ManualReview))
-	}
-	if !strings.Contains(result.ManualReview[0].Reason, "range") {
-		t.Errorf("expected reason to mention range, got %s", result.ManualReview[0].Reason)
-	}
-}
-
-func TestTplFlaggedForReview(t *testing.T) {
-	result := &MigrateResult{ManualReview: make([]ReviewItem, 0)}
-	input := "{{ tpl .Values.x . }}"
-	ConvertHelmLine(input, "test.yaml", 1, result)
-	if 1 != len(result.ManualReview) {
-		t.Fatalf("expected 1 review item, got %d", len(result.ManualReview))
-	}
-}
-
 func TestChartYAMLConversion(t *testing.T) {
 	chartYAML := `apiVersion: v2
 name: myapp
@@ -257,27 +65,6 @@ dependencies:
 	}
 	if "John Doe" != meta.Maintainers[0].Name {
 		t.Errorf("expected maintainer John Doe, got %s", meta.Maintainers[0].Name)
-	}
-}
-
-func TestParseDefineBlocks(t *testing.T) {
-	content := `{{- define "myapp.name" -}}
-{{- .Values.nameOverride | default .Chart.Name -}}
-{{- end -}}
-
-{{- define "myapp.fullname" -}}
-{{- .Release.Name }}-{{ .Chart.Name }}
-{{- end -}}
-`
-	blocks := ParseDefineBlocks(content)
-	if 2 != len(blocks) {
-		t.Fatalf("expected 2 blocks, got %d", len(blocks))
-	}
-	if _, ok := blocks["myapp.name"]; !ok {
-		t.Error("missing block myapp.name")
-	}
-	if _, ok := blocks["myapp.fullname"]; !ok {
-		t.Error("missing block myapp.fullname")
 	}
 }
 
@@ -359,22 +146,18 @@ func TestMigrateFullChart(t *testing.T) {
 	deployData2, _ := os.ReadFile(deployPath)
 	deployStr := string(deployData2)
 
-	if strings.Contains(deployStr, "$if: ${values.ingress.enabled}") {
-		t.Error("deployment.yaml converted an if-block that has unconditional sibling keys")
+	if !strings.Contains(deployStr, "$if: ${values.ingress.enabled}") {
+		t.Error("deployment.yaml did not convert the if-block")
 	}
 	for _, sibling := range []string{"imagePullPolicy:", "ports:", "env:"} {
 		if !strings.Contains(deployStr, sibling) {
 			t.Errorf("deployment.yaml lost unconditional key %q", sibling)
 		}
 	}
-	flaggedForReview := false
 	for _, item := range result.ManualReview {
 		if strings.Contains(item.File, "deployment.yaml") {
-			flaggedForReview = true
+			t.Errorf("deployment.yaml still needs review: %s", item.Reason)
 		}
-	}
-	if !flaggedForReview {
-		t.Error("deployment.yaml if-block was neither converted nor flagged for review")
 	}
 
 	// Verify range block was converted

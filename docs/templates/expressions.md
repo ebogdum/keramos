@@ -192,31 +192,29 @@ ${printf "%s-%d" "x" 7}   # → x-7
 ${"hello" | upper}        # → HELLO   (literal piped in)
 ```
 
-## Arguments are literals, not paths
+## Arguments: literals, paths, and nested calls
 
-Every argument after a function name is a **literal token** (string, number,
-bool, or null). The engine does **not** re-evaluate an argument as a path. So a
-path in argument position is read as a plain string:
+An argument is a literal (string, number, bool, null), a **path** — which the
+engine resolves — or a parenthesised sub-expression evaluated first:
 
 ```yaml
-${eq values.x "prod"}        # values.x is the literal string "values.x"
-${printf "%s" values.name}   # prints the literal "values.name"
+${eq values.env "prod"}                    # compares the value at values.env
+${printf "%s-%s" values.name release.name} # both paths resolved
+${and values.enabled (eq values.env "prod")}
+${(values.tag | default 'latest') | quote}
 ```
 
-There is also no `eq` / `ne` function, so a comparison like the first line above
-silently resolves to nil — see [Control flow](control-flow.md#comparing-strings)
-for the patterns that actually compare values.
+Comparison and boolean helpers are ordinary functions: `eq`, `ne`, `lt`, `le`,
+`gt`, `ge`, `and`, `or`, `not`. `and` returns the first falsy operand, `or` the
+first truthy one, matching Go templates.
 
-To feed a path's value into a function, put the path on the **left** of the
-pipe:
+A pipeline's input is still the value on the **left** of `|`, and tokens after a
+function name are its remaining arguments:
 
 ```yaml
-${values.a | mul 2}                # values.a resolved, 2 literal   → correct
+${values.a | mul 2}
 ${capabilities.kubeVersion.Version | semverCompare '>=1.27.0-0'}
 ```
-
-An expression can hold only **one** path lookup (the pipeline input). To combine
-two values, compute the result in `values.yaml` and read the single key.
 
 ## Truthiness
 

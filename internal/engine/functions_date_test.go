@@ -7,11 +7,11 @@ import (
 
 func TestStrftimeLayoutConversion(t *testing.T) {
 	cases := map[string]string{
-		"%Y-%m-%d":         "2006-01-02",
-		"%H:%M:%S":         "15:04:05",
+		"%Y-%m-%d":          "2006-01-02",
+		"%H:%M:%S":          "15:04:05",
 		"%Y-%m-%dT%H:%M:%S": "2006-01-02T15:04:05",
-		"plain literal":    "plain literal",
-		"%%":               "%",
+		"plain literal":     "plain literal",
+		"%%":                "%",
 	}
 	for in, want := range cases {
 		got := goLayout(in)

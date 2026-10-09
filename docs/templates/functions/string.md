@@ -254,6 +254,48 @@ ${"Hello World" | swapcase}   → "hELLO wORLD"
 ${"aBc123" | swapcase}        → "AbC123"
 ```
 
+### `print`
+`print(a, b, …)` → string — concatenates the operands the way Go's `fmt.Sprint` does: a space is added only between two operands that are both non-strings.
+
+**Examples**
+```
+${print "a" "b"}              → ab
+${print 1 2}                  → 1 2
+${print "port:" 80}           → port:80
+```
+
+### `println`
+`println(a, b, …)` → string — the operands separated by single spaces, with a trailing newline.
+
+**Examples**
+```
+${println "a" "b"}            → "a b\n"
+${println 1}                  → "1\n"
+```
+
+### `formatEach`
+`formatEach(items, format, field, …)` → list of strings — one `printf`-style line per item. `items` is a list, or a map iterated in key order as `{key, value}` pairs. Each `field` is a dotted path into the item (`.` or `""` for the item itself) and fills the next verb in `format`. Verbs are Go's: `%v` prints any value, `%s` only strings, `%d` only integers.
+
+**Examples**
+```
+${values.ports | formatEach "listen %v" .}
+# →  [listen 80, listen 443]            (ports = [80, 443])
+
+${values.env | formatEach "%s=%v" key value}
+# →  [A=1, B=2]                          (env = {A: 1, B: 2})
+
+${values.hosts | formatEach "%s:%d" name port}
+# →  [db:5432, web:80]                   (hosts = [{name: db, port: 5432}, {name: web, port: 80}])
+```
+
+Pair it with `$text` to lay the lines out as a block:
+
+```yaml
+data:
+  servers.conf:
+    $text: ${values.hosts | formatEach "server %s:%d" name port}
+```
+
 ### `initials`
 `initials(value)` → string
 

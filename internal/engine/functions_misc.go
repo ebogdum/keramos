@@ -115,6 +115,9 @@ func fnUnset(value any, args ...any) (any, error) {
 }
 
 func fnGet(value any, args ...any) (any, error) {
+	if nil == value {
+		return nil, nil
+	}
 	m, ok := value.(map[string]any)
 	if !ok {
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "get: expected map, got %T", value)
@@ -150,9 +153,9 @@ func fnMerge(value any, args ...any) (any, error) {
 	}
 	out := deepCopyMap(dst)
 	for _, raw := range args {
-		var src map[string]any
-		if jsonErr := json.Unmarshal([]byte(coerceString(raw)), &src); nil != jsonErr {
-			return nil, keramoserrors.WrapErrorf(keramoserrors.ErrFunction, jsonErr, "merge: arg is not valid JSON: %q", raw)
+		src, err := asMapArg("merge", raw)
+		if nil != err {
+			return nil, err
 		}
 		out = mergeMaps(out, src, false)
 	}
@@ -168,13 +171,33 @@ func fnMergeOverwrite(value any, args ...any) (any, error) {
 	}
 	out := deepCopyMap(dst)
 	for _, raw := range args {
-		var src map[string]any
-		if jsonErr := json.Unmarshal([]byte(coerceString(raw)), &src); nil != jsonErr {
-			return nil, keramoserrors.WrapErrorf(keramoserrors.ErrFunction, jsonErr, "mergeOverwrite: arg is not valid JSON: %q", raw)
+		src, err := asMapArg("mergeOverwrite", raw)
+		if nil != err {
+			return nil, err
 		}
 		out = mergeMaps(out, src, true)
 	}
 	return out, nil
+}
+
+func asMapArg(fn string, raw any) (map[string]any, error) {
+	switch v := raw.(type) {
+	case nil:
+		return map[string]any{}, nil
+	case map[string]any:
+		return v, nil
+	case map[any]any:
+		out := make(map[string]any, len(v))
+		for k, val := range v {
+			out[coerceString(k)] = val
+		}
+		return out, nil
+	}
+	var src map[string]any
+	if jsonErr := json.Unmarshal([]byte(coerceString(raw)), &src); nil != jsonErr {
+		return nil, keramoserrors.WrapErrorf(keramoserrors.ErrFunction, jsonErr, "%s: arg is not a map: %v", fn, raw)
+	}
+	return src, nil
 }
 
 func mergeMaps(dst, src map[string]any, overwrite bool) map[string]any {

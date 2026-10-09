@@ -102,6 +102,30 @@ func TestRenderRequiredFails(t *testing.T) {
 	}
 }
 
+func TestRenderValuesAsMapFeedsDig(t *testing.T) {
+	dir := t.TempDir()
+	writeChart(t, dir, map[string]string{
+		"Chart.yaml":  "apiVersion: v2\nname: deprcheck\nversion: 1.0.0\n",
+		"values.yaml": "encryption:\n  enabled: false\nreplicas: 3\n",
+		"templates/cm.yaml": `kind: ConfigMap
+legacyKeyFile: {{ dig "encryption" "keyFile" "unset" .Values.AsMap }}
+missingBranch: {{ dig "proxy" "prometheus" "port" "unset" .Values.AsMap }}
+replicas: {{ (.Values.AsMap).replicas }}`,
+	})
+
+	out, err := Render(dir, Options{Release: ReleaseMeta{Name: "r", Namespace: "default", Revision: 1}})
+	if nil != err {
+		t.Fatalf("render: %v", err)
+	}
+
+	cm := find(t, out, "cm.yaml")
+	for _, want := range []string{"legacyKeyFile: unset", "missingBranch: unset", "replicas: 3"} {
+		if !strings.Contains(cm, want) {
+			t.Errorf("configmap missing %q:\n%s", want, cm)
+		}
+	}
+}
+
 func TestRenderSubchartScoping(t *testing.T) {
 	dir := t.TempDir()
 	writeChart(t, dir, map[string]string{

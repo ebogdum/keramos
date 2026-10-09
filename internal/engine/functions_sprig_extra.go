@@ -306,6 +306,9 @@ func fnPrepend(value any, args ...any) (any, error) {
 }
 
 func fnAppend(value any, args ...any) (any, error) {
+	if nil == value {
+		return append([]any{}, args...), nil
+	}
 	list, ok := value.([]any)
 	if !ok {
 		return nil, keramoserrors.NewErrorf(keramoserrors.ErrFunction, "append: expected list, got %T", value)

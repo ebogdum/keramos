@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ebogdum/keramos/v3/internal/audit"
@@ -50,10 +51,10 @@ func NewRootCommand() *cobra.Command {
 		SilenceErrors: true,
 	}
 
-	cmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace")
+	cmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", namespaceFromEnv(), "Kubernetes namespace (default from KERAMOS_NAMESPACE or HELM_NAMESPACE)")
 	cmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
-	cmd.PersistentFlags().StringVar(&kubeContext, "kube-context", "", "Kubernetes context to use")
-	cmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug output")
+	cmd.PersistentFlags().StringVar(&kubeContext, "kube-context", kubeContextFromEnv(), "Kubernetes context to use (default from KERAMOS_KUBECONTEXT)")
+	cmd.PersistentFlags().BoolVar(&debugFlag, "debug", debugFromEnv(), "enable debug output (default from KERAMOS_DEBUG)")
 	cmd.PersistentFlags().BoolVar(&allowPlaintextAuth, "allow-plaintext-auth", false, "send credentials over plaintext HTTP (equivalent to KERAMOS_ALLOW_PLAINTEXT_AUTH=1)")
 	cmd.PersistentFlags().BoolVar(&ociPlainHTTP, "oci-plain-http", false, "use plain HTTP for OCI registries (equivalent to KERAMOS_OCI_PLAIN_HTTP=1)")
 	cmd.PersistentFlags().BoolVar(&ociInsecureSkipTLS, "oci-insecure-skip-tls-verify", false, "skip TLS verification for OCI registries (equivalent to KERAMOS_OCI_INSECURE_SKIP_TLS=1)")
@@ -119,6 +120,22 @@ func NewRootCommand() *cobra.Command {
 
 // Execute runs the root command. This is the main entry point.
 // If the command is unknown, it attempts to run it as a plugin.
+func kubeContextFromEnv() string {
+	return os.Getenv("KERAMOS_KUBECONTEXT")
+}
+
+func namespaceFromEnv() string {
+	if ns := os.Getenv("KERAMOS_NAMESPACE"); "" != ns {
+		return ns
+	}
+	return os.Getenv("HELM_NAMESPACE")
+}
+
+func debugFromEnv() bool {
+	enabled, err := strconv.ParseBool(os.Getenv("KERAMOS_DEBUG"))
+	return nil == err && enabled
+}
+
 func Execute() error {
 	root := NewRootCommand()
 	err := root.Execute()

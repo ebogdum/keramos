@@ -13,6 +13,7 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"gopkg.in/yaml.v3"
 )
 
@@ -62,11 +63,10 @@ type Downloader struct {
 
 // PluginDir returns the plugin installation directory (~/.config/keramos/plugins/).
 func PluginDir() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := paths.Plugins()
 	if nil != err {
-		return "", keramoserr.WrapError(keramoserr.ErrInternal, "cannot determine home directory", err)
+		return "", keramoserr.WrapError(keramoserr.ErrInternal, "cannot determine plugin directory", err)
 	}
-	dir := filepath.Join(home, ".config", "keramos", "plugins")
 	if err := os.MkdirAll(dir, 0o755); nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrInternal, "cannot create plugin directory", err)
 	}

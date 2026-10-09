@@ -11,6 +11,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 )
 
 // SourceType classifies the origin of a layer or required package.
@@ -94,11 +95,11 @@ func FetchSource(source, ref, version, name, cacheDir, basePath string) (string,
 // `latest` when no tag).
 func FetchOCISource(ociURL, version, cacheDir string) (string, error) {
 	if "" == cacheDir {
-		home, err := os.UserCacheDir()
+		dir, err := paths.OCICache()
 		if nil != err {
 			return "", keramoserr.WrapError(keramoserr.ErrDependency, "cache dir", err)
 		}
-		cacheDir = filepath.Join(home, "keramos", "oci")
+		cacheDir = dir
 	}
 	if err := os.MkdirAll(cacheDir, 0o755); nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrDependency, "create cache dir", err)
@@ -192,11 +193,11 @@ func FetchGitSource(repoURL, ref, subdir, cacheDir string) (string, error) {
 		return "", err
 	}
 	if "" == cacheDir {
-		home, err := os.UserCacheDir()
+		dir, err := paths.GitCache()
 		if nil != err {
 			return "", keramoserr.WrapError(keramoserr.ErrDependency, "failed to determine cache directory", err)
 		}
-		cacheDir = filepath.Join(home, "keramos", "git")
+		cacheDir = dir
 	}
 
 	if err := os.MkdirAll(cacheDir, 0755); nil != err {
@@ -243,11 +244,11 @@ func FetchGitSource(repoURL, ref, subdir, cacheDir string) (string, error) {
 // the version constraint against the registry index.
 func FetchRegistrySource(registryURL, name, version, cacheDir string) (string, error) {
 	if "" == cacheDir {
-		home, err := os.UserCacheDir()
+		dir, err := paths.RegistryCache()
 		if nil != err {
 			return "", keramoserr.WrapError(keramoserr.ErrDependency, "failed to determine cache directory", err)
 		}
-		cacheDir = filepath.Join(home, "keramos", "registry")
+		cacheDir = dir
 	}
 
 	if err := os.MkdirAll(cacheDir, 0755); nil != err {

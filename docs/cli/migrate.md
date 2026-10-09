@@ -14,22 +14,29 @@ directory.
   going forward.
 - Moving your own charts off Helm and onto keramos, one chart at a time.
 
-The output is a starting point you then own and edit. `migrate` is a translation
-tool, not a 1:1 Helm emulator — expect to review and finish some templates by
-hand. To keep running an unmodified Helm chart as-is instead of converting it,
-use [`keramos helm-compat`](helm-compat.md).
+The output is a keramos package you then own and edit. It contains no Helm:
+whatever the migrator cannot express in keramos YAML is reported as a review
+item naming the file, line and construct, never copied through. To keep running
+an unmodified Helm chart as-is instead of converting it, use
+[`keramos helm-compat`](helm-compat.md).
 
 ## What happens
 
-1. Reads the Helm chart at `<helm-chart-path>` — its `Chart.yaml`, `templates/`,
-   `values.yaml`, and related files.
-2. Converts the templates and metadata to keramos's package format, rewriting Helm
-   template constructs to their keramos equivalents where it can.
-3. Writes the result to a new package directory — `<chart-name>-keramos/` by
+1. Reads the Helm chart at `<helm-chart-path>` — its `Chart.yaml`, `templates/`
+   (including subdirectories), `values.yaml`, `crds/` and `charts/`.
+2. Parses every template, compiles the Go-template actions to `${...}`
+   expressions, and attaches each `if` / `with` / `range` to the YAML nodes it
+   wraps — conditional keys become `$merge`, loops become `$each`, text built
+   from loops becomes `$text`, named helpers become partials in
+   `templates/_helpers.yaml`.
+3. Converts each subchart under `charts/` into a layer with its values nested
+   under the subchart's key.
+4. Writes the result to a new package directory — `<chart-name>-keramos/` by
    default, or wherever `-o/--output` points. With `--dry-run` nothing is
    written and the conversion is only reported.
-4. Prints the output path, the list of converted files, any items that need
-   manual review (with the file, line, and reason), and any warnings.
+5. Prints the output path, the list of converted files, any items that need
+   manual review (file, line, reason and the original template text), and any
+   warnings. `--strict` turns review items into a non-zero exit.
 
 This works entirely on local files. It reads no cluster and installs nothing.
 
@@ -74,6 +81,7 @@ Chart.yaml  values.yaml  templates/
   service.yaml
   _helpers.tpl
   NOTES.txt
+  tests/test-connection.yaml
 ```
 
 **Convert it:**
@@ -86,25 +94,34 @@ keramos migrate ./redis -o ./redis-keramos
 
 ```
 Output: ./redis-keramos
-Converted 4 files:
+Converted 8 files:
   - keramos.yaml
   - values.yaml
   - templates/deployment.yaml
   - templates/service.yaml
-
-Items requiring manual review (1):
-  templates/deployment.yaml:24 — unsupported Helm function 'lookup'
-    {{- $existing := lookup "v1" "Secret" .Release.Namespace "redis" }}
+  - tests/test-connection.yaml
+  - templates/notes.yaml
+  - templates/_helpers.yaml
+  - .keramosignore
 
 Migration complete.
 ```
 
+A construct with no keramos form is listed before `Migration complete.`, with
+the original template text under it:
+
+```
+Items requiring manual review (1):
+  templates/deployment.yaml:24 — if/else where both branches set the same key
+    {{- if .Values.tls }}port: 6380{{ else }}port: 6379{{ end }}
+```
+
 ```sh
-ls ./redis-keramos
+ls -a ./redis-keramos
 ```
 
 ```
-keramos.yaml  values.yaml  values.schema.json  templates/
+.keramosignore  keramos.yaml  values.yaml  templates/  tests/
 ```
 
 Lint the result, then fix anything flagged for manual review:

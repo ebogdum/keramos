@@ -1,7 +1,6 @@
 package migrate
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,23 +28,23 @@ type ReviewItem struct {
 
 // helmChart represents a parsed Chart.yaml.
 type helmChart struct {
-	APIVersion   string                   `yaml:"apiVersion"`
-	Name         string                   `yaml:"name"`
-	Version      string                   `yaml:"version"`
-	AppVersion   string                   `yaml:"appVersion,omitempty"`
-	Description  string                   `yaml:"description,omitempty"`
-	Type         string                   `yaml:"type,omitempty"`
-	KubeVersion  string                   `yaml:"kubeVersion,omitempty"`
-	Dependencies []helmDep                `yaml:"dependencies,omitempty"`
-	Maintainers  []map[string]string      `yaml:"maintainers,omitempty"`
-	Keywords     []string                 `yaml:"keywords,omitempty"`
-	Annotations  map[string]string        `yaml:"annotations,omitempty"`
-	Sources      []string                 `yaml:"sources,omitempty"`
-	Home         string                   `yaml:"home,omitempty"`
-	Icon         string                   `yaml:"icon,omitempty"`
-	Deprecated   bool                     `yaml:"deprecated,omitempty"`
-	Extra        map[string]any   `yaml:",inline"`
-	RawEntries   []map[string]any `yaml:"-"`
+	APIVersion   string              `yaml:"apiVersion"`
+	Name         string              `yaml:"name"`
+	Version      string              `yaml:"version"`
+	AppVersion   string              `yaml:"appVersion,omitempty"`
+	Description  string              `yaml:"description,omitempty"`
+	Type         string              `yaml:"type,omitempty"`
+	KubeVersion  string              `yaml:"kubeVersion,omitempty"`
+	Dependencies []helmDep           `yaml:"dependencies,omitempty"`
+	Maintainers  []map[string]string `yaml:"maintainers,omitempty"`
+	Keywords     []string            `yaml:"keywords,omitempty"`
+	Annotations  map[string]string   `yaml:"annotations,omitempty"`
+	Sources      []string            `yaml:"sources,omitempty"`
+	Home         string              `yaml:"home,omitempty"`
+	Icon         string              `yaml:"icon,omitempty"`
+	Deprecated   bool                `yaml:"deprecated,omitempty"`
+	Extra        map[string]any      `yaml:",inline"`
+	RawEntries   []map[string]any    `yaml:"-"`
 }
 
 type helmDep struct {
@@ -59,17 +58,68 @@ type helmDep struct {
 }
 
 type keramosMeta struct {
-	APIVersion   string            `yaml:"apiVersion"`
-	Name         string            `yaml:"name"`
-	Version      string            `yaml:"version"`
-	AppVersion   string            `yaml:"appVersion,omitempty"`
-	Description  string            `yaml:"description,omitempty"`
-	Type         string            `yaml:"type,omitempty"`
-	KubeVersion  string            `yaml:"kubeVersion,omitempty"`
-	Dependencies []keramosDep         `yaml:"dependencies,omitempty"`
-	Maintainers  []keramosMaintainer  `yaml:"maintainers,omitempty"`
-	Keywords     []string          `yaml:"keywords,omitempty"`
-	Annotations  map[string]string `yaml:"annotations,omitempty"`
+	APIVersion   string              `yaml:"apiVersion"`
+	Name         string              `yaml:"name"`
+	Version      string              `yaml:"version"`
+	AppVersion   string              `yaml:"appVersion,omitempty"`
+	Description  string              `yaml:"description,omitempty"`
+	Type         string              `yaml:"type,omitempty"`
+	KubeVersion  string              `yaml:"kubeVersion,omitempty"`
+	Layers       []keramosLayer      `yaml:"layers,omitempty"`
+	Dependencies []keramosDep        `yaml:"dependencies,omitempty"`
+	Maintainers  []keramosMaintainer `yaml:"maintainers,omitempty"`
+	Keywords     []string            `yaml:"keywords,omitempty"`
+	Annotations  map[string]string   `yaml:"annotations,omitempty"`
+}
+
+type keramosLayer struct {
+	Name      string   `yaml:"name"`
+	Source    string   `yaml:"source"`
+	Condition string   `yaml:"condition,omitempty"`
+	Tags      []string `yaml:"tags,omitempty"`
+	Alias     string   `yaml:"alias,omitempty"`
+	Enabled   *bool    `yaml:"enabled,omitempty"`
+}
+
+func splitDependencies(deps []helmDep, subcharts []string) ([]keramosLayer, []keramosDep) {
+	local := make(map[string]bool, len(subcharts))
+	for _, name := range subcharts {
+		local[name] = true
+	}
+	layers := make([]keramosLayer, 0, len(deps))
+	remote := make([]keramosDep, 0, len(deps))
+	seen := make(map[string]bool, len(deps))
+	for _, d := range deps {
+		name := d.Name
+		if "" != d.Alias {
+			name = d.Alias
+		}
+		if !local[d.Name] {
+			remote = append(remote, keramosDep(d))
+			continue
+		}
+		seen[d.Name] = true
+		layers = append(layers, keramosLayer{
+			Name:      name,
+			Source:    "charts/" + d.Name,
+			Condition: d.Condition,
+			Tags:      d.Tags,
+			Enabled:   d.Enabled,
+		})
+	}
+	for _, name := range subcharts {
+		if seen[name] {
+			continue
+		}
+		layers = append(layers, keramosLayer{Name: name, Source: "charts/" + name})
+	}
+	if 0 == len(layers) {
+		layers = nil
+	}
+	if 0 == len(remote) {
+		remote = nil
+	}
+	return layers, remote
 }
 
 type keramosDep struct {
@@ -137,7 +187,7 @@ func Migrate(chartPath, outputDir string, strict bool, optDryRun ...bool) (*Migr
 		return nil, keramoserr.WrapError(keramoserr.ErrInternal, "cannot create temp directory", tmpErr)
 	}
 
-	writeErr := migrateWriteAll(chartPath, &chart, tmpDir, result)
+	writeErr := migrateWriteAll(chartPath, &chart, tmpDir, "", result)
 	if nil != writeErr {
 		_ = os.RemoveAll(tmpDir)
 		return nil, writeErr
@@ -188,31 +238,48 @@ func dirHasContent(path string) (bool, error) {
 }
 
 // migrateWriteAll performs all file writes into the given directory.
-func migrateWriteAll(chartPath string, chart *helmChart, writeDir string, result *MigrateResult) error {
+func migrateWriteAll(chartPath string, chart *helmChart, writeDir, valuePrefix string, result *MigrateResult) error {
 	if mkErr := os.MkdirAll(writeDir, 0o755); nil != mkErr {
 		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot create output directory", mkErr)
 	}
 
-	if err := convertChartYAML(chart, writeDir, result); nil != err {
+	subcharts, err := localSubcharts(chartPath)
+	if nil != err {
 		return err
 	}
 
-	if err := copyFileIfExists(filepath.Join(chartPath, "values.yaml"), filepath.Join(writeDir, "values.yaml"), result); nil != err {
+	if err := convertChartYAML(chart, writeDir, subcharts, result); nil != err {
+		return err
+	}
+
+	if err := writeValues(chartPath, writeDir, valuePrefix, result); nil != err {
 		return err
 	}
 	if err := copyFileIfExists(filepath.Join(chartPath, "values.schema.json"), filepath.Join(writeDir, "values.schema.json"), result); nil != err {
 		return err
 	}
 
+	conv := newTemplateConverter(result)
+	conv.chartName = chart.Name
+	conv.valuePrefix = valuePrefix
+
 	templatesDir := filepath.Join(chartPath, "templates")
 	if _, statErr := os.Stat(templatesDir); nil == statErr {
-		if err := convertTemplates(templatesDir, writeDir, result); nil != err {
+		if err := convertTemplates(templatesDir, writeDir, conv, result); nil != err {
 			return err
 		}
 	}
 
 	notesPath := filepath.Join(chartPath, "templates", "NOTES.txt")
-	if err := convertNotes(notesPath, writeDir, result); nil != err {
+	if err := convertNotes(notesPath, writeDir, conv, result); nil != err {
+		return err
+	}
+
+	if err := writeHelpers(conv, writeDir, result); nil != err {
+		return err
+	}
+
+	if err := copyChartFiles(chartPath, writeDir, result); nil != err {
 		return err
 	}
 
@@ -225,6 +292,73 @@ func migrateWriteAll(chartPath string, chart *helmChart, writeDir string, result
 		return err
 	}
 
+	return convertSubcharts(chartPath, writeDir, subcharts, result)
+}
+
+func localSubcharts(chartPath string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(chartPath, "charts"))
+	if nil != err {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, keramoserr.WrapError(keramoserr.ErrInternal, "cannot read charts directory", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, statErr := os.Stat(filepath.Join(chartPath, "charts", entry.Name(), "Chart.yaml")); nil != statErr {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	return names, nil
+}
+
+func convertSubcharts(chartPath, writeDir string, subcharts []string, result *MigrateResult) error {
+	for _, name := range subcharts {
+		src := filepath.Join(chartPath, "charts", name)
+		data, readErr := os.ReadFile(filepath.Join(src, "Chart.yaml"))
+		if nil != readErr {
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read Chart.yaml of subchart %s", name)
+		}
+		var sub helmChart
+		if err := yaml.Unmarshal(data, &sub); nil != err {
+			return keramoserr.WrapErrorf(keramoserr.ErrParse, err, "invalid Chart.yaml in subchart %s", name)
+		}
+		dest := filepath.Join(writeDir, "charts", name)
+		if err := migrateWriteAll(src, &sub, dest, name, result); nil != err {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeValues(chartPath, writeDir, valuePrefix string, result *MigrateResult) error {
+	data, err := os.ReadFile(filepath.Join(chartPath, "values.yaml"))
+	if nil != err {
+		return nil
+	}
+	if "" == valuePrefix {
+		if writeErr := os.WriteFile(filepath.Join(writeDir, "values.yaml"), data, 0o644); nil != writeErr {
+			return keramoserr.WrapError(keramoserr.ErrInternal, "cannot write values.yaml", writeErr)
+		}
+		result.ConvertedFiles = append(result.ConvertedFiles, "values.yaml")
+		return nil
+	}
+	var values map[string]any
+	if err := yaml.Unmarshal(data, &values); nil != err {
+		return keramoserr.WrapErrorf(keramoserr.ErrParse, err, "invalid values.yaml in subchart %s", valuePrefix)
+	}
+	nested, marshalErr := yaml.Marshal(map[string]any{valuePrefix: values})
+	if nil != marshalErr {
+		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot nest subchart values", marshalErr)
+	}
+	if writeErr := os.WriteFile(filepath.Join(writeDir, "values.yaml"), nested, 0o644); nil != writeErr {
+		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot write values.yaml", writeErr)
+	}
+	result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("charts", valuePrefix, "values.yaml"))
 	return nil
 }
 
@@ -313,20 +447,30 @@ func migrateDryRun(chartPath string, result *MigrateResult, strict bool) (*Migra
 
 // dryRunConvertTemplates reads and converts templates in memory without writing.
 func dryRunConvertTemplates(templatesDir string, result *MigrateResult) error {
-	entries, err := os.ReadDir(templatesDir)
+	return dryRunConvertTemplateTree(templatesDir, "", newTemplateConverter(result), result)
+}
+
+func dryRunConvertTemplateTree(dir, rel string, conv *templateConverter, result *MigrateResult) error {
+	entries, err := os.ReadDir(dir)
 	if nil != err {
 		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot read templates directory", err)
 	}
 
+	helpersSeen := false
 	for _, entry := range entries {
 		name := entry.Name()
-		srcPath := filepath.Join(templatesDir, name)
+		srcPath := filepath.Join(dir, name)
+		relPath := filepath.Join(rel, name)
 
 		if entry.IsDir() {
-			if "tests" == name {
-				if testErr := dryRunConvertTestTemplates(srcPath, result); nil != testErr {
+			if "tests" == name && "" == rel {
+				if testErr := dryRunConvertTestTemplates(srcPath, conv, result); nil != testErr {
 					return testErr
 				}
+				continue
+			}
+			if treeErr := dryRunConvertTemplateTree(srcPath, relPath, conv, result); nil != treeErr {
+				return treeErr
 			}
 			continue
 		}
@@ -336,38 +480,41 @@ func dryRunConvertTemplates(templatesDir string, result *MigrateResult) error {
 			continue
 		}
 
-		if "_helpers.tpl" == name {
-			result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", "_helpers.yaml"))
+		if isPartialTemplate(name) {
+			if !helpersSeen {
+				result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", "_helpers.yaml"))
+				helpersSeen = true
+			}
 			data, readErr := os.ReadFile(srcPath)
 			if nil != readErr {
-				return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read template %s", name)
+				return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read template %s", relPath)
 			}
-			convertTemplateContent(string(data), "_helpers.tpl", result)
+			conv.convertFile(string(data), relPath)
 			continue
 		}
 
 		data, readErr := os.ReadFile(srcPath)
 		if nil != readErr {
-			return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read template %s", name)
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read template %s", relPath)
 		}
 
 		content := string(data)
 		if isHookTemplate(content) {
-			result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("hooks", name))
+			result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("hooks", hookName(relPath)))
 			stripped := stripHookAnnotation(content)
-			convertTemplateContent(stripped, name, result)
+			conv.convertFile(stripped, relPath)
 			continue
 		}
 
-		convertTemplateContent(content, name, result)
-		result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", name))
+		conv.convertFile(content, relPath)
+		result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", relPath))
 	}
 
 	return nil
 }
 
 // dryRunConvertTestTemplates reads and converts test templates in memory without writing.
-func dryRunConvertTestTemplates(testsDir string, result *MigrateResult) error {
+func dryRunConvertTestTemplates(testsDir string, conv *templateConverter, result *MigrateResult) error {
 	entries, err := os.ReadDir(testsDir)
 	if nil != err {
 		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot read tests directory", err)
@@ -383,14 +530,14 @@ func dryRunConvertTestTemplates(testsDir string, result *MigrateResult) error {
 			return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read test template %s", entry.Name())
 		}
 		content := stripHookAnnotation(string(data))
-		convertTemplateContent(content, filepath.Join("tests", entry.Name()), result)
+		conv.convertFile(content, filepath.Join("tests", entry.Name()))
 		result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("tests", entry.Name()))
 	}
 
 	return nil
 }
 
-func convertChartYAML(chart *helmChart, outputDir string, result *MigrateResult) error {
+func convertChartYAML(chart *helmChart, outputDir string, subcharts []string, result *MigrateResult) error {
 	meta := keramosMeta{
 		APIVersion:  "keramos/v1",
 		Name:        chart.Name,
@@ -403,13 +550,7 @@ func convertChartYAML(chart *helmChart, outputDir string, result *MigrateResult)
 		Annotations: chart.Annotations,
 	}
 
-	if len(chart.Dependencies) > 0 {
-		deps := make([]keramosDep, 0, len(chart.Dependencies))
-		for _, d := range chart.Dependencies {
-			deps = append(deps, keramosDep(d))
-		}
-		meta.Dependencies = deps
-	}
+	meta.Layers, meta.Dependencies = splitDependencies(chart.Dependencies, subcharts)
 
 	if len(chart.Maintainers) > 0 {
 		maintainers := make([]keramosMaintainer, 0, len(chart.Maintainers))
@@ -435,27 +576,117 @@ func convertChartYAML(chart *helmChart, outputDir string, result *MigrateResult)
 	return nil
 }
 
-func convertTemplates(templatesDir, outputDir string, result *MigrateResult) error {
+func convertTemplates(templatesDir, outputDir string, conv *templateConverter, result *MigrateResult) error {
 	outTemplates := filepath.Join(outputDir, "templates")
 	if err := os.MkdirAll(outTemplates, 0o755); nil != err {
 		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot create templates directory", err)
 	}
+	return convertTemplateTree(templatesDir, "", outputDir, conv, result)
+}
 
-	entries, err := os.ReadDir(templatesDir)
+var skipCopyDirs = map[string]bool{"templates": true, "charts": true, "crds": true, ".git": true}
+
+func copyChartFiles(chartPath, outputDir string, result *MigrateResult) error {
+	entries, err := os.ReadDir(chartPath)
+	if nil != err {
+		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot read chart directory", err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if skipCopyDirs[name] || "Chart.yaml" == name || "values.yaml" == name ||
+			"values.schema.json" == name || strings.HasPrefix(name, ".") {
+			continue
+		}
+		src := filepath.Join(chartPath, name)
+		dst := filepath.Join(outputDir, "files", name)
+		if err := copyTree(src, dst, result); nil != err {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyTree(src, dst string, result *MigrateResult) error {
+	info, err := os.Lstat(src)
+	if nil != err {
+		return keramoserr.WrapErrorf(keramoserr.ErrInternal, err, "cannot stat %s", src)
+	}
+	if 0 != info.Mode()&os.ModeSymlink {
+		return nil
+	}
+	if !info.IsDir() {
+		data, readErr := os.ReadFile(src)
+		if nil != readErr {
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read %s", src)
+		}
+		if mkErr := os.MkdirAll(filepath.Dir(dst), 0o755); nil != mkErr {
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, mkErr, "cannot create %s", filepath.Dir(dst))
+		}
+		if writeErr := os.WriteFile(dst, data, 0o644); nil != writeErr {
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, writeErr, "cannot write %s", dst)
+		}
+		return nil
+	}
+	entries, readErr := os.ReadDir(src)
+	if nil != readErr {
+		return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read %s", src)
+	}
+	for _, entry := range entries {
+		if err := copyTree(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name()), result); nil != err {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeHelpers(conv *templateConverter, outputDir string, result *MigrateResult) error {
+	data, err := conv.helpersDocument()
+	if nil != err {
+		return keramoserr.WrapError(keramoserr.ErrInternal, "failed to marshal _helpers.yaml", err)
+	}
+	if 0 == len(data) {
+		return nil
+	}
+	outTemplates := filepath.Join(outputDir, "templates")
+	if mkErr := os.MkdirAll(outTemplates, 0o755); nil != mkErr {
+		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot create templates dir", mkErr)
+	}
+	dest := filepath.Join(outTemplates, "_helpers.yaml")
+	if writeErr := os.WriteFile(dest, data, 0o644); nil != writeErr {
+		return keramoserr.WrapError(keramoserr.ErrInternal, "failed to write _helpers.yaml", writeErr)
+	}
+	result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", "_helpers.yaml"))
+	return nil
+}
+
+func isPartialTemplate(name string) bool {
+	return strings.HasPrefix(name, "_")
+}
+
+func hookName(relPath string) string {
+	return strings.ReplaceAll(relPath, string(filepath.Separator), "-")
+}
+
+func convertTemplateTree(dir, rel, outputDir string, conv *templateConverter, result *MigrateResult) error {
+	entries, err := os.ReadDir(dir)
 	if nil != err {
 		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot read templates directory", err)
 	}
 
 	for _, entry := range entries {
 		name := entry.Name()
-		srcPath := filepath.Join(templatesDir, name)
+		srcPath := filepath.Join(dir, name)
+		relPath := filepath.Join(rel, name)
 
 		if entry.IsDir() {
-			if "tests" == name {
-				if err := convertTestTemplates(srcPath, outputDir, result); nil != err {
+			if "tests" == name && "" == rel {
+				if err := convertTestTemplates(srcPath, outputDir, conv, result); nil != err {
 					return err
 				}
 				continue
+			}
+			if err := convertTemplateTree(srcPath, relPath, outputDir, conv, result); nil != err {
+				return err
 			}
 			continue
 		}
@@ -469,46 +700,49 @@ func convertTemplates(templatesDir, outputDir string, result *MigrateResult) err
 		// the migrated package.
 		lstat, lerr := os.Lstat(srcPath)
 		if nil != lerr {
-			return keramoserr.WrapErrorf(keramoserr.ErrInternal, lerr, "cannot lstat template %s", name)
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, lerr, "cannot lstat template %s", relPath)
 		}
 		if 0 != lstat.Mode()&os.ModeSymlink {
 			return keramoserr.NewErrorf(keramoserr.ErrCLIValidation,
 				"refusing to follow symlink in templates: %s", srcPath)
 		}
 
-		if "_helpers.tpl" == name {
-			if err := convertHelpers(srcPath, outputDir, result); nil != err {
-				return err
-			}
-			continue
-		}
-
 		data, readErr := os.ReadFile(srcPath)
 		if nil != readErr {
-			return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read template %s", name)
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, readErr, "cannot read template %s", relPath)
 		}
 
 		content := string(data)
 
-		// Check for helm.sh/hook annotation — move hooks to hooks/ dir
+		if isPartialTemplate(name) {
+			conv.convertFile(content, relPath)
+			continue
+		}
+
 		if isHookTemplate(content) {
-			if err := convertHookTemplate(name, content, outputDir, result); nil != err {
+			if err := convertHookTemplate(hookName(relPath), content, outputDir, conv, result); nil != err {
 				return err
 			}
 			continue
 		}
 
-		converted := convertTemplateContent(content, name, result)
-		destPath := filepath.Join(outTemplates, name)
-		if err := os.WriteFile(destPath, []byte(converted), 0o644); nil != err {
-			return keramoserr.WrapErrorf(keramoserr.ErrInternal, err, "cannot write template %s", name)
+		converted := conv.convertFile(content, relPath)
+		if "" == strings.TrimSpace(converted) {
+			continue
 		}
-		result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", name))
+		destPath := filepath.Join(outputDir, "templates", relPath)
+		if mkErr := os.MkdirAll(filepath.Dir(destPath), 0o755); nil != mkErr {
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, mkErr, "cannot create directory for template %s", relPath)
+		}
+		if err := os.WriteFile(destPath, []byte(converted), 0o644); nil != err {
+			return keramoserr.WrapErrorf(keramoserr.ErrInternal, err, "cannot write template %s", relPath)
+		}
+		result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", relPath))
 	}
 	return nil
 }
 
-func convertTestTemplates(testsDir, outputDir string, result *MigrateResult) error {
+func convertTestTemplates(testsDir, outputDir string, conv *templateConverter, result *MigrateResult) error {
 	outTests := filepath.Join(outputDir, "tests")
 	if err := os.MkdirAll(outTests, 0o755); nil != err {
 		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot create tests directory", err)
@@ -530,7 +764,7 @@ func convertTestTemplates(testsDir, outputDir string, result *MigrateResult) err
 		}
 
 		content := stripHookAnnotation(string(data))
-		converted := convertTemplateContent(content, filepath.Join("tests", entry.Name()), result)
+		converted := conv.convertFile(content, filepath.Join("tests", entry.Name()))
 		destPath := filepath.Join(outTests, entry.Name())
 		if err := os.WriteFile(destPath, []byte(converted), 0o644); nil != err {
 			return keramoserr.WrapErrorf(keramoserr.ErrInternal, err, "cannot write test template %s", entry.Name())
@@ -550,14 +784,14 @@ func stripHookAnnotation(content string) string {
 	return hookAnnotationRe.ReplaceAllString(content, "")
 }
 
-func convertHookTemplate(name, content, outputDir string, result *MigrateResult) error {
+func convertHookTemplate(name, content, outputDir string, conv *templateConverter, result *MigrateResult) error {
 	hooksDir := filepath.Join(outputDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); nil != err {
 		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot create hooks directory", err)
 	}
 
 	stripped := stripHookAnnotation(content)
-	converted := convertTemplateContent(stripped, name, result)
+	converted := conv.convertFile(stripped, name)
 	destPath := filepath.Join(hooksDir, name)
 	if err := os.WriteFile(destPath, []byte(converted), 0o644); nil != err {
 		return keramoserr.WrapErrorf(keramoserr.ErrInternal, err, "cannot write hook template %s", name)
@@ -566,341 +800,27 @@ func convertHookTemplate(name, content, outputDir string, result *MigrateResult)
 	return nil
 }
 
-// convertTemplateContent converts Go template expressions to keramos expressions.
-// Uses block-aware conversion that handles if/else/end, with/end, range/end patterns.
-func convertTemplateContent(content, filename string, result *MigrateResult) string {
-	return convertTemplateContentV2(content, filename, result)
-}
-
-// Regex patterns for Helm template expressions
-var (
-	// Complex constructs that need manual review
-	reIfBlock    = regexp.MustCompile(`\{\{-?\s*if\s+`)
-	reElse       = regexp.MustCompile(`\{\{-?\s*else\s*-?\}\}`)
-	reEnd        = regexp.MustCompile(`\{\{-?\s*end\s*-?\}\}`)
-	reRange      = regexp.MustCompile(`\{\{-?\s*range\s+`)
-	reTpl        = regexp.MustCompile(`\{\{-?\s*tpl\s+`)
-	reWith       = regexp.MustCompile(`\{\{-?\s*with\s+`)
-
-	// Include on its own line
-	reIncludeLine = regexp.MustCompile(`^\s*\{\{-?\s*include\s+"([^"]+)"\s+\.\s*-?\}\}\s*$`)
-
-	// Simple expressions: {{ .Values.x }}, {{ .Release.Name }}, etc.
-	reSimpleExpr = regexp.MustCompile(`\{\{-?\s*(.+?)\s*-?\}\}`)
-)
-
-func convertLine(line, filename string, lineNum int, result *MigrateResult) string {
-	// Check for include-only line first
-	if m := reIncludeLine.FindStringSubmatch(line); nil != m {
-		indent := extractIndent(line)
-		return indent + "$include: " + m[1]
-	}
-
-	// Flag complex control flow for manual review
-	if reRange.MatchString(line) {
-		result.ManualReview = append(result.ManualReview, ReviewItem{
-			File: filename, Line: lineNum, Reason: "range block requires manual conversion", Original: strings.TrimSpace(line),
-		})
-		return line
-	}
-	if reTpl.MatchString(line) {
-		result.ManualReview = append(result.ManualReview, ReviewItem{
-			File: filename, Line: lineNum, Reason: "tpl call requires manual conversion", Original: strings.TrimSpace(line),
-		})
-		return line
-	}
-	if reWith.MatchString(line) {
-		result.ManualReview = append(result.ManualReview, ReviewItem{
-			File: filename, Line: lineNum, Reason: "with block requires manual conversion", Original: strings.TrimSpace(line),
-		})
-		return line
-	}
-
-	// Flag if/else/end blocks for review (complex control flow)
-	if reIfBlock.MatchString(line) || reElse.MatchString(line) || reEnd.MatchString(line) {
-		result.ManualReview = append(result.ManualReview, ReviewItem{
-			File: filename, Line: lineNum, Reason: "control flow block requires manual conversion", Original: strings.TrimSpace(line),
-		})
-		return line
-	}
-
-	// Convert simple expressions inline
-	return reSimpleExpr.ReplaceAllStringFunc(line, func(match string) string {
-		return convertExpression(match)
-	})
-}
-
-func convertExpression(expr string) string {
-	// Strip {{ }} and whitespace/dashes
-	inner := expr
-	inner = strings.TrimPrefix(inner, "{{-")
-	inner = strings.TrimPrefix(inner, "{{")
-	inner = strings.TrimSuffix(inner, "-}}")
-	inner = strings.TrimSuffix(inner, "}}")
-	inner = strings.TrimSpace(inner)
-
-	// Handle piped expressions
-	parts := splitPipe(inner)
-	if 0 == len(parts) {
-		return expr
-	}
-
-	base := convertBaseRef(parts[0])
-	if "" == base {
-		return expr // cannot convert, leave as-is
-	}
-
-	if 1 == len(parts) {
-		return "${" + base + "}"
-	}
-
-	filters := make([]string, 0, len(parts)-1)
-	for _, p := range parts[1:] {
-		f := convertFilter(strings.TrimSpace(p))
-		filters = append(filters, f)
-	}
-	return "${" + base + " | " + strings.Join(filters, " | ") + "}"
-}
-
-func convertBaseRef(ref string) string {
-	ref = strings.TrimSpace(ref)
-
-	replacements := map[string]string{
-		".Release.Name":      "release.name",
-		".Release.Namespace": "release.namespace",
-		".Chart.Name":        "package.name",
-		".Chart.Version":     "package.version",
-		".Chart.AppVersion":  "package.appVersion",
-	}
-
-	if mapped, ok := replacements[ref]; ok {
-		return mapped
-	}
-
-	if strings.HasPrefix(ref, ".Values.") {
-		return "values." + ref[len(".Values."):]
-	}
-
-	return ""
-}
-
-func convertFilter(filter string) string {
-	filter = strings.TrimSpace(filter)
-
-	// default "value"
-	if arg, ok := strings.CutPrefix(filter, "default "); ok {
-		return "default(" + strings.TrimSpace(arg) + ")"
-	}
-
-	// indent N
-	if arg, ok := strings.CutPrefix(filter, "indent "); ok {
-		return "indent(" + strings.TrimSpace(arg) + ")"
-	}
-
-	// nindent N
-	if arg, ok := strings.CutPrefix(filter, "nindent "); ok {
-		return "nindent(" + strings.TrimSpace(arg) + ")"
-	}
-
-	// Simple renames
-	filterMap := map[string]string{
-		"quote":  "quote",
-		"upper":  "upper",
-		"lower":  "lower",
-		"b64enc": "b64encode",
-		"b64dec": "b64decode",
-		"toYaml": "toYaml",
-		"toJson": "toJson",
-		"trim":   "trim",
-	}
-
-	if mapped, ok := filterMap[filter]; ok {
-		return mapped
-	}
-
-	return filter
-}
-
-func splitPipe(s string) []string {
-	// Split on | but not inside quotes
-	parts := make([]string, 0, 4)
-	var current strings.Builder
-	inQuote := false
-	quoteChar := byte(0)
-	sLen := len(s)
-
-	for i := range sLen {
-		ch := s[i]
-		if inQuote {
-			current.WriteByte(ch)
-			if ch == quoteChar {
-				inQuote = false
-			}
-			continue
-		}
-		if '"' == ch || '\'' == ch {
-			inQuote = true
-			quoteChar = ch
-			current.WriteByte(ch)
-			continue
-		}
-		if '|' == ch {
-			parts = append(parts, strings.TrimSpace(current.String()))
-			current.Reset()
-			continue
-		}
-		current.WriteByte(ch)
-	}
-	if current.Len() > 0 {
-		parts = append(parts, strings.TrimSpace(current.String()))
-	}
-	return parts
-}
-
-func extractIndent(line string) string {
-	lineLen := len(line)
-	for i := range lineLen {
-		if ' ' != line[i] && '\t' != line[i] {
-			return line[:i]
-		}
-	}
-	return line
-}
-
-func convertHelpers(srcPath, outputDir string, result *MigrateResult) error {
-	data, err := os.ReadFile(srcPath)
-	if nil != err {
-		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot read _helpers.tpl", err)
-	}
-
-	blocks, dupes := parseDefineBlocksWithWarnings(string(data))
-	for _, name := range dupes {
-		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("_helpers.tpl: duplicate {{ define %q }} — only the last definition is kept", name))
-	}
-	helpers := make(map[string]string, len(blocks))
-	for name, body := range blocks {
-		converted := convertTemplateContent(body, "_helpers.tpl", result)
-		helpers[name] = strings.TrimSpace(converted)
-	}
-
-	outData, err := yaml.Marshal(helpers)
-	if nil != err {
-		return keramoserr.WrapError(keramoserr.ErrInternal, "failed to marshal _helpers.yaml", err)
-	}
-
-	outTemplates := filepath.Join(outputDir, "templates")
-	if mkErr := os.MkdirAll(outTemplates, 0o755); nil != mkErr {
-		return keramoserr.WrapError(keramoserr.ErrInternal, "cannot create templates dir", mkErr)
-	}
-
-	dest := filepath.Join(outTemplates, "_helpers.yaml")
-	if err := os.WriteFile(dest, outData, 0o644); nil != err {
-		return keramoserr.WrapError(keramoserr.ErrInternal, "failed to write _helpers.yaml", err)
-	}
-	result.ConvertedFiles = append(result.ConvertedFiles, filepath.Join("templates", "_helpers.yaml"))
-	return nil
-}
-
-var reDefine = regexp.MustCompile(`\{\{-?\s*define\s+"([^"]+)"\s*-?\}\}`)
-var reEndBlock = regexp.MustCompile(`\{\{-?\s*end\s*-?\}\}`)
-var reBlockOpener = regexp.MustCompile(`\{\{-?\s*(if|range|with|block)\b`)
-
-// parseDefineBlocksWithWarnings is the variant that also returns a list of
-// names that were declared more than once (later definitions silently
-// overwrite earlier ones, which can hide bugs in real charts).
-func parseDefineBlocksWithWarnings(content string) (map[string]string, []string) {
-	blocks := make(map[string]string)
-	var dupes []string
-	collect := func(name string) {
-		if _, exists := blocks[name]; exists {
-			dupes = append(dupes, name)
-		}
-	}
-	_ = collect
-	out := parseDefineBlocksImpl(content, func(name string) {
-		if _, exists := blocks[name]; exists {
-			dupes = append(dupes, name)
-		}
-	}, blocks)
-	return out, dupes
-}
-
-func parseDefineBlocks(content string) map[string]string {
-	out, _ := parseDefineBlocksWithWarnings(content)
-	return out
-}
-
-func parseDefineBlocksImpl(content string, onDuplicate func(string), blocks map[string]string) map[string]string {
-	if nil == blocks {
-		blocks = make(map[string]string)
-	}
-	lines := strings.Split(content, "\n")
-	lineCount := len(lines)
-
-	var currentName string
-	var body strings.Builder
-	nesting := 0
-
-	for i := range lineCount {
-		line := lines[i]
-
-		if m := reDefine.FindStringSubmatch(line); "" == currentName && nil != m {
-			currentName = m[1]
-			if nil != onDuplicate {
-				if _, exists := blocks[currentName]; exists {
-					onDuplicate(currentName)
-				}
-			}
-			body.Reset()
-			nesting = 0
-			continue
-		}
-
-		if "" != currentName {
-			openers := len(reBlockOpener.FindAllStringIndex(line, -1))
-			closers := len(reEndBlock.FindAllStringIndex(line, -1))
-
-			// Account for inner openers/closers before deciding whether this
-			// line is the define's terminator.
-			if 0 == nesting && 0 < closers && openers < closers {
-				// The first {{ end }} on this line closes the define.
-				blocks[currentName] = body.String()
-				currentName = ""
-				nesting = 0
-				continue
-			}
-
-			nesting += openers - closers
-			if nesting < 0 {
-				nesting = 0
-			}
-
-			if body.Len() > 0 {
-				body.WriteString("\n")
-			}
-			body.WriteString(line)
-		}
-	}
-	return blocks
-}
-
-func convertNotes(notesPath, outputDir string, result *MigrateResult) error {
+func convertNotes(notesPath, outputDir string, conv *templateConverter, result *MigrateResult) error {
 	data, err := os.ReadFile(notesPath)
 	if nil != err {
 		return nil // NOTES.txt is optional
 	}
 
-	converted := convertTemplateContent(string(data), "NOTES.txt", result)
-	// Wrap in notes.yaml format: message: | block scalar
-	var sb strings.Builder
-	sb.WriteString("message: |\n")
-	for line := range strings.SplitSeq(strings.TrimRight(converted, "\n"), "\n") {
-		sb.WriteString("  ")
-		sb.WriteString(line)
-		sb.WriteByte('\n')
+	converted, structured := conv.convertText(string(data), "NOTES.txt")
+	if "" == strings.TrimSpace(converted) {
+		return nil
 	}
-	yamlContent := sb.String()
+	yamlContent := converted
+	if !structured {
+		var sb strings.Builder
+		sb.WriteString("message: |\n")
+		for line := range strings.SplitSeq(strings.TrimRight(converted, "\n"), "\n") {
+			sb.WriteString("  ")
+			sb.WriteString(line)
+			sb.WriteByte('\n')
+		}
+		yamlContent = sb.String()
+	}
 
 	outTemplates := filepath.Join(outputDir, "templates")
 	if mkErr := os.MkdirAll(outTemplates, 0o755); nil != mkErr {
@@ -935,18 +855,6 @@ func copyFileIfExists(src, dst string, result *MigrateResult) error {
 	}
 	result.ConvertedFiles = append(result.ConvertedFiles, filepath.Base(dst))
 	return nil
-}
-
-// ConvertHelmExpression converts a single Helm template expression to keramos syntax.
-// Exported for testing.
-func ConvertHelmExpression(expr string) string {
-	return convertExpression(expr)
-}
-
-// ConvertHelmLine converts a single line of Helm template content.
-// Exported for testing.
-func ConvertHelmLine(line, filename string, lineNum int, result *MigrateResult) string {
-	return convertLine(line, filename, lineNum, result)
 }
 
 // ParseHelmChart parses a Chart.yaml file and returns the keramos.yaml content.
@@ -990,10 +898,3 @@ func ParseHelmChart(chartYAML []byte) ([]byte, error) {
 
 	return yaml.Marshal(meta)
 }
-
-// ParseDefineBlocks parses Go template define blocks from _helpers.tpl content.
-// Exported for testing.
-func ParseDefineBlocks(content string) map[string]string {
-	return parseDefineBlocks(content)
-}
-

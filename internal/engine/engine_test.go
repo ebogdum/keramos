@@ -238,7 +238,7 @@ func TestRenderMultipleTemplates(t *testing.T) {
 	}
 
 	templates := map[string]string{
-		"service.yaml": "apiVersion: v1\nkind: Service\nmetadata:\n  name: ${values.name}\n",
+		"service.yaml":   "apiVersion: v1\nkind: Service\nmetadata:\n  name: ${values.name}\n",
 		"configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ${values.name}-config\n",
 	}
 

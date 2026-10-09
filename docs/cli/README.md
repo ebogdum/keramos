@@ -17,7 +17,7 @@ These apply to every command and can also be set as defaults via environment var
 |---|---|---|
 | `-n, --namespace <ns>` | `KERAMOS_NAMESPACE` | Kubernetes namespace for the operation. |
 | `--kubeconfig <path>` | `KUBECONFIG` | Path to kubeconfig file. |
-| `--kube-context <name>` | — | Active kubeconfig context. |
+| `--kube-context <name>` | `KERAMOS_KUBECONTEXT` | Active kubeconfig context. |
 | `--debug` | `KERAMOS_DEBUG` | Enable debug logging. |
 | `--allow-plaintext-auth` | `KERAMOS_ALLOW_PLAINTEXT_AUTH` | Send registry credentials over plaintext HTTP. |
 | `--oci-plain-http` | `KERAMOS_OCI_PLAIN_HTTP` | Use plain HTTP for OCI registries instead of HTTPS. |
@@ -27,16 +27,18 @@ These apply to every command and can also be set as defaults via environment var
 
 | Variable | Purpose |
 |---|---|
-| `KERAMOS_CONFIG_HOME` | Config dir (default: `~/.config/keramos`). |
-| `KERAMOS_CACHE_HOME` | Cache dir (default: `~/.cache/keramos`). |
+| `KERAMOS_CONFIG_HOME` | Config dir holding `repositories.yaml`, `credentials.json`, `keyring/`, `plugins/` (default: `$XDG_CONFIG_HOME/keramos`, else `~/.config/keramos`). |
+| `KERAMOS_CACHE_HOME` | Cache dir holding `indexes/`, `oci/`, `git/`, `registry/` (default: `$XDG_CACHE_HOME/keramos`, else `~/.cache/keramos`). |
 | `KERAMOS_DATA_HOME` | Data dir (default: `~/.local/share/keramos`). |
-| `KERAMOS_DEBUG` | Enable debug logging when truthy. |
+| `KERAMOS_PLUGINS` | Plugin dir (default: `$KERAMOS_CONFIG_HOME/plugins`). |
+| `KERAMOS_DEBUG` | Enable debug logging when `true`/`1`; `--debug` overrides it. |
 | `KERAMOS_OCI_PLAIN_HTTP` | Use HTTP for OCI instead of HTTPS. |
 | `KERAMOS_OCI_INSECURE_SKIP_TLS` | Skip TLS verification for OCI. |
 | `KERAMOS_ALLOW_PLAINTEXT_AUTH` | Allow sending registry credentials over plaintext HTTP. |
 | `KERAMOS_DRIVER` | Release storage driver (`secret`, `configmap`, `memory`, `sql`). Default `secret`. |
 | `KERAMOS_DRIVER_SQL_DSN` | SQL DSN when driver is `sql`. |
 | `KERAMOS_NAMESPACE` (or `HELM_NAMESPACE`) | Default namespace; legacy aliases recognised. |
+| `KERAMOS_KUBECONTEXT` | Default kubeconfig context; `--kube-context` overrides it. |
 | `KUBECONFIG` | Standard Kubernetes kubeconfig path. |
 
 ## Exit codes

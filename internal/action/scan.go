@@ -529,4 +529,3 @@ func fileExists(path string) bool {
 	}
 	return !info.IsDir()
 }
-

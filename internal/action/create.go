@@ -33,13 +33,13 @@ func Create(name string, dir string) error {
 	}
 
 	files := map[string]string{
-		"keramos.yaml":               keramosYAML(pkgName),
-		"values.yaml":             valuesYAML(pkgName),
+		"keramos.yaml":              keramosYAML(pkgName),
+		"values.yaml":               valuesYAML(pkgName),
 		"templates/deployment.yaml": deploymentTemplate(),
 		"templates/service.yaml":    serviceTemplate(),
 		"templates/_helpers.yaml":   helpersTemplate(),
 		"templates/notes.yaml":      notesTemplate(pkgName),
-		".keramosignore":               keramosignoreContent(),
+		".keramosignore":            keramosignoreContent(),
 	}
 
 	for relPath, content := range files {

@@ -215,45 +215,55 @@ func loadTemplates(dirPath string) (map[string]string, map[string]any, error) {
 		return templates, partials, nil
 	}
 
-	entries, err := os.ReadDir(templatesDir)
+	if err := walkTemplateTree(templatesDir, "", templates, partials); nil != err {
+		return nil, nil, err
+	}
+
+	return templates, partials, nil
+}
+
+func walkTemplateTree(dir, rel string, templates map[string]string, partials map[string]any) error {
+	entries, err := os.ReadDir(dir)
 	if nil != err {
-		return nil, nil, keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read templates directory", err)
+		return keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read templates directory", err)
 	}
 
 	for _, entry := range entries {
+		name := entry.Name()
+		key := name
+		if "" != rel {
+			key = rel + "/" + name
+		}
 		if entry.IsDir() {
+			if err := walkTemplateTree(filepath.Join(dir, name), key, templates, partials); nil != err {
+				return err
+			}
 			continue
 		}
-		name := entry.Name()
 		if !isYAMLFile(name) {
 			continue
 		}
 
-		data, readErr := os.ReadFile(filepath.Join(templatesDir, name))
+		data, readErr := os.ReadFile(filepath.Join(dir, name))
 		if nil != readErr {
-			return nil, nil, keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read template file", readErr)
+			return keramoserr.WrapError(keramoserr.ErrPackageInvalid, "failed to read template file", readErr)
 		}
 
 		if strings.HasPrefix(name, "_") {
-			// Partial files are YAML maps whose top-level keys become
-			// individually-addressable partials so ${include "key"} can
-			// resolve them. The filename-keyed form is also kept so
-			// callers that look up by filename still work.
 			var parsed map[string]any
 			if pErr := yaml.Unmarshal(data, &parsed); nil != pErr {
-				return nil, nil, keramoserr.WrapErrorf(keramoserr.ErrPackageInvalid, pErr,
-					"failed to parse partials file %s", name)
+				return keramoserr.WrapErrorf(keramoserr.ErrPackageInvalid, pErr,
+					"failed to parse partials file %s", key)
 			}
-			partials[name] = string(data)
+			partials[key] = string(data)
 			for k, v := range parsed {
 				partials[k] = v
 			}
-		} else {
-			templates[name] = string(data)
+			continue
 		}
+		templates[key] = string(data)
 	}
-
-	return templates, partials, nil
+	return nil
 }
 
 func applyProfile(packagePath, profile string, resolved *ResolvedPackage) error {

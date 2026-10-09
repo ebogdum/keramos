@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"github.com/ebogdum/keramos/v3/internal/repo"
 )
 
@@ -15,19 +16,15 @@ func setupTestCredDir(t *testing.T) string {
 	t.Helper()
 	tmpDir := t.TempDir()
 
-	// os.UserConfigDir on Darwin uses $HOME/Library/Application Support
-	// On Linux it uses $XDG_CONFIG_HOME (or $HOME/.config)
-	// We set HOME so both platforms resolve to our temp directory.
 	t.Setenv("HOME", tmpDir)
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv(paths.ConfigHomeEnv, "")
 
-	// Determine the actual config dir that os.UserConfigDir will return
-	configDir, err := os.UserConfigDir()
+	keramosDir, err := paths.ConfigHome()
 	if nil != err {
-		t.Fatalf("UserConfigDir failed: %v", err)
+		t.Fatalf("ConfigHome failed: %v", err)
 	}
-
-	keramosDir := filepath.Join(configDir, "keramos")
+	configDir := filepath.Dir(keramosDir)
 	if err := os.MkdirAll(keramosDir, 0755); nil != err {
 		t.Fatalf("MkdirAll failed: %v", err)
 	}

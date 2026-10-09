@@ -10,6 +10,7 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,12 +28,10 @@ type cacheMeta struct {
 
 // NewIndexCache creates an IndexCache using ~/.cache/keramos/indexes/ with a 30-minute TTL.
 func NewIndexCache() (*IndexCache, error) {
-	cacheDir, err := os.UserCacheDir()
+	dir, err := paths.IndexCache()
 	if nil != err {
 		return nil, keramoserr.WrapError(keramoserr.ErrRepo, "failed to determine cache directory", err)
 	}
-
-	dir := filepath.Join(cacheDir, "keramos", "indexes")
 	if err := os.MkdirAll(dir, 0755); nil != err {
 		return nil, keramoserr.WrapError(keramoserr.ErrRepo, "failed to create cache directory", err)
 	}

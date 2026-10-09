@@ -9,6 +9,7 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 )
 
 // AuthType identifies the authentication method for a credential.
@@ -45,11 +46,11 @@ type CredentialStore struct {
 }
 
 func credentialStorePath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	path, err := paths.CredentialStore()
 	if nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrAuth, "failed to determine config directory", err)
 	}
-	return filepath.Join(configDir, "keramos", "credentials.json"), nil
+	return path, nil
 }
 
 // LoadCredentialStore reads credentials from ~/.config/keramos/credentials.json.
@@ -225,12 +226,10 @@ func execCredentialHelper(helper, host string) (Credential, error) {
 }
 
 func migrateOCICredentials(store *CredentialStore) error {
-	configDir, err := os.UserConfigDir()
+	legacyPath, err := paths.LegacyOCICredentials()
 	if nil != err {
 		return keramoserr.WrapError(keramoserr.ErrAuth, "failed to determine config directory", err)
 	}
-
-	legacyPath := filepath.Join(configDir, "keramos", "oci-credentials.json")
 	data, err := os.ReadFile(legacyPath)
 	if nil != err {
 		return keramoserr.WrapError(keramoserr.ErrAuth, "no legacy OCI credentials to migrate", err)

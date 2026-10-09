@@ -10,6 +10,7 @@ import (
 
 	keramoserr "github.com/ebogdum/keramos/v3/internal/errors"
 	"github.com/ebogdum/keramos/v3/internal/logger"
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"gopkg.in/yaml.v3"
 )
 
@@ -117,12 +118,11 @@ func (rf *RepoFile) Remove(name string) error {
 }
 
 func repoFilePath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	path, err := paths.RepositoryConfig()
 	if nil != err {
 		return "", keramoserr.WrapError(keramoserr.ErrRepo, "failed to determine config directory", err)
 	}
-
-	return filepath.Join(configDir, "keramos", "repositories.yaml"), nil
+	return path, nil
 }
 
 // LoadRepoFile loads repositories from the config file.
@@ -409,8 +409,10 @@ func VerifyArchive(archivePath, archiveURL string) error {
 	}
 	defer os.Remove(provLocal)
 
-	home, _ := os.UserHomeDir()
-	keyringDir := filepath.Join(home, ".config", "keramos", "keyring")
+	keyringDir, keyringErr := paths.Keyring()
+	if nil != keyringErr {
+		return keramoserr.WrapError(keramoserr.ErrSignature, "failed to determine keyring directory", keyringErr)
+	}
 	return VerifySignatureFromKeyring(archivePath, provLocal, keyringDir)
 }
 

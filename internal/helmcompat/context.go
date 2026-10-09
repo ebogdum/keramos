@@ -10,6 +10,10 @@ import (
 )
 
 // versionSet implements Helm's .Capabilities.APIVersions with a Has method.
+type helmValues map[string]any
+
+func (v helmValues) AsMap() map[string]any { return map[string]any(v) }
+
 type versionSet struct {
 	set map[string]bool
 }

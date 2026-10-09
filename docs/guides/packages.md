@@ -192,6 +192,25 @@ data:
   conf: ${"files/default.conf" | Files.Get | quote}
 ```
 
+### `$text` — building strings
+
+A value that is a `$text` mapping is assembled from its items, joined with
+newlines, so text a chart used to build with a loop stays in YAML:
+
+```yaml
+data:
+  app.conf:
+    $text:
+      - "[server]"
+      - $each: ${values.config}
+        $as: entry
+        $yield: "${entry.key} = ${entry.value}"
+      - $if: ${values.metrics}
+        $then: "metrics = on"
+```
+
+`$join` changes the separator, `$indent` shifts every line.
+
 ### `profiles/`
 
 Optional. A profile is a named values overlay. Activate one with `--profile

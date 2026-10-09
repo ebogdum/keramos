@@ -56,9 +56,9 @@ func TestRenderMultiDocWithConditionalFalsy(t *testing.T) {
 	e := New()
 	ctx := &RenderContext{
 		Values: map[string]any{
-			"service":  map[string]any{"enabled": true},
-			"ingress":  map[string]any{"enabled": false},
-			"name":     "myapp",
+			"service": map[string]any{"enabled": true},
+			"ingress": map[string]any{"enabled": false},
+			"name":    "myapp",
 		},
 	}
 
@@ -107,12 +107,12 @@ func TestCleanDollarKeysNested(t *testing.T) {
 	// names) MUST be preserved.
 	input := map[string]any{
 		"keep":     "value",
-		"$comment": "preserved",       // not a directive — kept
-		"$if":      "${values.flag}",  // directive — stripped
+		"$comment": "preserved",      // not a directive — kept
+		"$if":      "${values.flag}", // directive — stripped
 		"nested": map[string]any{
 			"keep2":   "value2",
-			"$ref":    "#/$defs/foo",  // JSON Schema — kept
-			"$switch": "${values.x}",  // directive — stripped
+			"$ref":    "#/$defs/foo", // JSON Schema — kept
+			"$switch": "${values.x}", // directive — stripped
 		},
 		"list": []any{
 			map[string]any{

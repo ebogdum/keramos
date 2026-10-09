@@ -3,11 +3,11 @@ package action
 import (
 	"time"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func (m *mockKubeClient) Dynamic() (dynamic.Interface, error) {

@@ -5,11 +5,11 @@ import "testing"
 func TestVersionSetHas(t *testing.T) {
 	vs := NewVersionSet("policy/v1", "apps/v1")
 	cases := map[string]bool{
-		"policy/v1":                        true,
-		"policy/v1/PodDisruptionBudget":    true, // group/version/kind also matches
-		"apps/v1":                          true,
-		"missing/v1":                       false,
-		"":                                 false,
+		"policy/v1":                     true,
+		"policy/v1/PodDisruptionBudget": true, // group/version/kind also matches
+		"apps/v1":                       true,
+		"missing/v1":                    false,
+		"":                              false,
 	}
 	for in, want := range cases {
 		got := vs.Has(in)

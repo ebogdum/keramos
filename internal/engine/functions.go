@@ -39,6 +39,8 @@ func NewFuncRegistry() *FuncRegistry {
 	registerSprigFinal(r)
 	registerSecretFuncs(r)
 	registerExternalFuncs(r)
+	registerHelmFuncs(r)
+	registerFormatEach(r)
 	return r
 }
 

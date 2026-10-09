@@ -257,7 +257,7 @@ func TestSwitchMatching(t *testing.T) {
 	ctx := &RenderContext{
 		Values: map[string]any{
 			"service": map[string]any{
-				"type": "LoadBalancer",
+				"type":           "LoadBalancer",
 				"loadBalancerIP": "10.0.0.1",
 			},
 		},

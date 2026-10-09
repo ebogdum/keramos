@@ -42,11 +42,17 @@ func EvaluateExpression(expr string, ctx *RenderContext, funcs *FuncRegistry) (a
 		value = "true" == firstSeg
 	} else if isNullLiteral(firstSeg) {
 		value = nil
+	} else if isParenthesised(firstSeg) {
+		v, subErr := EvaluateExpression(firstSeg[1:len(firstSeg)-1], ctx, funcs)
+		if nil != subErr {
+			return nil, subErr
+		}
+		value = v
 	} else if name, args, ok := parseSpaceCall(firstSeg); ok {
 		if fn, exists := funcs.Get(name); exists {
 			typed := make([]any, len(args))
 			for i, a := range args {
-				resolved, resolveErr := resolveArg(a, ctx)
+				resolved, resolveErr := resolveArg(a, ctx, funcs)
 				if nil != resolveErr {
 					return nil, resolveErr
 				}
@@ -110,7 +116,7 @@ func EvaluateExpression(expr string, ctx *RenderContext, funcs *FuncRegistry) (a
 
 		typed := make([]any, len(fnArgs))
 		for i, a := range fnArgs {
-			resolved, resolveErr := resolveArg(a, ctx)
+			resolved, resolveErr := resolveArg(a, ctx, funcs)
 			if nil != resolveErr {
 				return nil, resolveErr
 			}
@@ -143,7 +149,11 @@ func SubstituteAll(node any, ctx *RenderContext, funcs *FuncRegistry) (any, erro
 			if isOmit(resolved) {
 				continue // `${... | omitempty}` drops its key
 			}
-			result[key] = resolved
+			outKey, err := substituteKey(key, ctx, funcs)
+			if nil != err {
+				return nil, err
+			}
+			result[outKey] = resolved
 		}
 		return result, nil
 	case []any:
@@ -165,6 +175,20 @@ func SubstituteAll(node any, ctx *RenderContext, funcs *FuncRegistry) (any, erro
 }
 
 // substituteString handles expression substitution in a single string value.
+func substituteKey(key string, ctx *RenderContext, funcs *FuncRegistry) (string, error) {
+	if !strings.Contains(key, "${") {
+		return key, nil
+	}
+	resolved, err := substituteString(key, ctx, funcs)
+	if nil != err {
+		return "", err
+	}
+	if isOmit(resolved) {
+		return key, nil
+	}
+	return fmt.Sprintf("%v", resolved), nil
+}
+
 func substituteString(s string, ctx *RenderContext, funcs *FuncRegistry) (any, error) {
 	// Check if the entire string is a single expression
 	trimmed := strings.TrimSpace(s)
@@ -308,6 +332,8 @@ func lookupPath(data map[string]any, path string) (any, error) {
 				return nil, nil
 			}
 			current = container[idx]
+		case nil:
+			return nil, nil
 		default:
 			return nil, keramoserrors.NewErrorf(keramoserrors.ErrUndefinedVar,
 				"cannot index into %T at %q", current, part)
@@ -410,7 +436,7 @@ func parseSpaceCall(s string) (string, []string, bool) {
 	if "" == s {
 		return "", nil, false
 	}
-	if strings.ContainsAny(s, "(") {
+	if isParenCallForm(s) {
 		return "", nil, false
 	}
 	// Find first whitespace not inside quotes.
@@ -465,6 +491,7 @@ func splitSpaceArgs(s string) []string {
 	out := make([]string, 0, 4)
 	runes := []rune(s)
 	inSingle, inDouble := false, false
+	depth := 0
 	start := 0
 	for i := 0; i < len(runes); i++ {
 		ch := runes[i]
@@ -476,7 +503,11 @@ func splitSpaceArgs(s string) []string {
 			inSingle = !inSingle
 		case '"' == ch && !inSingle:
 			inDouble = !inDouble
-		case (' ' == ch || '\t' == ch) && !inSingle && !inDouble:
+		case '(' == ch && !inSingle && !inDouble:
+			depth++
+		case ')' == ch && !inSingle && !inDouble:
+			depth--
+		case (' ' == ch || '\t' == ch) && !inSingle && !inDouble && 0 == depth:
 			if start < i {
 				out = append(out, strings.TrimSpace(string(runes[start:i])))
 			}
@@ -508,14 +539,60 @@ func isContextPath(s string) bool {
 	return false
 }
 
-func resolveArg(raw string, ctx *RenderContext) (any, error) {
+func resolveArg(raw string, ctx *RenderContext, funcs *FuncRegistry) (any, error) {
+	raw = strings.TrimSpace(raw)
 	if isQuotedLiteral(raw) {
 		return stripQuotes(raw), nil
+	}
+	if isParenthesised(raw) {
+		return EvaluateExpression(raw[1:len(raw)-1], ctx, funcs)
 	}
 	if isContextPath(raw) {
 		return resolvePath(raw, ctx)
 	}
+	if strings.HasPrefix(raw, "$") {
+		return resolvePath(raw, ctx)
+	}
 	return inferArgLiteral(stripQuotes(raw)), nil
+}
+
+func isParenthesised(s string) bool {
+	s = strings.TrimSpace(s)
+	if 2 > len(s) || '(' != s[0] || ')' != s[len(s)-1] {
+		return false
+	}
+	depth := 0
+	inSingle, inDouble := false, false
+	runes := []rune(s)
+	for i := 0; i < len(runes); i++ {
+		switch ch := runes[i]; {
+		case '\\' == ch && i+1 < len(runes):
+			i++
+		case '\'' == ch && !inDouble:
+			inSingle = !inSingle
+		case '"' == ch && !inSingle:
+			inDouble = !inDouble
+		case '(' == ch && !inSingle && !inDouble:
+			depth++
+		case ')' == ch && !inSingle && !inDouble:
+			depth--
+			if 0 == depth && i != len(runes)-1 {
+				return false
+			}
+		}
+	}
+	return 0 == depth
+}
+
+func isParenCallForm(s string) bool {
+	idx := strings.Index(s, "(")
+	if 1 > idx {
+		return false
+	}
+	if ' ' == s[idx-1] || '\t' == s[idx-1] {
+		return false
+	}
+	return isIdentifier(s[:idx])
 }
 
 // parseFuncCall parses a function call like "funcName" or "funcName('arg1', arg2)".
@@ -577,9 +654,45 @@ func parseArgs(s string) ([]string, error) {
 // stripQuotes removes surrounding single or double quotes from a string.
 func stripQuotes(s string) string {
 	if len(s) >= 2 {
-		if ('\'' == s[0] && '\'' == s[len(s)-1]) || ('"' == s[0] && '"' == s[len(s)-1]) {
+		if '\'' == s[0] && '\'' == s[len(s)-1] {
 			return s[1 : len(s)-1]
+		}
+		if '"' == s[0] && '"' == s[len(s)-1] {
+			return unescapeDoubleQuoted(s[1 : len(s)-1])
 		}
 	}
 	return s
+}
+
+func unescapeDoubleQuoted(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if '\\' != s[i] || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		i++
+		switch s[i] {
+		case 'n':
+			b.WriteByte('\n')
+		case 'r':
+			b.WriteByte('\r')
+		case 't':
+			b.WriteByte('\t')
+		case '\\':
+			b.WriteByte('\\')
+		case '"':
+			b.WriteByte('"')
+		case '\'':
+			b.WriteByte('\'')
+		default:
+			b.WriteByte('\\')
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
 }

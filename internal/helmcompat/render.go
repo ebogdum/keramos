@@ -83,7 +83,7 @@ func Render(chartPath string, opts Options) (map[string]string, error) {
 	out := make(map[string]string, len(renderUnits))
 	for _, u := range renderUnits {
 		ctx := map[string]any{
-			"Values":       u.chart.scoped,
+			"Values":       helmValues(u.chart.scoped),
 			"Chart":        chartMap(u.chart.metadata),
 			"Release":      releaseMap(rel),
 			"Capabilities": caps,

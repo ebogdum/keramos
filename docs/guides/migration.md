@@ -9,8 +9,9 @@ parent: "Guides"
 `keramos migrate` converts an existing **Helm chart** directory into a **keramos
 package**: it walks the chart (`Chart.yaml`, `templates/`, `values.yaml`,
 `crds/`, `_helpers.tpl`, `NOTES.txt`) and emits an equivalent keramos package,
-rewriting Go-template constructs to keramos's `${...}` expressions where it can.
-Anything it cannot translate cleanly is flagged for manual review.
+rewriting Go-template constructs to keramos's `${...}` expressions, `$if` /
+`$each` / `$switch` directives and `$text` blocks. The result is keramos YAML
+only — no Helm survives in the output.
 
 The command reference is [`keramos migrate`](../cli/migrate.md). The companion
 [`keramos helm-compat`](../cli/helm-compat.md) runs an unmodified Helm chart under
@@ -69,6 +70,20 @@ them needs more review afterward.
 | `templates/tests/*` | `tests/*` |
 | `crds/*.yaml` | `crds/*.yaml` |
 
+Subcharts under `charts/` are converted too: each becomes a package under
+`charts/<name>` in the output and is declared as a layer, carrying over the
+dependency's `condition`, `tags` and `enabled`. A subchart's values are nested
+under its own key so `.Values.x` inside it resolves to `values.<subchart>.x`,
+while `.Values.global.x` stays global — the same scoping Helm gives subcharts.
+
+Conversion is structural, not textual: the chart's templates are parsed, the
+Go-template actions are compiled to `${...}` expressions, and each `if` / `with`
+/ `range` block is mapped onto the YAML nodes it actually wraps. Conditional
+sibling keys become `$merge` entries, conditional list items become spliced
+`$merge` items, and loops become `$each` / `$as` / `$yield`. Control flow that
+lives inside a literal block scalar is compiled to inline expressions
+(`ternary`, `printf`) instead, because there is no YAML structure there to gate.
+
 Inside templates it rewrites a curated set of Go-template constructs to keramos
 expressions — for example:
 
@@ -76,14 +91,25 @@ expressions — for example:
 |---|---|
 | `{{ .Values.x }}` | `${values.x}` |
 | `{{ .Release.Name }}` | `${release.name}` |
-| `{{ if .Values.enabled }}` … `{{ end }}` | `${if .Values.enabled}` … `${end}` |
-| `{{ range .Values.items }}` … `{{ end }}` | `${range .Values.items}` … `${end}` |
+| `{{ if .Values.enabled }}` … `{{ end }}` around a key | `$merge: { $if: ${values.enabled}, $then: … }` |
+| `{{ range .Values.items }}` … `{{ end }}` | `$each: ${values.items}` / `$as` / `$yield` |
+| `{{ $x := … }}` … | `$let: { x: … }` / `$in: …` |
+| a loop that builds a config file | `$text:` with `$each` lines |
 | `{{ include "named" . }}` | `${include "named"}` |
+| `{{ include "named" (dict …) }}` | `${include "named" (dict …)}` — read as `$ctx` in the partial |
+| `{{ .Capabilities.APIVersions.Has "x" }}` | `${Capabilities.APIVersions.Has "x"}` |
 | `{{ toYaml .Values.x \| nindent 4 }}` | `${values.x \| toYaml \| nindent 4}` |
 
-Constructs it cannot translate cleanly — some multi-variable `with`/`range`
-forms, heavily nested conditionals around YAML structure, or calls to functions
-keramos does not implement — are left unchanged and listed for manual review.
+## What it cannot convert yet
+
+The output contains no Helm. A construct the migrator cannot express in keramos
+YAML is reported as a review item that names the file, the line and the
+construct — so the gap is visible and closable, never smuggled into the package.
+
+Measured over 100 upstream charts, the constructs still reported are:
+templates that render text rather than YAML (validators built from `fail`, name
+helpers with branching), `if`/`else` pairs where both branches set the same key,
+and a handful of placement cases where a block spans half a YAML node.
 
 ## Convert
 
@@ -110,18 +136,17 @@ Converted 8 files:
 Migration complete.
 ```
 
-When a construct needs a human, the report names the file, line, and reason
-before `Migration complete.`:
+Constructs with no keramos form are listed before `Migration complete.`, each
+with the file, line, reason and the original template text:
 
 ```
 Items requiring manual review (1):
-  templates/deployment.yaml:24 — unsupported Helm function 'lookup'
-    {{- $existing := lookup "v1" "Secret" .Release.Namespace "redis" }}
+  templates/configmap.yaml:12 — if/else where both branches set the same key
+    {{- if .Values.tls }}port: 6380{{ else }}port: 6379{{ end }}
 ```
 
 Use `--dry-run` to see the report without writing anything, or `--strict` to
-fail the command on any template that cannot be fully auto-converted (useful as
-a CI gate).
+fail the command on anything left for review (useful as a CI gate).
 
 ## Review and finish
 
@@ -133,14 +158,16 @@ ls ./redis-keramos
 keramos.yaml  values.yaml  templates/  tests/  .keramosignore
 ```
 
-Lint the result, then resolve any flagged items by hand:
+Lint the result, then render it and compare against `helm template` before you
+trust it:
 
 ```sh
 keramos lint ./redis-keramos
+keramos template ./redis-keramos --release-name redis
 ```
 
 The migrator is deterministic and idempotent — re-running on the same input
-produces the same output — so the workflow is: migrate, hand-edit the review
+produces the same output — so the workflow is: migrate, resolve the review
 items, commit, then re-migrate when the upstream chart releases a new version
 and diff to apply the changes.
 

@@ -3,14 +3,12 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 
+	"github.com/ebogdum/keramos/v3/internal/paths"
 	"github.com/spf13/cobra"
 )
 
-// newEnvCommand prints the resolved keramos environment (paths, plugin dir, cache
-// dir, namespace, kubeconfig).
 func newEnvCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "env",
@@ -34,38 +32,9 @@ func newEnvCommand() *cobra.Command {
 }
 
 func collectKeramosEnv() map[string]string {
-	cacheRoot := os.Getenv("KERAMOS_CACHE_HOME")
-	if "" == cacheRoot {
-		if home, err := os.UserCacheDir(); nil == err {
-			cacheRoot = filepath.Join(home, "keramos")
-		}
-	}
-	configRoot := os.Getenv("KERAMOS_CONFIG_HOME")
-	if "" == configRoot {
-		if home, err := os.UserConfigDir(); nil == err {
-			configRoot = filepath.Join(home, "keramos")
-		}
-	}
-	dataRoot := os.Getenv("KERAMOS_DATA_HOME")
-	if "" == dataRoot {
-		if home, err := os.UserHomeDir(); nil == err {
-			dataRoot = filepath.Join(home, ".local", "share", "keramos")
-		}
-	}
-	pluginsRoot := os.Getenv("KERAMOS_PLUGINS")
-	if "" == pluginsRoot {
-		pluginsRoot = filepath.Join(dataRoot, "plugins")
-	}
-
-	// Order: explicit --namespace flag > KERAMOS_NAMESPACE > HELM_NAMESPACE > default.
-	// HELM_NAMESPACE is honoured as a legacy fallback so existing shell
-	// environments resolve to the same namespace every other keramos command uses.
 	ns := namespace
 	if "" == ns {
-		ns = os.Getenv("KERAMOS_NAMESPACE")
-	}
-	if "" == ns {
-		ns = os.Getenv("HELM_NAMESPACE")
+		ns = namespaceFromEnv()
 	}
 	if "" == ns {
 		ns = "default"
@@ -78,15 +47,24 @@ func collectKeramosEnv() map[string]string {
 
 	return map[string]string{
 		"KERAMOS_BIN":               bin,
-		"KERAMOS_CACHE_HOME":        cacheRoot,
-		"KERAMOS_CONFIG_HOME":       configRoot,
-		"KERAMOS_DATA_HOME":         dataRoot,
-		"KERAMOS_PLUGINS":           pluginsRoot,
+		"KERAMOS_CACHE_HOME":        resolvedPath(paths.CacheHome),
+		"KERAMOS_CONFIG_HOME":       resolvedPath(paths.ConfigHome),
+		"KERAMOS_DATA_HOME":         resolvedPath(paths.DataHome),
+		"KERAMOS_DEBUG":             fmt.Sprintf("%t", debugFlag),
+		"KERAMOS_PLUGINS":           resolvedPath(paths.Plugins),
 		"KERAMOS_NAMESPACE":         ns,
 		"KERAMOS_KUBECONFIG":        os.Getenv("KUBECONFIG"),
-		"KERAMOS_KUBECONTEXT":       os.Getenv("KERAMOS_KUBECONTEXT"),
-		"KERAMOS_REGISTRY_CONFIG":   filepath.Join(configRoot, "registry.json"),
-		"KERAMOS_REPOSITORY_CACHE":  filepath.Join(cacheRoot, "repository"),
-		"KERAMOS_REPOSITORY_CONFIG": filepath.Join(configRoot, "repositories.yaml"),
+		"KERAMOS_KUBECONTEXT":       kubeContext,
+		"KERAMOS_REGISTRY_CONFIG":   resolvedPath(paths.CredentialStore),
+		"KERAMOS_REPOSITORY_CACHE":  resolvedPath(paths.IndexCache),
+		"KERAMOS_REPOSITORY_CONFIG": resolvedPath(paths.RepositoryConfig),
 	}
+}
+
+func resolvedPath(resolve func() (string, error)) string {
+	dir, err := resolve()
+	if nil != err {
+		return ""
+	}
+	return dir
 }
